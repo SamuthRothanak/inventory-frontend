@@ -36,7 +36,7 @@ const mainMenus = [
   { label: "Inventory", icon: FiArchive, path: "/home/inventory" },
   { label: "Purchases", icon: FiShoppingCart, path: "/home/purchases" },
   { label: "Sales", icon: FiDollarSign, path: "/home/sales" },
-  { label: "Orders", icon: FiClipboard, path: "/home/orders" },
+  // { label: "Orders", icon: FiClipboard, path: "/home/orders" },
   { label: "Reports", icon: FiFileText, path: "/home/reports" },
 ];
 
