@@ -25,7 +25,11 @@ import {
   FiHash,
   FiInfo,
   FiFileText,
+  FiTag,
 } from "react-icons/fi";
+
+const getToday = () => new Date().toISOString().slice(0, 10);
+const getNow = () => new Date().toISOString().slice(0, 19).replace("T", " ");
 
 const initialInventory = [
   {
@@ -41,8 +45,8 @@ const initialInventory = [
     unitCostBase: 0.3,
     status: "Out of Stock",
     units: [
-      { unitName: "Can", conversionQty: 1, isBaseUnit: true },
-      { unitName: "Case", conversionQty: 24, isBaseUnit: false },
+      { id: 1, unitName: "Can", conversionQty: 1, isBaseUnit: true },
+      { id: 2, unitName: "Case", conversionQty: 24, isBaseUnit: false },
     ],
     batches: [],
     movements: [],
@@ -60,8 +64,8 @@ const initialInventory = [
     unitCostBase: 0.85,
     status: "Out of Stock",
     units: [
-      { unitName: "Bottle", conversionQty: 1, isBaseUnit: true },
-      { unitName: "Case", conversionQty: 6, isBaseUnit: false },
+      { id: 5, unitName: "Bottle", conversionQty: 1, isBaseUnit: true },
+      { id: 6, unitName: "Case", conversionQty: 6, isBaseUnit: false },
     ],
     batches: [],
     movements: [],
@@ -79,11 +83,12 @@ const initialInventory = [
     unitCostBase: 0.45,
     status: "Low Stock",
     units: [
-      { unitName: "Box", conversionQty: 1, isBaseUnit: true },
-      { unitName: "Set", conversionQty: 6, isBaseUnit: false },
+      { id: 11, unitName: "Box", conversionQty: 1, isBaseUnit: true },
+      { id: 12, unitName: "Set", conversionQty: 6, isBaseUnit: false },
     ],
     batches: [
       {
+        id: 1,
         batchNo: "BATCH-003",
         lotNo: "LOT-MASK-001",
         expiredDate: "2026-10-10",
@@ -99,13 +104,15 @@ const initialInventory = [
         type: "purchase_in",
         qtyBase: 60,
         refType: "purchase",
+        refId: 1,
         note: "Purchase stock",
         createdAt: "2026-04-30",
       },
       {
         type: "sale_out",
-        qtyBase: 52,
+        qtyBase: -52,
         refType: "sale",
+        refId: 1,
         note: "POS sales",
         createdAt: "2026-05-01",
       },
@@ -124,15 +131,16 @@ const initialInventory = [
     unitCostBase: 0.001,
     status: "Out of Stock",
     units: [
-      { unitName: "Gram", conversionQty: 1, isBaseUnit: true },
-      { unitName: "Kg", conversionQty: 1000, isBaseUnit: false },
+      { id: 13, unitName: "Gram", conversionQty: 1, isBaseUnit: true },
+      { id: 14, unitName: "Kg", conversionQty: 1000, isBaseUnit: false },
     ],
     batches: [],
     movements: [
       {
         type: "sale_out",
-        qtyBase: 25000,
+        qtyBase: -25000,
         refType: "sale",
+        refId: 1,
         note: "Sold out",
         createdAt: "2026-05-01",
       },
@@ -152,6 +160,7 @@ const initialPendingPurchases = [
     items: [
       {
         inventoryId: 1,
+        productVariantUnitId: 2,
         variantName: "Coca-Cola Can 330ml",
         qty: 180,
         unitName: "Case",
@@ -162,6 +171,7 @@ const initialPendingPurchases = [
       },
       {
         inventoryId: 2,
+        productVariantUnitId: 6,
         variantName: "Coca-Cola Big Bottle 1.5L",
         qty: 20,
         unitName: "Case",
@@ -183,6 +193,7 @@ const initialPendingPurchases = [
     items: [
       {
         inventoryId: 3,
+        productVariantUnitId: 12,
         variantName: "Face Mask Box",
         qty: 10,
         unitName: "Set",
@@ -195,13 +206,27 @@ const initialPendingPurchases = [
   },
 ];
 
+const initialStockAdjustments = [];
+
 const emptyAdjustmentForm = {
   inventoryId: "",
-  movementType: "adjustment_out",
+  adjustmentType: "decrease",
+  reason: "damaged",
   qty: "",
   unitName: "",
+  inventoryBatchId: "",
   note: "",
 };
+
+const adjustmentReasons = [
+  { value: "damaged", label: "Damaged" },
+  { value: "expired", label: "Expired" },
+  { value: "internal_use", label: "Internal Use" },
+  { value: "lost", label: "Lost" },
+  { value: "stock_count", label: "Stock Count" },
+  { value: "correction", label: "Correction" },
+  { value: "other", label: "Other" },
+];
 
 function useLockBodyScroll(isOpen) {
   useEffect(() => {
@@ -209,7 +234,6 @@ function useLockBodyScroll(isOpen) {
 
     const originalOverflow = document.body.style.overflow;
     const originalPaddingRight = document.body.style.paddingRight;
-
     const scrollbarWidth =
       window.innerWidth - document.documentElement.clientWidth;
 
@@ -233,6 +257,9 @@ export default function Inventory() {
   const [inventory, setInventory] = useState(initialInventory);
   const [pendingPurchases, setPendingPurchases] = useState(
     initialPendingPurchases
+  );
+  const [stockAdjustments, setStockAdjustments] = useState(
+    initialStockAdjustments
   );
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -299,6 +326,22 @@ export default function Inventory() {
     return "In Stock";
   };
 
+  const getMovementTypeFromAdjustment = (adjustmentType, reason) => {
+    if (adjustmentType === "increase") return "adjustment_in";
+
+    const movementMap = {
+      damaged: "damage_out",
+      expired: "expired_out",
+      internal_use: "internal_use_out",
+      lost: "lost_out",
+      stock_count: "adjustment_out",
+      correction: "adjustment_out",
+      other: "adjustment_out",
+    };
+
+    return movementMap[reason] || "adjustment_out";
+  };
+
   const filteredInventory = useMemo(() => {
     const search = searchTerm.toLowerCase();
 
@@ -322,10 +365,6 @@ export default function Inventory() {
     (item) =>
       Number(item.stockBaseQty) > 0 &&
       Number(item.stockBaseQty) <= Number(item.lowStockThreshold)
-  ).length;
-
-  const outOfStockItems = inventory.filter(
-    (item) => Number(item.stockBaseQty) <= 0
   ).length;
 
   const stockValue = inventory.reduce(
@@ -391,9 +430,11 @@ export default function Inventory() {
 
     setAdjustmentForm({
       inventoryId: item?.id || "",
-      movementType: isIn ? "adjustment_in" : "adjustment_out",
+      adjustmentType: isIn ? "increase" : "decrease",
+      reason: isIn ? "correction" : "damaged",
       qty: "",
       unitName: item?.baseUnit || "",
+      inventoryBatchId: "",
       note: "",
     });
 
@@ -420,7 +461,7 @@ export default function Inventory() {
   };
 
   const handleConfirmStockIn = (purchase) => {
-    const now = new Date().toISOString().slice(0, 10);
+    const nowDate = getToday();
 
     setInventory((previous) =>
       previous.map((inventoryItem) => {
@@ -434,6 +475,8 @@ export default function Inventory() {
           Number(inventoryItem.stockBaseQty || 0) +
           Number(purchaseItem.baseQty || 0);
 
+        const newBatchId = Date.now() + inventoryItem.id;
+
         return {
           ...inventoryItem,
           stockBaseQty: nextQty,
@@ -441,13 +484,14 @@ export default function Inventory() {
           status: getStockStatus(nextQty, inventoryItem.lowStockThreshold),
           batches: [
             {
+              id: newBatchId,
               batchNo: `BATCH-${purchase.purchaseNo}-${inventoryItem.id}`,
               lotNo: `LOT-${purchase.purchaseNo}`,
               expiredDate: purchaseItem.expiredDate,
               qtyReceivedBase: purchaseItem.baseQty,
               qtyRemainingBase: purchaseItem.baseQty,
               unitCostBase: purchaseItem.unitCostBase,
-              receivedAt: now,
+              receivedAt: nowDate,
               status: "active",
             },
             ...inventoryItem.batches,
@@ -455,10 +499,11 @@ export default function Inventory() {
           movements: [
             {
               type: "purchase_in",
-              qtyBase: purchaseItem.baseQty,
+              qtyBase: Number(purchaseItem.baseQty || 0),
               refType: "purchase",
+              refId: purchase.id,
               note: `Stock in confirmed from ${purchase.purchaseNo}`,
-              createdAt: now,
+              createdAt: nowDate,
             },
             ...inventoryItem.movements,
           ],
@@ -485,12 +530,45 @@ export default function Inventory() {
       nextErrors.inventoryId = "Please select inventory item.";
     }
 
+    if (!adjustmentForm.reason) {
+      nextErrors.reason = "Please select reason.";
+    }
+
     if (!adjustmentForm.unitName) {
       nextErrors.unitName = "Please select unit.";
     }
 
     if (!adjustmentForm.qty || Number(adjustmentForm.qty) <= 0) {
       nextErrors.qty = "Quantity must be greater than 0.";
+    }
+
+    if (item && adjustmentForm.adjustmentType === "decrease") {
+      const selectedUnit =
+        item.units.find((unit) => unit.unitName === adjustmentForm.unitName) ||
+        item.units.find((unit) => unit.isBaseUnit) ||
+        item.units[0];
+
+      const baseQty =
+        Number(adjustmentForm.qty || 0) *
+        Number(selectedUnit?.conversionQty || 1);
+
+      if (baseQty > Number(item.stockBaseQty || 0)) {
+        nextErrors.qty = `Cannot stock out more than ${Number(
+          item.stockBaseQty || 0
+        ).toLocaleString()} ${item.baseUnit}.`;
+      }
+
+      if (adjustmentForm.inventoryBatchId) {
+        const selectedBatch = item.batches.find(
+          (batch) => String(batch.id) === String(adjustmentForm.inventoryBatchId)
+        );
+
+        if (selectedBatch && baseQty > Number(selectedBatch.qtyRemainingBase || 0)) {
+          nextErrors.qty = `Selected batch only has ${Number(
+            selectedBatch.qtyRemainingBase || 0
+          ).toLocaleString()} ${item.baseUnit}.`;
+        }
+      }
     }
 
     setErrors(nextErrors);
@@ -515,30 +593,88 @@ export default function Inventory() {
       Number(adjustmentForm.qty || 0) *
       Number(selectedUnit.conversionQty || 1);
 
-    const isStockIn = modalMode === "adjustment_in";
+    const isStockIn = adjustmentForm.adjustmentType === "increase";
+    const signedQtyBase = isStockIn ? baseQty : -baseQty;
 
-    const nextQty = isStockIn
-      ? Number(item.stockBaseQty) + baseQty
-      : Math.max(0, Number(item.stockBaseQty) - baseQty);
-
+    const nextQty = Number(item.stockBaseQty || 0) + signedQtyBase;
     const nextStatus = getStockStatus(nextQty, item.lowStockThreshold);
-    const now = new Date().toISOString().slice(0, 10);
+    const nowDate = getToday();
+    const now = getNow();
+    const adjustmentId = Date.now();
+    const movementType = getMovementTypeFromAdjustment(
+      adjustmentForm.adjustmentType,
+      adjustmentForm.reason
+    );
+    const unitCostBase = Number(item.unitCostBase || 0);
+    const lineCost = baseQty * unitCostBase;
+
+    const selectedBatch = item.batches.find(
+      (batch) => String(batch.id) === String(adjustmentForm.inventoryBatchId)
+    );
+
+    const adjustment = {
+      id: adjustmentId,
+      adjustmentNo: `ADJ-${String(stockAdjustments.length + 1).padStart(3, "0")}`,
+      adjustmentType: adjustmentForm.adjustmentType,
+      reason: adjustmentForm.reason,
+      note: adjustmentForm.note || "Manual stock adjustment",
+      createdBy: 1,
+      createdAt: now,
+      status: "approved",
+      items: [
+        {
+          id: adjustmentId + 1,
+          stockAdjustmentId: adjustmentId,
+          productVariantId: item.id,
+          productVariantUnitId: selectedUnit.id || null,
+          inventoryBatchId: selectedBatch?.id || null,
+          qty: Number(adjustmentForm.qty || 0),
+          baseQty,
+          movementType,
+          unitCostBase,
+          lineCost,
+          note: adjustmentForm.note || "Manual stock adjustment",
+          createdAt: now,
+        },
+      ],
+    };
+
+    setStockAdjustments((previous) => [adjustment, ...previous]);
 
     setInventory((previous) =>
       previous.map((inventoryItem) => {
         if (inventoryItem.id !== item.id) return inventoryItem;
 
+        const updatedBatches = inventoryItem.batches.map((batch) => {
+          if (String(batch.id) !== String(adjustmentForm.inventoryBatchId)) {
+            return batch;
+          }
+
+          const nextBatchQty = Math.max(
+            0,
+            Number(batch.qtyRemainingBase || 0) + signedQtyBase
+          );
+
+          return {
+            ...batch,
+            qtyRemainingBase: nextBatchQty,
+            status: nextBatchQty <= 0 ? "depleted" : batch.status,
+          };
+        });
+
         return {
           ...inventoryItem,
           stockBaseQty: nextQty,
           status: nextStatus,
+          batches: updatedBatches,
           movements: [
             {
-              type: adjustmentForm.movementType,
-              qtyBase: baseQty,
-              refType: "manual",
+              type: movementType,
+              qtyBase: signedQtyBase,
+              refType: "adjustment",
+              refId: adjustmentId,
               note: adjustmentForm.note || "Manual stock adjustment",
-              createdAt: now,
+              createdAt: nowDate,
             },
             ...inventoryItem.movements,
           ],
@@ -648,7 +784,7 @@ export default function Inventory() {
         <ActionCard
           theme={theme}
           icon={<FiEdit2 className="text-4xl text-blue-500" />}
-          title="Manual Adjustment In"
+          title="Adjustment In"
           subtitle="Admin correction only"
           buttonText="Adjustment In"
           buttonClass="bg-blue-600 hover:bg-blue-700"
@@ -659,7 +795,7 @@ export default function Inventory() {
           theme={theme}
           icon={<FiTrendingDown className="text-4xl text-red-500" />}
           title="Stock Out"
-          subtitle="Damage / expired / correction"
+          subtitle="Damage / expired / internal use"
           buttonText="Stock Out"
           buttonClass="bg-red-500 hover:bg-red-600"
           onClick={() => openAdjustmentModal("adjustment_out")}
@@ -739,208 +875,15 @@ export default function Inventory() {
         </div>
       )}
 
-      <div
-        className={`overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}
-      >
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-white/10">
-          <div>
-            <h2 className={`text-base font-semibold ${theme.pageTitle}`}>
-              Inventory List
-            </h2>
-
-            <p className={`mt-1 text-xs ${theme.muted}`}>
-              Showing {filteredInventory.length} of {inventory.length} stock
-              items
-            </p>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px]">
-            <thead className="bg-red-600 text-white">
-              <tr>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Product / Variant
-                </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Category
-                </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Current Stock
-                </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Low Stock Alert
-                </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Cost / Value
-                </th>
-                <th className="px-5 py-3 text-center text-sm font-semibold">
-                  Status
-                </th>
-                <th className="px-5 py-3 text-center text-sm font-semibold">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredInventory.map((item) => {
-                const stockBreakdown = getVariantStockBreakdown(item);
-
-                return (
-                  <tr
-                    key={item.id}
-                    className={`border-t transition ${theme.row}`}
-                  >
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <InventoryThumb item={item} />
-
-                        <div>
-                          <p className="text-sm font-semibold leading-5">
-                            {item.variantName}
-                          </p>
-
-                          <div className="mt-1 flex flex-wrap items-center gap-2">
-                            <span
-                              className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${theme.badge}`}
-                            >
-                              {item.variantCode}
-                            </span>
-
-                            <span className={`text-xs ${theme.muted}`}>
-                              {item.productName}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
-                      >
-                        {item.category}
-                      </span>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <p className="text-sm font-bold">
-                        {stockBreakdown.baseText}
-                      </p>
-
-                      {stockBreakdown.convertedTexts.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                          {stockBreakdown.convertedTexts.map((converted) => (
-                            <span
-                              key={converted.unitName}
-                              className={`rounded-full border px-2.5 py-0.5 text-xs ${theme.badge}`}
-                            >
-                              ≈ {converted.text}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <p className={`text-sm font-semibold ${theme.pageTitle}`}>
-                        {Number(item.lowStockThreshold).toLocaleString()}{" "}
-                        {item.baseUnit}
-                      </p>
-
-                      <p className={`mt-1 text-xs ${theme.muted}`}>
-                        Alert when equal or below
-                      </p>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <p className="text-sm font-semibold">
-                        ${Number(item.unitCostBase).toFixed(3)} /{" "}
-                        {item.baseUnit}
-                      </p>
-
-                      <p className={`mt-1 text-xs ${theme.muted}`}>
-                        Value: $
-                        {(
-                          Number(item.stockBaseQty || 0) *
-                          Number(item.unitCostBase || 0)
-                        ).toFixed(2)}
-                      </p>
-                    </td>
-
-                    <td className="px-5 py-4 text-center">
-                      <StockStatusBadge
-                        status={item.status}
-                        getStatusClass={getStatusClass}
-                      />
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openViewModal(item)}
-                          title="View stock"
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
-                        >
-                          <FiEye size={16} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openAdjustmentModal("adjustment_in", item)
-                          }
-                          title="Manual adjustment in"
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
-                        >
-                          <FiTrendingUp size={16} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openAdjustmentModal("adjustment_out", item)
-                          }
-                          title="Stock out"
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
-                        >
-                          <FiTrendingDown size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {filteredInventory.length === 0 && (
-                <tr className={`border-t ${theme.row}`}>
-                  <td colSpan="7" className="px-4 py-14 text-center">
-                    <div className="flex flex-col items-center justify-center">
-                      <div
-                        className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}
-                      >
-                        <FiSearch className={`text-3xl ${theme.muted}`} />
-                      </div>
-
-                      <p
-                        className={`mt-4 text-sm font-semibold ${theme.pageTitle}`}
-                      >
-                        No inventory found
-                      </p>
-
-                      <p className={`mt-1 text-xs ${theme.muted}`}>
-                        Try changing your search keyword or status filter.
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <InventoryTable
+        theme={theme}
+        inventory={inventory}
+        filteredInventory={filteredInventory}
+        getVariantStockBreakdown={getVariantStockBreakdown}
+        getStatusClass={getStatusClass}
+        openViewModal={openViewModal}
+        openAdjustmentModal={openAdjustmentModal}
+      />
 
       {modalMode === "confirm_stock_in" && (
         <ConfirmStockInModal
@@ -975,6 +918,207 @@ export default function Inventory() {
         />
       )}
     </section>
+  );
+}
+
+function InventoryTable({
+  theme,
+  inventory,
+  filteredInventory,
+  getVariantStockBreakdown,
+  getStatusClass,
+  openViewModal,
+  openAdjustmentModal,
+}) {
+  return (
+    <div
+      className={`overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}
+    >
+      <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-white/10">
+        <div>
+          <h2 className={`text-base font-semibold ${theme.pageTitle}`}>
+            Inventory List
+          </h2>
+
+          <p className={`mt-1 text-xs ${theme.muted}`}>
+            Showing {filteredInventory.length} of {inventory.length} stock items
+          </p>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1180px]">
+          <thead className="bg-red-600 text-white">
+            <tr>
+              <th className="px-5 py-3 text-left text-sm font-semibold">
+                Product / Variant
+              </th>
+              <th className="px-5 py-3 text-left text-sm font-semibold">
+                Category
+              </th>
+              <th className="px-5 py-3 text-left text-sm font-semibold">
+                Current Stock
+              </th>
+              <th className="px-5 py-3 text-left text-sm font-semibold">
+                Low Stock Alert
+              </th>
+              <th className="px-5 py-3 text-left text-sm font-semibold">
+                Cost / Value
+              </th>
+              <th className="px-5 py-3 text-center text-sm font-semibold">
+                Status
+              </th>
+              <th className="px-5 py-3 text-center text-sm font-semibold">
+                Actions
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {filteredInventory.map((item) => {
+              const stockBreakdown = getVariantStockBreakdown(item);
+
+              return (
+                <tr key={item.id} className={`border-t transition ${theme.row}`}>
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <InventoryThumb item={item} />
+
+                      <div>
+                        <p className="text-sm font-semibold leading-5">
+                          {item.variantName}
+                        </p>
+
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${theme.badge}`}
+                          >
+                            {item.variantCode}
+                          </span>
+
+                          <span className={`text-xs ${theme.muted}`}>
+                            {item.productName}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td className="px-5 py-4">
+                    <span
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
+                    >
+                      {item.category}
+                    </span>
+                  </td>
+
+                  <td className="px-5 py-4">
+                    <p className="text-sm font-bold">{stockBreakdown.baseText}</p>
+
+                    {stockBreakdown.convertedTexts.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {stockBreakdown.convertedTexts.map((converted) => (
+                          <span
+                            key={converted.unitName}
+                            className={`rounded-full border px-2.5 py-0.5 text-xs ${theme.badge}`}
+                          >
+                            ≈ {converted.text}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="px-5 py-4">
+                    <p className={`text-sm font-semibold ${theme.pageTitle}`}>
+                      {Number(item.lowStockThreshold).toLocaleString()} {item.baseUnit}
+                    </p>
+
+                    <p className={`mt-1 text-xs ${theme.muted}`}>
+                      Alert when equal or below
+                    </p>
+                  </td>
+
+                  <td className="px-5 py-4">
+                    <p className="text-sm font-semibold">
+                      ${Number(item.unitCostBase).toFixed(3)} / {item.baseUnit}
+                    </p>
+
+                    <p className={`mt-1 text-xs ${theme.muted}`}>
+                      Value: $
+                      {(
+                        Number(item.stockBaseQty || 0) *
+                        Number(item.unitCostBase || 0)
+                      ).toFixed(2)}
+                    </p>
+                  </td>
+
+                  <td className="px-5 py-4 text-center">
+                    <StockStatusBadge
+                      status={item.status}
+                      getStatusClass={getStatusClass}
+                    />
+                  </td>
+
+                  <td className="px-5 py-4">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openViewModal(item)}
+                        title="View stock"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
+                      >
+                        <FiEye size={16} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openAdjustmentModal("adjustment_in", item)}
+                        title="Manual adjustment in"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                      >
+                        <FiTrendingUp size={16} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openAdjustmentModal("adjustment_out", item)}
+                        title="Stock out"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
+                      >
+                        <FiTrendingDown size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+
+            {filteredInventory.length === 0 && (
+              <tr className={`border-t ${theme.row}`}>
+                <td colSpan="7" className="px-4 py-14 text-center">
+                  <div className="flex flex-col items-center justify-center">
+                    <div
+                      className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}
+                    >
+                      <FiSearch className={`text-3xl ${theme.muted}`} />
+                    </div>
+
+                    <p className={`mt-4 text-sm font-semibold ${theme.pageTitle}`}>
+                      No inventory found
+                    </p>
+
+                    <p className={`mt-1 text-xs ${theme.muted}`}>
+                      Try changing your search keyword or status filter.
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -1131,7 +1275,7 @@ function ConfirmStockInModal({
   return (
     <ModalShell
       title="Confirm Stock In"
-      subtitle="Confirm received purchase items before adding them to inventory stock."
+      subtitle="Confirm accepted purchase items before adding them to inventory batches, stock movements, and balances."
       theme={theme}
       onClose={onClose}
       width="max-w-6xl"
@@ -1209,7 +1353,7 @@ function ConfirmStockInModal({
                   <thead className="bg-red-600 text-white">
                     <tr>
                       <th className="px-3 py-3 text-left">Product Variant</th>
-                      <th className="px-3 py-3 text-left">Purchase Qty</th>
+                      <th className="px-3 py-3 text-left">Accepted Qty</th>
                       <th className="px-3 py-3 text-left">Base Qty</th>
                       <th className="px-3 py-3 text-left">Unit Cost</th>
                       <th className="px-3 py-3 text-left">Expiry</th>
@@ -1381,7 +1525,7 @@ function ViewInventoryModal({
                   {item.batches.length > 0 ? (
                     item.batches.map((batch) => (
                       <tr
-                        key={batch.batchNo}
+                        key={batch.id || batch.batchNo}
                         className="border-t border-zinc-200 dark:border-white/10"
                       >
                         <td className="px-3 py-3">{batch.batchNo}</td>
@@ -1390,23 +1534,17 @@ function ViewInventoryModal({
                           {batch.expiredDate || "-"}
                         </td>
                         <td className="px-3 py-3">
-                          {Number(batch.qtyRemainingBase).toLocaleString()}{" "}
-                          {item.baseUnit}
+                          {Number(batch.qtyRemainingBase).toLocaleString()} {item.baseUnit}
                         </td>
                         <td className="px-3 py-3">
                           ${Number(batch.unitCostBase).toFixed(3)}
                         </td>
-                        <td className="px-3 py-3 capitalize">
-                          {batch.status}
-                        </td>
+                        <td className="px-3 py-3 capitalize">{batch.status}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td
-                        colSpan="6"
-                        className="px-3 py-8 text-center text-zinc-500"
-                      >
+                      <td colSpan="6" className="px-3 py-8 text-center text-zinc-500">
                         No active batch.
                       </td>
                     </tr>
@@ -1449,8 +1587,7 @@ function ViewInventoryModal({
 
                     <div className="text-right">
                       <p className="text-sm font-bold">
-                        {Number(movement.qtyBase).toLocaleString()}{" "}
-                        {item.baseUnit}
+                        {Number(movement.qtyBase).toLocaleString()} {item.baseUnit}
                       </p>
 
                       <p className={`mt-1 text-xs ${theme.muted}`}>
@@ -1484,14 +1621,31 @@ function StockAdjustmentModal({
   onSave,
 }) {
   const isStockIn = mode === "adjustment_in";
-  const title = isStockIn ? "Manual Adjustment In" : "Stock Out";
+  const title = isStockIn ? "Manual Adjustment In" : "Stock Out Adjustment";
   const subtitle = isStockIn
-    ? "Use this only for admin correction, not normal purchase stock in."
-    : "Use this for damage, expired item, correction, or manual stock out.";
+    ? "Use this only for stock count or correction, not normal purchase stock in."
+    : "Use this for damaged, expired, internal use, lost item, or correction.";
 
   const activeItem =
     selectedItem ||
     inventory.find((item) => String(item.id) === String(form.inventoryId));
+
+  const selectedUnit = activeItem?.units.find(
+    (unit) => unit.unitName === form.unitName
+  );
+
+  const previewBaseQty =
+    Number(form.qty || 0) * Number(selectedUnit?.conversionQty || 1);
+
+  const batchOptions = [
+    { value: "", label: "No batch selected" },
+    ...(activeItem?.batches || [])
+      .filter((batch) => Number(batch.qtyRemainingBase || 0) > 0)
+      .map((batch) => ({
+        value: batch.id,
+        label: `${batch.batchNo} · ${Number(batch.qtyRemainingBase).toLocaleString()} ${activeItem.baseUnit} · Exp: ${batch.expiredDate || "-"}`,
+      })),
+  ];
 
   return (
     <ModalShell
@@ -1529,7 +1683,7 @@ function StockAdjustmentModal({
         <SectionTitle
           icon={isStockIn ? <FiTrendingUp /> : <FiTrendingDown />}
           title="Adjustment Information"
-          subtitle="Select item, unit, quantity, and movement type."
+          subtitle="This creates stock_adjustments, stock_adjustment_items, and stock_movements."
           theme={theme}
         />
 
@@ -1546,6 +1700,7 @@ function StockAdjustmentModal({
 
                 onChange("inventoryId", value);
                 onChange("unitName", item?.baseUnit || "");
+                onChange("inventoryBatchId", "");
               }}
               theme={theme}
               icon={<FiPackage />}
@@ -1557,6 +1712,16 @@ function StockAdjustmentModal({
                 })),
               ]}
               disabled={Boolean(selectedItem)}
+            />
+
+            <FormSelect
+              label="Reason"
+              value={form.reason}
+              error={errors.reason}
+              onChange={(value) => onChange("reason", value)}
+              theme={theme}
+              icon={<FiTag />}
+              options={adjustmentReasons}
             />
 
             <FormSelect
@@ -1588,28 +1753,22 @@ function StockAdjustmentModal({
             />
 
             <FormSelect
-              label="Movement Type"
-              value={form.movementType}
-              onChange={(value) => onChange("movementType", value)}
+              label="Batch / Lot"
+              value={form.inventoryBatchId}
+              onChange={(value) => onChange("inventoryBatchId", value)}
               theme={theme}
-              icon={isStockIn ? <FiTrendingUp /> : <FiTrendingDown />}
-              options={
-                isStockIn
-                  ? [
-                      { value: "adjustment_in", label: "Adjustment In" },
-                      { value: "sales_return_in", label: "Sales Return In" },
-                    ]
-                  : [
-                      { value: "adjustment_out", label: "Adjustment Out" },
-                      { value: "damage_out", label: "Damage Out" },
-                      { value: "expired_out", label: "Expired Out" },
-                      {
-                        value: "purchase_return_out",
-                        label: "Purchase Return Out",
-                      },
-                    ]
-              }
+              icon={<FiClipboard />}
+              options={batchOptions}
             />
+
+            <div className={`rounded-xl border p-3 text-sm ${theme.softCard}`}>
+              <p className={`text-xs font-semibold ${theme.muted}`}>
+                Base Qty Preview
+              </p>
+              <p className="mt-1 text-lg font-bold">
+                {Number(previewBaseQty || 0).toLocaleString()} {activeItem?.baseUnit || "base units"}
+              </p>
+            </div>
           </div>
 
           <div className="mt-4">
@@ -1637,8 +1796,7 @@ function StockAdjustmentModal({
               <p className="text-sm font-semibold">{activeItem.variantName}</p>
 
               <p className="mt-2 text-3xl font-bold">
-                {Number(activeItem.stockBaseQty).toLocaleString()}{" "}
-                {activeItem.baseUnit}
+                {Number(activeItem.stockBaseQty).toLocaleString()} {activeItem.baseUnit}
               </p>
 
               <p className={`mt-1 text-xs ${theme.muted}`}>
@@ -1762,9 +1920,7 @@ function FormTextarea({
           rows={3}
           className={`w-full resize-none rounded-xl border ${
             icon ? "pl-10" : "px-3"
-          } pr-3 py-3 text-sm outline-none transition focus:ring-4 ${
-            theme.input
-          }`}
+          } pr-3 py-3 text-sm outline-none transition focus:ring-4 ${theme.input}`}
         />
       </div>
     </label>

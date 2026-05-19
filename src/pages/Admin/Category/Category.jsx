@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useId, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FiSearch,
   FiPlusCircle,
@@ -18,42 +19,21 @@ import {
   FiTag,
   FiInfo,
   FiLink,
+  FiUploadCloud,
 } from "react-icons/fi";
 
-const initialCategories = [
-  {
-    id: 1,
-    name: "Beverage",
-    description: "Drinks, soda, water, and juice",
-    imagePath: "",
-    status: "Active",
-    createdAt: "2026-04-30",
-    updatedAt: "2026-04-30",
-  },
-  {
-    id: 2,
-    name: "Soap / Care",
-    description: "Soap, shampoo, body care, and hygiene products",
-    imagePath: "",
-    status: "Active",
-    createdAt: "2026-04-30",
-    updatedAt: "2026-04-30",
-  },
-  {
-    id: 3,
-    name: "Snack",
-    description: "Chips, biscuits, candy, and small snacks",
-    imagePath: "",
-    status: "Inactive",
-    createdAt: "2026-04-30",
-    updatedAt: "2026-04-30",
-  },
-];
+import {
+  getCategoriesApi,
+  createCategoryApi,
+  updateCategoryApi,
+  deleteCategoryApi,
+} from "../../../services/category.service";
 
 const emptyForm = {
   name: "",
   description: "",
   imagePath: "",
+  imageFile: null,
   status: "Active",
 };
 
@@ -84,7 +64,8 @@ export default function Category() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
 
-  const [categories, setCategories] = useState(initialCategories);
+  const queryClient = useQueryClient();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -95,14 +76,65 @@ export default function Category() {
 
   useLockBodyScroll(Boolean(modalMode));
 
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => getCategoriesApi(),
+  });
+
+  const createCategoryMutation = useMutation({
+    mutationFn: createCategoryApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+  });
+
+  const updateCategoryMutation = useMutation({
+    mutationFn: updateCategoryApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: deleteCategoryApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+  });
+
+  const categories = useMemo(() => {
+    const responseData = categoriesQuery.data?.data;
+
+    const list = Array.isArray(responseData)
+      ? responseData
+      : Array.isArray(responseData?.data)
+        ? responseData.data
+        : [];
+
+    return list.map((item) => ({
+      id: item.id,
+      name: item.name || "",
+      description: item.description || "",
+      imagePath: item.image || "",
+      imageFile: null,
+      status: item.status ? "Active" : "Inactive",
+      createdAt: item.created_at ? item.created_at.slice(0, 10) : "-",
+      updatedAt: item.updated_at
+        ? item.updated_at.slice(0, 10)
+        : item.created_at
+          ? item.created_at.slice(0, 10)
+          : "-",
+    }));
+  }, [categoriesQuery.data]);
+
   const totalCategories = categories.length;
 
   const activeCategories = categories.filter(
-    (item) => item.status === "Active"
+    (item) => item.status === "Active",
   ).length;
 
   const inactiveCategories = categories.filter(
-    (item) => item.status === "Inactive"
+    (item) => item.status === "Inactive",
   ).length;
 
   const filteredCategories = useMemo(() => {
@@ -188,6 +220,7 @@ export default function Category() {
       name: category.name,
       description: category.description,
       imagePath: category.imagePath,
+      imageFile: null,
       status: category.status,
     });
     setModalMode("edit");
@@ -219,75 +252,63 @@ export default function Category() {
       nextErrors.name = "Category name is required.";
     }
 
-    if (
-      form.imagePath.trim() &&
-      !form.imagePath.trim().startsWith("/") &&
-      !form.imagePath.trim().startsWith("http")
-    ) {
-      nextErrors.imagePath = "Use a valid path or URL.";
-    }
-
     setErrors(nextErrors);
 
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSaveCategory = () => {
+  const handleSaveCategory = async () => {
     if (!validateForm()) return;
 
-    const now = new Date().toISOString().slice(0, 10);
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim(),
+      imagePath: form.imagePath,
+      imageFile: form.imageFile,
+      status: form.status,
+    };
 
-    if (modalMode === "add") {
-      const newCategory = {
-        id: Date.now(),
-        name: form.name.trim(),
-        description: form.description.trim(),
-        imagePath: form.imagePath.trim(),
-        status: form.status,
-        createdAt: now,
-        updatedAt: now,
-      };
+    try {
+      if (modalMode === "add") {
+        await createCategoryMutation.mutateAsync(payload);
+        closeModal();
+        return;
+      }
 
-      setCategories((previous) => [newCategory, ...previous]);
-      closeModal();
-      return;
-    }
+      if (modalMode === "edit" && selectedCategory) {
+        await updateCategoryMutation.mutateAsync({
+          id: selectedCategory.id,
+          payload,
+        });
 
-    if (modalMode === "edit" && selectedCategory) {
-      setCategories((previous) =>
-        previous.map((item) =>
-          item.id === selectedCategory.id
-            ? {
-                ...item,
-                name: form.name.trim(),
-                description: form.description.trim(),
-                imagePath: form.imagePath.trim(),
-                status: form.status,
-                updatedAt: now,
-              }
-            : item
-        )
-      );
+        closeModal();
+      }
+    } catch (error) {
+      const message = error?.response?.data?.message || "Something went wrong.";
 
-      closeModal();
+      setErrors((previous) => ({
+        ...previous,
+        form: message,
+      }));
     }
   };
 
-  const handleToggleStatus = (categoryId) => {
-    const now = new Date().toISOString().slice(0, 10);
-
-    setCategories((previous) =>
-      previous.map((item) =>
-        item.id === categoryId
-          ? {
-              ...item,
-              status: item.status === "Active" ? "Inactive" : "Active",
-              updatedAt: now,
-            }
-          : item
-      )
+  const handleToggleStatus = async (categoryId) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this category?",
     );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteCategoryMutation.mutateAsync(categoryId);
+    } catch (error) {
+      alert(error?.response?.data?.message || "Failed to delete category.");
+    }
   };
+
+  const isSaving =
+    createCategoryMutation.isPending || updateCategoryMutation.isPending;
 
   return (
     <section className="space-y-6">
@@ -380,134 +401,155 @@ export default function Category() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
-            <thead className="bg-red-600 text-white">
-              <tr>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Category
-                </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Description
-                </th>
-                <th className="px-5 py-3 text-center text-sm font-semibold">
-                  Status
-                </th>
-                <th className="px-5 py-3 text-center text-sm font-semibold">
-                  Actions
-                </th>
-              </tr>
-            </thead>
+        {categoriesQuery.isLoading && (
+          <div className={`px-5 py-10 text-center text-sm ${theme.muted}`}>
+            Loading categories...
+          </div>
+        )}
 
-            <tbody>
-              {filteredCategories.map((item) => (
-                <tr key={item.id} className={`border-t transition ${theme.row}`}>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <CategoryThumb category={item} />
+        {categoriesQuery.isError && (
+          <div className="px-5 py-10 text-center text-sm text-red-500">
+            {categoriesQuery.error?.response?.data?.message ||
+              "Failed to load categories."}
+          </div>
+        )}
 
-                      <div>
-                        <p className="text-sm font-semibold leading-5">
-                          {item.name}
-                        </p>
+        {!categoriesQuery.isLoading && !categoriesQuery.isError && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead className="bg-red-600 text-white">
+                <tr>
+                  <th className="px-5 py-3 text-left text-sm font-semibold">
+                    Category
+                  </th>
+                  <th className="px-5 py-3 text-left text-sm font-semibold">
+                    Description
+                  </th>
+                  <th className="px-5 py-3 text-center text-sm font-semibold">
+                    Status
+                  </th>
+                  <th className="px-5 py-3 text-center text-sm font-semibold">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
 
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <span
-                            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${theme.badge}`}
-                          >
-                            Category
-                          </span>
+              <tbody>
+                {filteredCategories.map((item) => (
+                  <tr
+                    key={item.id}
+                    className={`border-t transition ${theme.row}`}
+                  >
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <CategoryThumb category={item} />
 
-                          <span className={`text-xs ${theme.muted}`}>
-                            Updated: {item.updatedAt}
-                          </span>
+                        <div>
+                          <p className="text-sm font-semibold leading-5">
+                            {item.name}
+                          </p>
+
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${theme.badge}`}
+                            >
+                              Category
+                            </span>
+
+                            <span className={`text-xs ${theme.muted}`}>
+                              Updated: {item.updatedAt}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  <td className="px-5 py-4">
-                    <p
-                      className={`max-w-[520px] text-sm leading-6 ${theme.muted}`}
-                    >
-                      {item.description || "-"}
-                    </p>
-                  </td>
-
-                  <td className="px-5 py-4 text-center">
-                    <span
-                      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
-                        item.status === "Active"
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                          : "bg-red-500/10 text-red-500 dark:text-red-400"
-                      }`}
-                    >
-                      {item.status === "Active" ? (
-                        <FiCheckCircle />
-                      ) : (
-                        <FiXCircle />
-                      )}
-                      {item.status}
-                    </span>
-                  </td>
-
-                  <td className="px-5 py-4">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openViewModal(item)}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
-                        title="View category"
+                    <td className="px-5 py-4">
+                      <p
+                        className={`max-w-[520px] text-sm leading-6 ${theme.muted}`}
                       >
-                        <FiEye size={16} />
-                      </button>
+                        {item.description || "-"}
+                      </p>
+                    </td>
 
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(item)}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
-                        title="Edit category"
+                    <td className="px-5 py-4 text-center">
+                      <span
+                        className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+                          item.status === "Active"
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : "bg-red-500/10 text-red-500 dark:text-red-400"
+                        }`}
                       >
-                        <FiEdit2 size={16} />
-                      </button>
+                        {item.status === "Active" ? (
+                          <FiCheckCircle />
+                        ) : (
+                          <FiXCircle />
+                        )}
+                        {item.status}
+                      </span>
+                    </td>
 
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(item.id)}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
-                        title="Activate / Deactivate category"
-                      >
-                        <FiTrash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-5 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openViewModal(item)}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
+                          title="View category"
+                        >
+                          <FiEye size={16} />
+                        </button>
 
-              {filteredCategories.length === 0 && (
-                <tr className={`border-t ${theme.row}`}>
-                  <td colSpan="4" className="px-4 py-14 text-center">
-                    <div className="flex flex-col items-center justify-center">
-                      <div
-                        className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}
-                      >
-                        <FiSearch className={`text-3xl ${theme.muted}`} />
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(item)}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                          title="Edit category"
+                        >
+                          <FiEdit2 size={16} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(item.id)}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
+                          title="Delete category"
+                          disabled={deleteCategoryMutation.isPending}
+                        >
+                          <FiTrash2 size={16} />
+                        </button>
                       </div>
+                    </td>
+                  </tr>
+                ))}
 
-                      <p className={`mt-4 text-sm font-semibold ${theme.title}`}>
-                        No categories found
-                      </p>
+                {filteredCategories.length === 0 && (
+                  <tr className={`border-t ${theme.row}`}>
+                    <td colSpan="4" className="px-4 py-14 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <div
+                          className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}
+                        >
+                          <FiSearch className={`text-3xl ${theme.muted}`} />
+                        </div>
 
-                      <p className={`mt-1 text-xs ${theme.muted}`}>
-                        Try changing your search keyword or status filter.
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                        <p
+                          className={`mt-4 text-sm font-semibold ${theme.title}`}
+                        >
+                          No categories found
+                        </p>
+
+                        <p className={`mt-1 text-xs ${theme.muted}`}>
+                          Try changing your search keyword or status filter.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {modalMode === "view" && selectedCategory && (
@@ -528,6 +570,7 @@ export default function Category() {
           onChange={handleFormChange}
           onClose={closeModal}
           onSave={handleSaveCategory}
+          isSaving={isSaving}
         />
       )}
     </section>
@@ -553,34 +596,44 @@ function SummaryCard({ theme, icon, iconBg, title, value }) {
   );
 }
 
-function CategoryThumb({ category, size = "normal" }) {
+function CategoryThumb({ category, size = "normal", fit = "cover" }) {
   const image = category.imagePath;
 
   const sizeClass =
-    size === "large"
-      ? "h-40 w-full rounded-2xl"
-      : "h-14 w-14 rounded-2xl";
+    size === "hero"
+      ? "h-[280px] w-full rounded-[28px]"
+      : size === "large"
+        ? "h-44 w-full rounded-2xl"
+        : "h-14 w-14 rounded-2xl";
+
+  const objectClass = fit === "contain" ? "object-contain" : "object-cover";
 
   if (image) {
     return (
-      <img
-        src={image}
-        alt={category.name || "Category"}
-        className={`${sizeClass} object-cover`}
-        onError={(event) => {
-          event.currentTarget.style.display = "none";
-        }}
-      />
+      <div
+        className={`relative shrink-0 overflow-hidden border border-white/10 bg-zinc-100 dark:bg-[#202024] ${sizeClass}`}
+      >
+        <img
+          src={image}
+          alt={category.name || "Category"}
+          className={`h-full w-full ${objectClass}`}
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
+        />
+      </div>
     );
   }
 
   return (
     <div
-      className={`flex shrink-0 items-center justify-center bg-red-500/10 ${sizeClass}`}
+      className={`flex shrink-0 items-center justify-center border border-white/10 bg-red-500/10 ${sizeClass}`}
     >
       <FiImage
         className={
-          size === "large" ? "text-5xl text-red-500" : "text-2xl text-red-500"
+          size === "hero" || size === "large"
+            ? "text-5xl text-red-500"
+            : "text-2xl text-red-500"
         }
       />
     </div>
@@ -639,10 +692,12 @@ function ModalShell({ title, subtitle, theme, onClose, children, footer }) {
 }
 
 function ViewCategoryModal({ category, theme, onClose, onEdit }) {
+  const isActive = category.status === "Active";
+
   return (
     <ModalShell
-      title={category.name}
-      subtitle="Category details and current status."
+      title="Category Details"
+      subtitle="Preview category image, status, and product grouping information."
       theme={theme}
       onClose={onClose}
       footer={
@@ -666,76 +721,119 @@ function ViewCategoryModal({ category, theme, onClose, onEdit }) {
         </>
       }
     >
-      <div className="space-y-4">
-        <CategoryThumb category={category} size="large" />
+      <div className="space-y-5">
+        <div
+          className={`overflow-hidden rounded-[28px] border shadow-sm ${theme.section}`}
+        >
+          <div className="relative bg-zinc-100 p-4 dark:bg-[#202024]">
+            <CategoryThumb category={category} size="hero" fit="contain" />
 
-        <SectionTitle
-          icon={<FiInfo />}
-          title="Category Information"
-          subtitle="Main category profile for product grouping."
-          theme={theme}
-        />
+            <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-b-[24px] bg-gradient-to-t from-black/60 to-transparent p-5">
+              <div className="pointer-events-auto flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
+                    Category
+                  </p>
 
-        <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <InfoBox
+                  <h3 className="mt-1 truncate text-2xl font-bold text-white">
+                    {category.name || "-"}
+                  </h3>
+                </div>
+
+                <span
+                  className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold shadow-sm ${
+                    isActive
+                      ? "bg-emerald-500 text-white"
+                      : "bg-red-500 text-white"
+                  }`}
+                >
+                  {isActive ? <FiCheckCircle /> : <FiXCircle />}
+                  {category.status}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+            <MiniInfoCard
               theme={theme}
               label="Name"
               value={category.name}
               icon={<FiTag />}
             />
 
-            <InfoBox
+            <MiniInfoCard
               theme={theme}
-              label="Status"
-              value={category.status}
-              icon={
-                category.status === "Active" ? <FiCheckCircle /> : <FiXCircle />
-              }
-            />
-
-            <InfoBox
-              theme={theme}
-              label="Created At"
+              label="Created"
               value={category.createdAt}
               icon={<FiFileText />}
             />
 
-            <InfoBox
+            <MiniInfoCard
               theme={theme}
-              label="Updated At"
+              label="Updated"
               value={category.updatedAt}
               icon={<FiFileText />}
             />
           </div>
         </div>
 
-        <SectionTitle
-          icon={<FiFileText />}
-          title="Description & Image"
-          subtitle="Extra information used in POS display."
-          theme={theme}
-        />
-
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
-          <DetailBlock
-            theme={theme}
-            label="Description"
-            value={category.description || "-"}
+          <SectionTitle
             icon={<FiFileText />}
+            title="Description"
+            subtitle="Extra information shown for product or POS grouping."
+            theme={theme}
           />
 
-          <div className="mt-5">
-            <DetailBlock
-              theme={theme}
-              label="Image Path"
-              value={category.imagePath || "No image"}
-              icon={<FiLink />}
-            />
+          <div
+            className={`mt-4 rounded-2xl border p-4 shadow-inner ${
+              theme.softCard
+            }`}
+          >
+            <p
+              className={`text-sm leading-7 ${
+                category.description ? theme.title : theme.muted
+              }`}
+            >
+              {category.description || "No description provided."}
+            </p>
+          </div>
+        </div>
+
+        <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+          <SectionTitle
+            icon={<FiLink />}
+            title="Image Source"
+            subtitle="Current image path used by this category."
+            theme={theme}
+          />
+
+          <div className={`mt-4 rounded-2xl border p-4 ${theme.softCard}`}>
+            <p className={`break-all text-sm leading-6 ${theme.muted}`}>
+              {category.imagePath || "No image path available."}
+            </p>
           </div>
         </div>
       </div>
     </ModalShell>
+  );
+}
+
+function MiniInfoCard({ label, value, theme, icon }) {
+  return (
+    <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
+      <div className="flex items-center gap-2">
+        <span className={theme.muted}>{icon}</span>
+        <p
+          className={`text-xs font-bold uppercase tracking-wide ${theme.muted}`}
+        >
+          {label}
+        </p>
+      </div>
+
+      <p className="mt-2 truncate text-sm font-bold">{value || "-"}</p>
+    </div>
   );
 }
 
@@ -747,6 +845,7 @@ function CategoryFormModal({
   onChange,
   onClose,
   onSave,
+  isSaving,
 }) {
   const title = mode === "add" ? "Add Category" : "Edit Category";
 
@@ -769,15 +868,22 @@ function CategoryFormModal({
           <button
             type="button"
             onClick={onSave}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+            disabled={isSaving}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FiSave />
-            Save Category
+            {isSaving ? "Saving..." : "Save Category"}
           </button>
         </>
       }
     >
       <div className="space-y-4">
+        {errors.form && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            {errors.form}
+          </div>
+        )}
+
         <SectionTitle
           icon={<FiTag />}
           title="Basic Information"
@@ -804,18 +910,29 @@ function CategoryFormModal({
               onChange={(value) => onChange("status", value)}
               options={["Active", "Inactive"]}
               theme={theme}
-              icon={form.status === "Active" ? <FiCheckCircle /> : <FiXCircle />}
+              icon={
+                form.status === "Active" ? <FiCheckCircle /> : <FiXCircle />
+              }
             />
 
             <div className="md:col-span-2">
-              <FormInput
-                label="Image URL / Path"
-                value={form.imagePath}
+              <FormImageInput
+                label="Image"
+                file={form.imageFile}
+                preview={form.imagePath}
                 error={errors.imagePath}
-                onChange={(value) => onChange("imagePath", value)}
+                onChange={(file) => {
+                  onChange("imageFile", file);
+
+                  if (file) {
+                    onChange("imagePath", URL.createObjectURL(file));
+                  }
+                }}
+                onRemove={() => {
+                  onChange("imageFile", null);
+                  onChange("imagePath", "");
+                }}
                 theme={theme}
-                placeholder="/uploads/categories/beverage.png"
-                icon={<FiLink />}
               />
             </div>
           </div>
@@ -932,6 +1049,92 @@ function FormInput({
 
       {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
     </label>
+  );
+}
+
+function FormImageInput({
+  label,
+  file,
+  preview,
+  onChange,
+  onRemove,
+  theme,
+  error = "",
+}) {
+  const inputId = useId();
+
+  return (
+    <div className="block">
+      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
+        {label}
+      </span>
+
+      <div
+        className={`rounded-2xl border border-dashed p-4 transition ${
+          error
+            ? "border-red-500 bg-red-500/5"
+            : "border-zinc-300 bg-white/0 hover:border-red-400 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500"
+        }`}
+      >
+        <div className="flex flex-col gap-4 md:flex-row md:items-center">
+          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
+            {preview ? (
+              <img
+                src={preview}
+                alt="Category preview"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <FiImage className="text-3xl text-red-500" />
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <label
+              htmlFor={inputId}
+              className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+            >
+              <FiUploadCloud className="text-lg" />
+              Choose Image
+            </label>
+
+            <input
+              id={inputId}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => {
+                const selectedFile = event.target.files?.[0] || null;
+                onChange(selectedFile);
+              }}
+            />
+
+            <p className={`mt-3 truncate text-sm ${theme.muted}`}>
+              {file?.name || "PNG, JPG, JPEG up to your backend limit."}
+            </p>
+
+            {file && (
+              <p className="mt-1 text-xs text-zinc-400">
+                {(file.size / 1024 / 1024).toFixed(2)} MB
+              </p>
+            )}
+          </div>
+
+          {(file || preview) && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            >
+              <FiX />
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
+    </div>
   );
 }
 

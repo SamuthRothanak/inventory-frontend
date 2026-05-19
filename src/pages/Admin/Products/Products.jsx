@@ -25,7 +25,18 @@ import {
   FiFileText,
   FiDollarSign,
   FiShoppingCart,
+  FiRefreshCw,
 } from "react-icons/fi";
+
+const initialExchangeRates = [
+  {
+    id: 1,
+    rateDate: "2026-05-01",
+    usdToKhrRate: 4000,
+    note: "Default exchange rate",
+    status: "active",
+  },
+];
 
 const initialProducts = [
   {
@@ -75,6 +86,8 @@ const initialProducts = [
             minQty: 1,
             usd: 0.5,
             khr: 2000,
+            inputCurrency: "USD",
+            exchangeRateUsed: 4000,
           },
           {
             appliesTo: "public",
@@ -82,6 +95,8 @@ const initialProducts = [
             minQty: 1,
             usd: 5,
             khr: 20000,
+            inputCurrency: "USD",
+            exchangeRateUsed: 4000,
           },
           {
             appliesTo: "customer",
@@ -89,6 +104,8 @@ const initialProducts = [
             minQty: 5,
             usd: 4,
             khr: 16000,
+            inputCurrency: "USD",
+            exchangeRateUsed: 4000,
           },
         ],
       },
@@ -128,6 +145,8 @@ const initialProducts = [
             minQty: 1,
             usd: 1.25,
             khr: 5000,
+            inputCurrency: "USD",
+            exchangeRateUsed: 4000,
           },
           {
             appliesTo: "public",
@@ -135,6 +154,8 @@ const initialProducts = [
             minQty: 1,
             usd: 7,
             khr: 28000,
+            inputCurrency: "USD",
+            exchangeRateUsed: 4000,
           },
         ],
       },
@@ -187,6 +208,8 @@ const initialProducts = [
             minQty: 1,
             usd: 2.5,
             khr: 10000,
+            inputCurrency: "USD",
+            exchangeRateUsed: 4000,
           },
           {
             appliesTo: "customer",
@@ -194,6 +217,8 @@ const initialProducts = [
             minQty: 3,
             usd: 25,
             khr: 100000,
+            inputCurrency: "USD",
+            exchangeRateUsed: 4000,
           },
         ],
       },
@@ -246,6 +271,8 @@ const initialProducts = [
             minQty: 1,
             usd: 1,
             khr: 4000,
+            inputCurrency: "USD",
+            exchangeRateUsed: 4000,
           },
         ],
       },
@@ -280,18 +307,21 @@ const emptyVariantForm = {
   purchaseUnitName: "Case",
   purchaseConversionQty: 1,
 
-  publicUnitName: "Piece",
-  publicPriceUsd: 0,
-  publicPriceKhr: 0,
+  exchangeRate: 4000,
 
-  caseUnitName: "Case",
-  casePriceUsd: 0,
-  casePriceKhr: 0,
-
-  wholesaleUnitName: "Case",
-  wholesaleMinQty: 5,
-  wholesalePriceUsd: 0,
-  wholesalePriceKhr: 0,
+  priceRules: [
+    {
+      formId: 1,
+      appliesTo: "public",
+      unitName: "Piece",
+      minQty: 1,
+      inputCurrency: "USD",
+      priceInput: 0,
+      usd: 0,
+      khr: 0,
+      exchangeRateUsed: 4000,
+    },
+  ],
 };
 
 function useLockBodyScroll(isOpen) {
@@ -317,9 +347,161 @@ function useLockBodyScroll(isOpen) {
   }, [isOpen]);
 }
 
+function roundUsd(value) {
+  return Number(Number(value || 0).toFixed(2));
+}
+
+function roundKhr(value, step = 100, mode = "up") {
+  const amount = Number(value || 0);
+  const roundingStep = Number(step || 1);
+
+  if (!amount) return 0;
+  if (!roundingStep || roundingStep <= 1 || mode === "none") {
+    return Math.round(amount);
+  }
+
+  if (mode === "nearest") {
+    return Math.round(amount / roundingStep) * roundingStep;
+  }
+
+  if (mode === "down") {
+    return Math.floor(amount / roundingStep) * roundingStep;
+  }
+
+  return Math.ceil(amount / roundingStep) * roundingStep;
+}
+
+function convertPriceByCurrency(value, inputCurrency, exchangeRate) {
+  const amount = Number(value || 0);
+  const rate = Number(exchangeRate || 0);
+
+  if (!amount || !rate) {
+    return {
+      usd: 0,
+      khr: 0,
+    };
+  }
+
+  if (inputCurrency === "USD") {
+    return {
+      usd: roundUsd(amount),
+      khr: roundKhr(amount * rate),
+    };
+  }
+
+  return {
+    usd: roundUsd(amount / rate),
+    khr: roundKhr(amount),
+  };
+}
+
+function getPriceInputFromRule(rule) {
+  if (!rule) return 0;
+
+  if ((rule.inputCurrency || "USD") === "KHR") {
+    return Number(rule.khr || 0);
+  }
+
+  return Number(rule.usd || 0);
+}
+
+function createEmptyPriceRule({
+  unitName = "Piece",
+  appliesTo = "public",
+  exchangeRate = 4000,
+} = {}) {
+  return {
+    formId: Date.now() + Math.random(),
+    appliesTo,
+    unitName,
+    minQty: 1,
+    inputCurrency: "USD",
+    priceInput: 0,
+    usd: 0,
+    khr: 0,
+    exchangeRateUsed: Number(exchangeRate || 0),
+  };
+}
+
+function normalizeFormPriceRule(rule, exchangeRate) {
+  const inputCurrency = rule.inputCurrency || "USD";
+  const priceInput = Number(rule.priceInput ?? getPriceInputFromRule(rule) ?? 0);
+
+  const converted = convertPriceByCurrency(
+    priceInput,
+    inputCurrency,
+    exchangeRate
+  );
+
+  return {
+    ...rule,
+    inputCurrency,
+    priceInput,
+    minQty: Number(rule.minQty || 1),
+    usd: converted.usd,
+    khr: converted.khr,
+    exchangeRateUsed: Number(exchangeRate || 0),
+  };
+}
+
+function buildFormPriceRuleFromStoredRule(rule, index, exchangeRate) {
+  return normalizeFormPriceRule(
+    {
+      formId: rule.id || `${rule.appliesTo || "public"}-${rule.unitName || "unit"}-${index}`,
+      appliesTo: rule.appliesTo || "public",
+      unitName: rule.unitName || "Piece",
+      minQty: rule.minQty || 1,
+      inputCurrency: rule.inputCurrency || "USD",
+      priceInput: getPriceInputFromRule(rule),
+      usd: Number(rule.usd || 0),
+      khr: Number(rule.khr || 0),
+      exchangeRateUsed: rule.exchangeRateUsed || exchangeRate,
+    },
+    rule.exchangeRateUsed || exchangeRate
+  );
+}
+
+function recalculateUsdRuleWithRounding(rule, exchangeRate, roundingMode) {
+  if ((rule.inputCurrency || "USD") !== "USD") return rule;
+
+  return {
+    ...rule,
+    khr: calculateBulkKhrPrice(rule.usd, exchangeRate, roundingMode),
+    exchangeRateUsed: Number(exchangeRate || 0),
+  };
+}
+
+function getRoundingConfig(roundingMode) {
+  const configs = {
+    none: { step: 1, mode: "none", label: "No rounding" },
+    nearest_100: { step: 100, mode: "nearest", label: "Nearest 100៛" },
+    up_100: { step: 100, mode: "up", label: "Round up 100៛" },
+    nearest_500: { step: 500, mode: "nearest", label: "Nearest 500៛" },
+    up_500: { step: 500, mode: "up", label: "Round up 500៛" },
+  };
+
+  return configs[roundingMode] || configs.up_100;
+}
+
+function calculateBulkKhrPrice(usdPrice, exchangeRate, roundingMode) {
+  const rounding = getRoundingConfig(roundingMode);
+  return roundKhr(Number(usdPrice || 0) * Number(exchangeRate || 0), rounding.step, rounding.mode);
+}
+
+
 export default function Products() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
+
+  const [exchangeRates, setExchangeRates] = useState(initialExchangeRates);
+  const [activeExchangeRate, setActiveExchangeRate] = useState(
+    initialExchangeRates[0].usdToKhrRate
+  );
+  const [bulkRateInput, setBulkRateInput] = useState(
+    initialExchangeRates[0].usdToKhrRate
+  );
+  const [bulkRoundingMode, setBulkRoundingMode] = useState("up_100");
+  const [exchangeRateModalOpen, setExchangeRateModalOpen] = useState(false);
 
   const [products, setProducts] = useState(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
@@ -339,7 +521,7 @@ export default function Products() {
   const [productErrors, setProductErrors] = useState({});
   const [variantErrors, setVariantErrors] = useState({});
 
-  useLockBodyScroll(Boolean(modalMode || variantModalOpen));
+  useLockBodyScroll(Boolean(modalMode || variantModalOpen || exchangeRateModalOpen));
 
   const theme = {
     pageTitle: isDark ? "text-white" : "text-zinc-900",
@@ -415,6 +597,38 @@ export default function Products() {
     )
   ).length;
 
+  const totalPriceRules = products.reduce(
+    (total, product) =>
+      total +
+      product.variants.reduce(
+        (variantTotal, variant) => variantTotal + variant.priceRules.length,
+        0
+      ),
+    0
+  );
+
+  const bulkUpdatePreview = useMemo(() => {
+    const newRate = Number(bulkRateInput || 0);
+
+    if (!newRate) return [];
+
+    return products.flatMap((product) =>
+      product.variants.flatMap((variant) =>
+        variant.priceRules
+          .filter((rule) => (rule.inputCurrency || "USD") === "USD")
+          .map((rule) => ({
+            productName: product.name,
+            variantName: variant.variantName,
+            unitName: rule.unitName,
+            appliesTo: rule.appliesTo,
+            usd: Number(rule.usd || 0),
+            oldKhr: Number(rule.khr || 0),
+            newKhr: calculateBulkKhrPrice(rule.usd, newRate, bulkRoundingMode),
+          }))
+      )
+    );
+  }, [products, bulkRateInput, bulkRoundingMode]);
+
   const filteredProducts = products.filter((product) => {
     const search = searchTerm.toLowerCase();
 
@@ -438,6 +652,51 @@ export default function Products() {
 
     return matchesSearch && matchesCategory && matchesStatus;
   });
+
+  const handleBulkUpdateExchangeRate = () => {
+    const newRate = Number(bulkRateInput || 0);
+
+    if (!newRate || newRate <= 0) {
+      alert("Exchange rate must be greater than 0.");
+      return;
+    }
+
+    const confirmUpdate = window.confirm(
+      `Apply exchange rate ${newRate.toLocaleString()} to ${bulkUpdatePreview.length} USD-based price rules?`
+    );
+
+    if (!confirmUpdate) return;
+
+    setExchangeRates((previous) => [
+      {
+        id: Date.now(),
+        rateDate: new Date().toISOString().slice(0, 10),
+        usdToKhrRate: newRate,
+        note: "Bulk price update",
+        status: "active",
+      },
+      ...previous.map((rate) => ({
+        ...rate,
+        status: "inactive",
+      })),
+    ]);
+
+    setActiveExchangeRate(newRate);
+
+    setProducts((previous) =>
+      previous.map((product) => ({
+        ...product,
+        variants: product.variants.map((variant) => ({
+          ...variant,
+          priceRules: variant.priceRules.map((rule) =>
+            recalculateUsdRuleWithRounding(rule, newRate, bulkRoundingMode)
+          ),
+        })),
+      }))
+    );
+
+    setExchangeRateModalOpen(false);
+  };
 
   const openAddProductModal = () => {
     setSelectedProduct(null);
@@ -501,10 +760,24 @@ export default function Products() {
   };
 
   const handleVariantFormChange = (field, value) => {
-    setVariantForm((previous) => ({
-      ...previous,
-      [field]: value,
-    }));
+    setVariantForm((previous) => {
+      const next = {
+        ...previous,
+        [field]: value,
+      };
+
+      if (field === "exchangeRate") {
+        const exchangeRate = Number(value || 0);
+        return {
+          ...next,
+          priceRules: next.priceRules.map((rule) =>
+            normalizeFormPriceRule(rule, exchangeRate)
+          ),
+        };
+      }
+
+      return next;
+    });
 
     setVariantErrors((previous) => ({
       ...previous,
@@ -512,11 +785,65 @@ export default function Products() {
     }));
   };
 
+  const handlePriceRuleChange = (index, field, value) => {
+    setVariantForm((previous) => {
+      const exchangeRate = Number(previous.exchangeRate || activeExchangeRate);
+
+      return {
+        ...previous,
+        priceRules: previous.priceRules.map((rule, ruleIndex) => {
+          if (ruleIndex !== index) return rule;
+
+          return normalizeFormPriceRule(
+            {
+              ...rule,
+              [field]: value,
+            },
+            exchangeRate
+          );
+        }),
+      };
+    });
+
+    setVariantErrors((previous) => ({
+      ...previous,
+      priceRules: "",
+    }));
+  };
+
+  const handleAddPriceRule = () => {
+    setVariantForm((previous) => ({
+      ...previous,
+      priceRules: [
+        ...previous.priceRules,
+        createEmptyPriceRule({
+          unitName: previous.purchaseUnitName || previous.baseUnitName || "Piece",
+          appliesTo: "public",
+          exchangeRate: previous.exchangeRate || activeExchangeRate,
+        }),
+      ],
+    }));
+  };
+
+  const handleRemovePriceRule = (index) => {
+    setVariantForm((previous) => {
+      if (previous.priceRules.length <= 1) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        priceRules: previous.priceRules.filter((_, ruleIndex) => ruleIndex !== index),
+      };
+    });
+  };
+
   const openAddVariantModal = () => {
     setVariantErrors({});
     setVariantEditIndex(null);
     setVariantForm({
       ...emptyVariantForm,
+      exchangeRate: activeExchangeRate,
       variantCode: `${productForm.productCode || "PRD"}-VAR-${String(
         productVariants.length + 1
       ).padStart(3, "0")}`,
@@ -535,19 +862,9 @@ export default function Products() {
     const purchaseUnit =
       variant.units.find((unit) => unit.isDefaultPurchaseUnit) || baseUnit;
 
-    const publicPrice =
-      variant.priceRules.find((rule) => rule.appliesTo === "public") ||
-      variant.priceRules[0] ||
-      {};
-
-    const casePrice =
-      variant.priceRules.find(
-        (rule) =>
-          rule.appliesTo === "public" && rule.unitName !== publicPrice.unitName
-      ) || {};
-
-    const wholesalePrice =
-      variant.priceRules.find((rule) => rule.appliesTo === "customer") || {};
+    const firstPriceRule = variant.priceRules?.[0] || {};
+    const variantExchangeRate =
+      firstPriceRule.exchangeRateUsed || activeExchangeRate;
 
     setVariantErrors({});
     setVariantEditIndex(index);
@@ -567,19 +884,23 @@ export default function Products() {
       purchaseUnitName: purchaseUnit?.unitName || "Case",
       purchaseConversionQty: purchaseUnit?.conversionQty || 1,
 
-      publicUnitName: publicPrice?.unitName || baseUnit?.unitName || "Piece",
-      publicPriceUsd: publicPrice?.usd || 0,
-      publicPriceKhr: publicPrice?.khr || 0,
+      exchangeRate: variantExchangeRate,
 
-      caseUnitName: casePrice?.unitName || purchaseUnit?.unitName || "Case",
-      casePriceUsd: casePrice?.usd || 0,
-      casePriceKhr: casePrice?.khr || 0,
-
-      wholesaleUnitName:
-        wholesalePrice?.unitName || purchaseUnit?.unitName || "Case",
-      wholesaleMinQty: wholesalePrice?.minQty || 5,
-      wholesalePriceUsd: wholesalePrice?.usd || 0,
-      wholesalePriceKhr: wholesalePrice?.khr || 0,
+      priceRules:
+        variant.priceRules && variant.priceRules.length > 0
+          ? variant.priceRules.map((rule, ruleIndex) =>
+              buildFormPriceRuleFromStoredRule(
+                rule,
+                ruleIndex,
+                variantExchangeRate
+              )
+            )
+          : [
+              createEmptyPriceRule({
+                unitName: baseUnit?.unitName || "Piece",
+                exchangeRate: variantExchangeRate,
+              }),
+            ],
     });
 
     setVariantModalOpen(true);
@@ -596,6 +917,7 @@ export default function Products() {
     const baseUnitName = variantForm.baseUnitName || "Piece";
     const purchaseUnitName = variantForm.purchaseUnitName || baseUnitName;
     const purchaseConversionQty = Number(variantForm.purchaseConversionQty || 1);
+    const exchangeRate = Number(variantForm.exchangeRate || activeExchangeRate);
 
     const units = [
       {
@@ -617,41 +939,22 @@ export default function Products() {
       });
     }
 
-    const priceRules = [
-      {
-        appliesTo: "public",
-        unitName: variantForm.publicUnitName || baseUnitName,
-        minQty: 1,
-        usd: Number(variantForm.publicPriceUsd || 0),
-        khr: Number(variantForm.publicPriceKhr || 0),
-      },
-    ];
-
-    if (
-      Number(variantForm.casePriceUsd || 0) > 0 ||
-      Number(variantForm.casePriceKhr || 0) > 0
-    ) {
-      priceRules.push({
-        appliesTo: "public",
-        unitName: variantForm.caseUnitName || purchaseUnitName,
-        minQty: 1,
-        usd: Number(variantForm.casePriceUsd || 0),
-        khr: Number(variantForm.casePriceKhr || 0),
-      });
-    }
-
-    if (
-      Number(variantForm.wholesalePriceUsd || 0) > 0 ||
-      Number(variantForm.wholesalePriceKhr || 0) > 0
-    ) {
-      priceRules.push({
-        appliesTo: "customer",
-        unitName: variantForm.wholesaleUnitName || purchaseUnitName,
-        minQty: Number(variantForm.wholesaleMinQty || 1),
-        usd: Number(variantForm.wholesalePriceUsd || 0),
-        khr: Number(variantForm.wholesalePriceKhr || 0),
-      });
-    }
+    const priceRules = variantForm.priceRules
+      .map((rule) => normalizeFormPriceRule(rule, exchangeRate))
+      .filter(
+        (rule) =>
+          rule.unitName.trim() &&
+          (Number(rule.usd || 0) > 0 || Number(rule.khr || 0) > 0)
+      )
+      .map((rule) => ({
+        appliesTo: rule.appliesTo || "public",
+        unitName: rule.unitName.trim(),
+        minQty: Number(rule.minQty || 1),
+        usd: Number(rule.usd || 0),
+        khr: Number(rule.khr || 0),
+        inputCurrency: rule.inputCurrency || "USD",
+        exchangeRateUsed: exchangeRate,
+      }));
 
     return {
       id: Date.now(),
@@ -698,6 +1001,10 @@ export default function Products() {
         "Purchase conversion qty must be greater than 0.";
     }
 
+    if (!variantForm.exchangeRate || Number(variantForm.exchangeRate) <= 0) {
+      nextErrors.exchangeRate = "Exchange rate must be greater than 0.";
+    }
+
     if (Number(variantForm.stockBaseQty || 0) < 0) {
       nextErrors.stockBaseQty = "Stock cannot be negative.";
     }
@@ -706,21 +1013,23 @@ export default function Products() {
       nextErrors.lowStockThreshold = "Low stock threshold cannot be negative.";
     }
 
-    if (!variantForm.publicUnitName.trim()) {
-      nextErrors.publicUnitName = "Public unit is required.";
+    if (!variantForm.priceRules || variantForm.priceRules.length === 0) {
+      nextErrors.priceRules = "Please add at least one price rule.";
     }
 
-    if (Number(variantForm.publicPriceUsd || 0) < 0) {
-      nextErrors.publicPriceUsd = "USD price cannot be negative.";
-    }
+    variantForm.priceRules.forEach((rule, index) => {
+      if (!rule.unitName.trim()) {
+        nextErrors.priceRules = `Price rule #${index + 1}: unit is required.`;
+      }
 
-    if (Number(variantForm.publicPriceKhr || 0) < 0) {
-      nextErrors.publicPriceKhr = "KHR price cannot be negative.";
-    }
+      if (Number(rule.minQty || 0) < 1) {
+        nextErrors.priceRules = `Price rule #${index + 1}: min qty must be at least 1.`;
+      }
 
-    if (Number(variantForm.wholesaleMinQty || 0) < 1) {
-      nextErrors.wholesaleMinQty = "Wholesale min qty must be at least 1.";
-    }
+      if (Number(rule.priceInput || 0) < 0) {
+        nextErrors.priceRules = `Price rule #${index + 1}: price cannot be negative.`;
+      }
+    });
 
     setVariantErrors(nextErrors);
 
@@ -872,7 +1181,7 @@ export default function Products() {
 
   return (
     <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         <SummaryCard
           theme={theme}
           icon={<FiBox className="text-[34px] text-red-500" />}
@@ -895,6 +1204,14 @@ export default function Products() {
           title="Total Variants"
           value={totalVariants}
           iconBg="bg-blue-500/10"
+        />
+
+        <SummaryCard
+          theme={theme}
+          icon={<FiDollarSign className="text-[34px] text-emerald-500" />}
+          title="Price Rules"
+          value={totalPriceRules}
+          iconBg="bg-emerald-500/10"
         />
 
         <SummaryCard
@@ -946,14 +1263,25 @@ export default function Products() {
           />
         </div>
 
-        <button
-          type="button"
-          onClick={openAddProductModal}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
-        >
-          <FiPlusCircle className="text-lg" />
-          Add Product
-        </button>
+        <div className="flex flex-col gap-3 sm:flex-row xl:shrink-0">
+          <button
+            type="button"
+            onClick={() => setExchangeRateModalOpen(true)}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600 xl:min-w-[190px]"
+          >
+            <FiRefreshCw className="text-lg" />
+            Update Rate
+          </button>
+
+          <button
+            type="button"
+            onClick={openAddProductModal}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
+          >
+            <FiPlusCircle className="text-lg" />
+            Add Product
+          </button>
+        </div>
       </div>
 
       <div
@@ -1166,6 +1494,20 @@ export default function Products() {
         </div>
       </div>
 
+      {exchangeRateModalOpen && (
+        <ExchangeRateBulkUpdateModal
+          theme={theme}
+          activeExchangeRate={activeExchangeRate}
+          bulkRateInput={bulkRateInput}
+          setBulkRateInput={setBulkRateInput}
+          bulkRoundingMode={bulkRoundingMode}
+          setBulkRoundingMode={setBulkRoundingMode}
+          bulkUpdatePreview={bulkUpdatePreview}
+          onClose={() => setExchangeRateModalOpen(false)}
+          onApply={handleBulkUpdateExchangeRate}
+        />
+      )}
+
       {modalMode === "view" && selectedProduct && (
         <ViewProductModal
           product={selectedProduct}
@@ -1196,7 +1538,11 @@ export default function Products() {
           form={variantForm}
           errors={variantErrors}
           theme={theme}
+          activeExchangeRate={activeExchangeRate}
           onChange={handleVariantFormChange}
+          onPriceRuleChange={handlePriceRuleChange}
+          onAddPriceRule={handleAddPriceRule}
+          onRemovePriceRule={handleRemovePriceRule}
           onClose={closeVariantModal}
           onSave={handleSaveVariant}
         />
@@ -1366,6 +1712,157 @@ function ModalShell({
         )}
       </div>
     </div>
+  );
+}
+
+function ExchangeRateBulkUpdateModal({
+  theme,
+  activeExchangeRate,
+  bulkRateInput,
+  setBulkRateInput,
+  bulkRoundingMode,
+  setBulkRoundingMode,
+  bulkUpdatePreview,
+  onClose,
+  onApply,
+}) {
+  return (
+    <ModalShell
+      title="Update Exchange Rate & Prices"
+      subtitle="Preview KHR price changes first. Apply only when you want to update price rules created from USD."
+      theme={theme}
+      onClose={onClose}
+      width="max-w-5xl"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onApply}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-red-600"
+          >
+            <FiRefreshCw />
+            Apply Update
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className={`rounded-xl border p-4 ${theme.softCard}`}>
+              <p className={`text-xs font-semibold ${theme.muted}`}>
+                Current Active Rate
+              </p>
+              <p className="mt-2 text-xl font-bold">
+                1 USD = {Number(activeExchangeRate).toLocaleString()} KHR
+              </p>
+            </div>
+
+            <FormInput
+              label="New Exchange Rate"
+              type="number"
+              value={bulkRateInput}
+              onChange={setBulkRateInput}
+              theme={theme}
+              icon={<FiDollarSign />}
+            />
+
+            <FormSelect
+              label="KHR Rounding"
+              value={bulkRoundingMode}
+              onChange={setBulkRoundingMode}
+              options={[
+                { value: "up_100", label: "Round up to nearest 100៛" },
+                { value: "nearest_100", label: "Round nearest 100៛" },
+                { value: "up_500", label: "Round up to nearest 500៛" },
+                { value: "nearest_500", label: "Round nearest 500៛" },
+                { value: "none", label: "No rounding" },
+              ]}
+              theme={theme}
+              icon={<FiFilter />}
+            />
+          </div>
+
+          <p className={`mt-4 text-xs ${theme.muted}`}>
+            This update affects only active price rules where input currency is USD. USD prices stay the same; only KHR prices and exchangeRateUsed are updated.
+          </p>
+        </div>
+
+        <div className={`overflow-hidden rounded-2xl border shadow-sm ${theme.section}`}>
+          <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-white/10">
+            <div>
+              <h3 className="text-sm font-bold">Preview Changes</h3>
+              <p className={`mt-1 text-xs ${theme.muted}`}>
+                Showing {Math.min(8, bulkUpdatePreview.length)} of {bulkUpdatePreview.length} USD-based price rules.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead className="bg-red-600 text-white">
+                <tr>
+                  <th className="px-3 py-3 text-left">Product</th>
+                  <th className="px-3 py-3 text-left">Rule</th>
+                  <th className="px-3 py-3 text-left">USD</th>
+                  <th className="px-3 py-3 text-left">Old KHR</th>
+                  <th className="px-3 py-3 text-left">New KHR</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {bulkUpdatePreview.length > 0 ? (
+                  bulkUpdatePreview.slice(0, 8).map((item, index) => (
+                    <tr
+                      key={`${item.variantName}-${item.unitName}-${item.appliesTo}-${index}`}
+                      className="border-t border-zinc-200 dark:border-white/10"
+                    >
+                      <td className="px-3 py-3">
+                        <p className="font-semibold">{item.variantName}</p>
+                        <p className={`text-xs ${theme.muted}`}>{item.productName}</p>
+                      </td>
+
+                      <td className="px-3 py-3 capitalize">
+                        {item.appliesTo} / {item.unitName}
+                      </td>
+
+                      <td className="px-3 py-3">${item.usd.toFixed(2)}</td>
+
+                      <td className="px-3 py-3">
+                        {item.oldKhr.toLocaleString()}៛
+                      </td>
+
+                      <td className="px-3 py-3 font-semibold text-emerald-500">
+                        {item.newKhr.toLocaleString()}៛
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="5" className="px-4 py-10 text-center">
+                      <p className={`text-sm font-semibold ${theme.pageTitle}`}>
+                        No USD-based price rules found
+                      </p>
+                      <p className={`mt-1 text-xs ${theme.muted}`}>
+                        There is nothing to update with the current filter.
+                      </p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 
@@ -1565,7 +2062,7 @@ function ProductFormModal({
             </div>
           ) : (
             <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-white/10">
-              <table className="w-full min-w-[980px] text-sm">
+              <table className="w-full min-w-[1100px] text-sm">
                 <thead className="bg-red-600 text-white">
                   <tr>
                     <th className="px-3 py-3 text-left">Variant</th>
@@ -1622,7 +2119,17 @@ function ProductFormModal({
                       </td>
 
                       <td className="px-3 py-3">
-                        {variant.priceRules.length} rules
+                        <div className="space-y-1">
+                          <p>{variant.priceRules.length} rules</p>
+                          <p className={`text-xs ${theme.muted}`}>
+                            Rate:{" "}
+                            {variant.priceRules[0]?.exchangeRateUsed
+                              ? Number(
+                                  variant.priceRules[0].exchangeRateUsed
+                                ).toLocaleString()
+                              : "-"}
+                          </p>
+                        </div>
                       </td>
 
                       <td className="px-3 py-3">
@@ -1656,16 +2163,28 @@ function ProductFormModal({
   );
 }
 
-function VariantFormModal({ mode, form, errors, theme, onChange, onClose, onSave }) {
+function VariantFormModal({
+  mode,
+  form,
+  errors,
+  theme,
+  activeExchangeRate,
+  onChange,
+  onPriceRuleChange,
+  onAddPriceRule,
+  onRemovePriceRule,
+  onClose,
+  onSave,
+}) {
   const title = mode === "add" ? "Add Variant" : "Edit Variant";
 
   return (
     <ModalShell
       title={title}
-      subtitle="Set variant details, units, stock, and price rules."
+      subtitle="Set variant details, units, stock, exchange rate, and price rules."
       theme={theme}
       onClose={onClose}
-      width="max-w-4xl"
+      width="max-w-5xl"
       footer={
         <>
           <button
@@ -1842,114 +2361,184 @@ function VariantFormModal({ mode, form, errors, theme, onChange, onClose, onSave
         </FormSection>
 
         <FormSection
-          title="3. Price Rules"
-          subtitle="Set public, case/pack, and wholesale prices."
+          title="3. Exchange Rate"
+          subtitle="This rate is used to auto-convert price input between USD and KHR before saving price_rules."
+          icon={<FiRefreshCw />}
+          theme={theme}
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FormInput
+              label="Exchange Rate: 1 USD = KHR"
+              required
+              type="number"
+              value={form.exchangeRate}
+              error={errors.exchangeRate}
+              onChange={(value) => onChange("exchangeRate", value)}
+              theme={theme}
+              placeholder={String(activeExchangeRate)}
+              icon={<FiDollarSign />}
+            />
+
+            <div className={`rounded-xl border p-4 text-sm ${theme.softCard}`}>
+              <p className={`text-xs font-semibold ${theme.muted}`}>
+                Active Exchange Rate
+              </p>
+              <p className="mt-1 text-xl font-bold">
+                1 USD = {Number(activeExchangeRate).toLocaleString()} KHR
+              </p>
+              <p className={`mt-1 text-xs ${theme.muted}`}>
+                You can override it for this variant price setup.
+              </p>
+            </div>
+          </div>
+        </FormSection>
+
+        <FormSection
+          title="4. Price Rules"
+          subtitle="Add only the prices you need. One row equals one price_rules record."
           icon={<FiDollarSign />}
           theme={theme}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <FormInput
-              label="Public Unit"
-              required
-              value={form.publicUnitName}
-              error={errors.publicUnitName}
-              onChange={(value) => onChange("publicUnitName", value)}
-              theme={theme}
-              placeholder="Can"
-              icon={<FiTag />}
-            />
+          {errors.priceRules && (
+            <div className="mb-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">
+              {errors.priceRules}
+            </div>
+          )}
 
-            <FormInput
-              label="Public Price USD"
-              type="number"
-              value={form.publicPriceUsd}
-              error={errors.publicPriceUsd}
-              onChange={(value) => onChange("publicPriceUsd", value)}
-              theme={theme}
-              icon={<FiDollarSign />}
-            />
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold">Dynamic Price Rules</p>
+              <p className={`mt-1 text-xs ${theme.muted}`}>
+                Example: Public / Can, Public / Case, Customer / Case, or only one Kg price.
+              </p>
+            </div>
 
-            <FormInput
-              label="Public Price KHR"
-              type="number"
-              value={form.publicPriceKhr}
-              error={errors.publicPriceKhr}
-              onChange={(value) => onChange("publicPriceKhr", value)}
-              theme={theme}
-              icon={<FiDollarSign />}
-            />
+            <button
+              type="button"
+              onClick={onAddPriceRule}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600"
+            >
+              <FiPlus />
+              Add Price Rule
+            </button>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <FormInput
-              label="Case / Pack Unit"
-              value={form.caseUnitName}
-              onChange={(value) => onChange("caseUnitName", value)}
-              theme={theme}
-              placeholder="Case"
-              icon={<FiLayers />}
-            />
-
-            <FormInput
-              label="Case Price USD"
-              type="number"
-              value={form.casePriceUsd}
-              onChange={(value) => onChange("casePriceUsd", value)}
-              theme={theme}
-              icon={<FiDollarSign />}
-            />
-
-            <FormInput
-              label="Case Price KHR"
-              type="number"
-              value={form.casePriceKhr}
-              onChange={(value) => onChange("casePriceKhr", value)}
-              theme={theme}
-              icon={<FiDollarSign />}
-            />
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
-            <FormInput
-              label="Wholesale Unit"
-              value={form.wholesaleUnitName}
-              onChange={(value) => onChange("wholesaleUnitName", value)}
-              theme={theme}
-              placeholder="Case"
-              icon={<FiLayers />}
-            />
-
-            <FormInput
-              label="Wholesale Min Qty"
-              type="number"
-              value={form.wholesaleMinQty}
-              error={errors.wholesaleMinQty}
-              onChange={(value) => onChange("wholesaleMinQty", value)}
-              theme={theme}
-              icon={<FiHash />}
-            />
-
-            <FormInput
-              label="Wholesale Price USD"
-              type="number"
-              value={form.wholesalePriceUsd}
-              onChange={(value) => onChange("wholesalePriceUsd", value)}
-              theme={theme}
-              icon={<FiDollarSign />}
-            />
-
-            <FormInput
-              label="Wholesale Price KHR"
-              type="number"
-              value={form.wholesalePriceKhr}
-              onChange={(value) => onChange("wholesalePriceKhr", value)}
-              theme={theme}
-              icon={<FiDollarSign />}
-            />
+          <div className="space-y-4">
+            {form.priceRules.map((rule, index) => (
+              <PriceRuleInputRow
+                key={rule.formId || index}
+                index={index}
+                rule={rule}
+                canRemove={form.priceRules.length > 1}
+                theme={theme}
+                onChange={onPriceRuleChange}
+                onRemove={onRemovePriceRule}
+              />
+            ))}
           </div>
         </FormSection>
       </div>
     </ModalShell>
+  );
+}
+
+function PriceRuleInputRow({
+  index,
+  rule,
+  canRemove,
+  theme,
+  onChange,
+  onRemove,
+}) {
+  return (
+    <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-bold">Price Rule #{index + 1}</h4>
+          <p className={`mt-1 text-xs ${theme.muted}`}>
+            {rule.appliesTo || "public"} / {rule.unitName || "unit"} / min qty {rule.minQty || 1}
+          </p>
+        </div>
+
+        {canRemove && (
+          <button
+            type="button"
+            onClick={() => onRemove(index)}
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white hover:bg-red-600"
+            title="Remove price rule"
+          >
+            <FiTrash2 size={15} />
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+        <FormSelect
+          label="Applies To"
+          value={rule.appliesTo}
+          onChange={(value) => onChange(index, "appliesTo", value)}
+          options={[
+            { value: "public", label: "Public" },
+            { value: "customer", label: "Customer" },
+            { value: "wholesale", label: "Wholesale" },
+          ]}
+          theme={theme}
+          icon={<FiTag />}
+        />
+
+        <FormInput
+          label="Unit"
+          required
+          value={rule.unitName}
+          onChange={(value) => onChange(index, "unitName", value)}
+          theme={theme}
+          placeholder="Can, Case, Kg"
+          icon={<FiLayers />}
+        />
+
+        <FormInput
+          label="Min Qty"
+          type="number"
+          value={rule.minQty}
+          onChange={(value) => onChange(index, "minQty", value)}
+          theme={theme}
+          icon={<FiHash />}
+        />
+
+        <FormSelect
+          label="Input Currency"
+          value={rule.inputCurrency}
+          onChange={(value) => onChange(index, "inputCurrency", value)}
+          options={[
+            { value: "USD", label: "USD" },
+            { value: "KHR", label: "KHR" },
+          ]}
+          theme={theme}
+          icon={<FiDollarSign />}
+        />
+
+        <FormInput
+          label={`Input Price ${rule.inputCurrency}`}
+          type="number"
+          value={rule.priceInput}
+          onChange={(value) => onChange(index, "priceInput", value)}
+          theme={theme}
+          icon={<FiDollarSign />}
+        />
+
+        <PricePreview usd={rule.usd} khr={rule.khr} theme={theme} />
+      </div>
+    </div>
+  );
+}
+
+function PricePreview({ usd, khr, theme }) {
+  return (
+    <div className={`rounded-xl border p-3 text-sm ${theme.softCard}`}>
+      <p className={`text-xs font-semibold ${theme.muted}`}>Auto Convert</p>
+      <p className="mt-1 font-bold">${Number(usd || 0).toFixed(2)}</p>
+      <p className="mt-1 font-bold">{Number(khr || 0).toLocaleString()}៛</p>
+    </div>
   );
 }
 
@@ -2116,7 +2705,7 @@ function ViewProductModal({ product, theme, onClose }) {
                   <h4 className="text-sm font-semibold">Price Rules</h4>
 
                   <div className="mt-2 overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
-                    <table className="w-full min-w-[640px] text-sm">
+                    <table className="w-full min-w-[860px] text-sm">
                       <thead className="bg-red-600 text-white">
                         <tr>
                           <th className="px-3 py-3 text-left">Applies To</th>
@@ -2124,6 +2713,8 @@ function ViewProductModal({ product, theme, onClose }) {
                           <th className="px-3 py-3 text-left">Min Qty</th>
                           <th className="px-3 py-3 text-left">USD</th>
                           <th className="px-3 py-3 text-left">KHR</th>
+                          <th className="px-3 py-3 text-left">Input</th>
+                          <th className="px-3 py-3 text-left">Rate Used</th>
                         </tr>
                       </thead>
 
@@ -2143,6 +2734,14 @@ function ViewProductModal({ product, theme, onClose }) {
                             </td>
                             <td className="px-3 py-3">
                               {Number(rule.khr).toLocaleString()}៛
+                            </td>
+                            <td className="px-3 py-3">
+                              {rule.inputCurrency || "USD"}
+                            </td>
+                            <td className="px-3 py-3">
+                              {Number(
+                                rule.exchangeRateUsed || 0
+                              ).toLocaleString()}
                             </td>
                           </tr>
                         ))}
