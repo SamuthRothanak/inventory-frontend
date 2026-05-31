@@ -49,7 +49,6 @@ function useLockBodyScroll(isOpen) {
 
 function getPaginationMeta(response, fallbackLength = 0) {
   const data = response?.data;
-
   const meta = data?.meta || response?.meta || null;
 
   if (meta) {
@@ -63,23 +62,14 @@ function getPaginationMeta(response, fallbackLength = 0) {
     };
   }
 
-  // Laravel pagination response:
-  // { data: [...], total: 11, per_page: 10, current_page: 1 }
-  if (response && typeof response === "object" && !Array.isArray(response)) {
-    const currentPage = Number(response.current_page || response.currentPage || 1);
-    const perPage = Number(response.per_page || response.perPage || 10);
-    const total = Number(response.total || fallbackLength);
-    const lastPage = Number(
-      response.last_page || response.lastPage || Math.max(1, Math.ceil(total / perPage))
-    );
-
+  if (data && typeof data === "object" && !Array.isArray(data)) {
     return {
-      currentPage,
-      perPage,
-      total,
-      lastPage,
-      from: Number(response.from || (total > 0 ? (currentPage - 1) * perPage + 1 : 0)),
-      to: Number(response.to || Math.min(currentPage * perPage, total)),
+      currentPage: Number(data.current_page || 1),
+      perPage: Number(data.per_page || 10),
+      total: Number(data.total || fallbackLength),
+      lastPage: Number(data.last_page || 1),
+      from: Number(data.from || 0),
+      to: Number(data.to || 0),
     };
   }
 
@@ -93,22 +83,48 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
-function getSummaryFromResponse(response, categories) {
+function getMeta(response) {
   const data = response?.data;
-  const summary = data?.summary || response?.summary || null;
+  return data?.meta || response?.meta || null;
+}
 
-  if (summary) {
+async function getAllCategoriesForStats() {
+  const firstResponse = await getCategoriesApi({
+    page: 1,
+    per_page: 9999,
+  });
+
+  const firstCategories = extractCategories(firstResponse);
+  const meta = getMeta(firstResponse);
+
+  const lastPage = Number(meta?.last_page || meta?.lastPage || 1);
+  const apiPerPage = Number(meta?.per_page || meta?.perPage || 10);
+
+  if (lastPage <= 1) {
     return {
-      total: Number(summary.total || 0),
-      active: Number(summary.active || 0),
-      inactive: Number(summary.inactive || 0),
+      data: firstCategories,
     };
   }
 
+  const pageRequests = [];
+
+  for (let nextPage = 2; nextPage <= lastPage; nextPage += 1) {
+    pageRequests.push(
+      getCategoriesApi({
+        page: nextPage,
+        per_page: apiPerPage,
+      })
+    );
+  }
+
+  const otherResponses = await Promise.all(pageRequests);
+
+  const otherCategories = otherResponses.flatMap((response) =>
+    extractCategories(response)
+  );
+
   return {
-    total: categories.length,
-    active: categories.filter((item) => item.status === "Active").length,
-    inactive: categories.filter((item) => item.status === "Inactive").length,
+    data: [...firstCategories, ...otherCategories],
   };
 }
 
@@ -154,6 +170,12 @@ export default function Category() {
     keepPreviousData: true,
   });
 
+  const statsQuery = useQuery({
+    queryKey: ["categories", "all-for-stats"],
+    queryFn: getAllCategoriesForStats,
+    keepPreviousData: true,
+  });
+
   const rawCategories = useMemo(() => {
     return extractCategories(categoriesQuery.data);
   }, [categoriesQuery.data]);
@@ -167,8 +189,21 @@ export default function Category() {
   }, [categoriesQuery.data, categories.length]);
 
   const summary = useMemo(() => {
-    return getSummaryFromResponse(categoriesQuery.data, categories);
-  }, [categoriesQuery.data, categories]);
+    const allCategories = extractCategories(statsQuery.data).map((item) =>
+      normalizeCategory(item)
+    );
+
+    const total = allCategories.length;
+    const active = allCategories.filter(
+      (item) => item.status === "Active"
+    ).length;
+
+    return {
+      total,
+      active,
+      inactive: total - active,
+    };
+  }, [statsQuery.data]);
 
   const theme = {
     title: isDark ? "text-white" : "text-zinc-900",
@@ -326,12 +361,12 @@ export default function Category() {
     <section className="space-y-6">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <CategorySummaryCard
-  theme={theme}
-  title="Total Categories"
-  value={pagination.total}
-  icon={<FiGrid className="text-[44px] text-red-500" />}
-  iconBg="bg-red-500/10"
-/>
+          theme={theme}
+          title="Total Categories"
+          value={summary.total}
+          icon={<FiGrid className="text-[44px] text-red-500" />}
+          iconBg="bg-red-500/10"
+        />
 
         <CategorySummaryCard
           theme={theme}
@@ -349,6 +384,13 @@ export default function Category() {
           iconBg="bg-red-500/10"
         />
       </div>
+
+      {statsQuery.isError && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
+          {statsQuery.error?.response?.data?.message ||
+            "Failed to load category summary."}
+        </div>
+      )}
 
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="grid w-full grid-cols-1 gap-3 xl:max-w-4xl xl:grid-cols-[1fr_220px_160px]">

@@ -20,6 +20,7 @@ import {
 } from "react-icons/fi";
 
 import ModalShell from "./ModalShell";
+import SearchableDropdown from "./SearchableDropdown";
 import {
   productSetupDefaultValues,
   productSetupSchema,
@@ -211,12 +212,14 @@ export default function ProductSetupFormModal({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormInput label="Product Name" required error={errors.product?.name?.message} theme={theme} icon={<FiPackage />}
               inputProps={register("product.name")} placeholder="Coca Cola" />
-            <FormSelectRHF label="Category" required error={errors.product?.category_id?.message} theme={theme} icon={<FiGrid />}
-              inputProps={register("product.category_id")}
+            <SearchableDropdown label="Category" required error={errors.product?.category_id?.message} theme={theme} icon={<FiGrid />}
+              value={watch("product.category_id")}
+              onChange={(v) => setValue("product.category_id", v, { shouldValidate: true })}
+              placeholder="Select category"
               options={[
-                { value: "", label: "Select category" },
                 ...categories.map((c) => ({ value: String(c.id), label: c.name })),
               ]} />
+            <input type="hidden" {...register("product.category_id")} />
             <FormSelectRHF label="Status" error={errors.product?.status?.message} theme={theme}
               icon={watch("product.status") === "active" ? <FiCheckCircle /> : <FiXCircle />}
               inputProps={register("product.status")}
@@ -546,15 +549,17 @@ function VariantSetupCard({
 
                 {/* UNIT FIELDS */}
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_1fr_2fr]">
-                  <FormSelectRHF label="Unit" required error={unitErrors?.unit_id?.message} theme={theme} icon={<FiLayers />}
-                    inputProps={register(`variants.${variantIndex}.units.${unitIndex}.unit_id`)}
+                  <SearchableDropdown label="Unit" required error={unitErrors?.unit_id?.message} theme={theme} icon={<FiLayers />}
+                    value={watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`)}
+                    onChange={(v) => setValue(`variants.${variantIndex}.units.${unitIndex}.unit_id`, v, { shouldValidate: true })}
+                    placeholder="Select unit"
                     options={[
-                      { value: "", label: "Select unit" },
                       ...units.map((u) => ({
                         value: String(u.id),
                         label: u.unit_name || u.unitName || u.unit_code || `Unit #${u.id}`,
                       })),
                     ]} />
+                  <input type="hidden" {...register(`variants.${variantIndex}.units.${unitIndex}.unit_id`)} />
                   <FormInput label="Conversion Qty" required type="number" sanitize="number" allowDecimal={true} error={unitErrors?.conversion_qty?.message} theme={theme} icon={<FiHash />}
                     inputProps={register(`variants.${variantIndex}.units.${unitIndex}.conversion_qty`)} />
                   <div>

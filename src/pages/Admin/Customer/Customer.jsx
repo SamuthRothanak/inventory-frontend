@@ -87,25 +87,6 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
-function getSummaryFromResponse(response, customers) {
-  const data = response?.data;
-  const summary = data?.summary || response?.summary || null;
-
-  if (summary) {
-    return {
-      total: Number(summary.total || 0),
-      active: Number(summary.active || 0),
-      inactive: Number(summary.inactive || 0),
-    };
-  }
-
-  return {
-    total: customers.length,
-    active: customers.filter((item) => item.status === "Active").length,
-    inactive: customers.filter((item) => item.status === "Inactive").length,
-  };
-}
-
 export default function Customer() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
@@ -142,6 +123,14 @@ export default function Customer() {
     keepPreviousData: true,
   });
 
+  // Stats — fetch all (per_page=9999) គណនា total/active/inactive ត្រឹមត្រូវ
+  // (មិនមែនតែ page)។ Customer = អ្នកទិញដុំ (តិច) → fetch all OK។
+  const statsQuery = useQuery({
+    queryKey: ["customers", "all-for-stats"],
+    queryFn: () => getCustomersApi({ per_page: 9999 }),
+    keepPreviousData: true,
+  });
+
   const customers = useMemo(() => {
     return extractCustomers(customersQuery.data);
   }, [customersQuery.data]);
@@ -151,8 +140,15 @@ export default function Customer() {
   }, [customersQuery.data, customers.length]);
 
   const summary = useMemo(() => {
-    return getSummaryFromResponse(customersQuery.data, customers);
-  }, [customersQuery.data, customers]);
+    const allCustomers = extractCustomers(statsQuery.data);
+    const total = allCustomers.length;
+    const active = allCustomers.filter((c) => c.status === "Active").length;
+    return {
+      total,
+      active,
+      inactive: total - active,
+    };
+  }, [statsQuery.data]);
 
   const theme = {
     pageTitle: isDark ? "text-white" : "text-zinc-900",

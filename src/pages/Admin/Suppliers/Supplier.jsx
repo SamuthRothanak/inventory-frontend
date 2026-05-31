@@ -84,25 +84,6 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
-function getSummaryFromResponse(response, suppliers) {
-  const data = response?.data;
-  const summary = data?.summary || response?.summary || null;
-
-  if (summary) {
-    return {
-      total: Number(summary.total || 0),
-      active: Number(summary.active || 0),
-      inactive: Number(summary.inactive || 0),
-    };
-  }
-
-  return {
-    total: suppliers.length,
-    active: suppliers.filter((item) => item.status === "Active").length,
-    inactive: suppliers.filter((item) => item.status === "Inactive").length,
-  };
-}
-
 export default function Supplier() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
@@ -139,6 +120,14 @@ export default function Supplier() {
     keepPreviousData: true,
   });
 
+  // Stats — fetch all (per_page=9999) គណនា total/active/inactive ត្រឹមត្រូវ
+  // (មិនមែនតែ page) — backend confirmed per_page=9999 return ទាំងអស់។
+  const statsQuery = useQuery({
+    queryKey: ["suppliers", "all-for-stats"],
+    queryFn: () => getSuppliersApi({ per_page: 9999 }),
+    keepPreviousData: true,
+  });
+
   const suppliers = useMemo(() => {
     return extractSuppliers(suppliersQuery.data);
   }, [suppliersQuery.data]);
@@ -148,8 +137,15 @@ export default function Supplier() {
   }, [suppliersQuery.data, suppliers.length]);
 
   const summary = useMemo(() => {
-    return getSummaryFromResponse(suppliersQuery.data, suppliers);
-  }, [suppliersQuery.data, suppliers]);
+    const allSuppliers = extractSuppliers(statsQuery.data);
+    const total = allSuppliers.length;
+    const active = allSuppliers.filter((s) => s.status === "Active").length;
+    return {
+      total,
+      active,
+      inactive: total - active,
+    };
+  }, [statsQuery.data]);
 
   const createMutation = useMutation({
     mutationFn: createSupplierApi,

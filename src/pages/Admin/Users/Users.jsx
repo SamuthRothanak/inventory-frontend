@@ -42,6 +42,59 @@ function useLockBodyScroll(isOpen) {
   }, [isOpen]);
 }
 
+function getMeta(response) {
+  const data = response?.data;
+  return data?.meta || response?.meta || null;
+}
+
+async function getAllUsersForStats() {
+  const firstResponse = await getUsersApi({
+    page: 1,
+    per_page: 9999,
+  });
+
+  const firstUsers = extractUsers(firstResponse);
+  const meta = getMeta(firstResponse);
+
+  const lastPage = Number(meta?.last_page || meta?.lastPage || 1);
+  const apiPerPage = Number(meta?.per_page || meta?.perPage || 100);
+
+  if (lastPage <= 1) {
+    return firstUsers;
+  }
+
+  const pageRequests = [];
+
+  for (let nextPage = 2; nextPage <= lastPage; nextPage += 1) {
+    pageRequests.push(
+      getUsersApi({
+        page: nextPage,
+        per_page: apiPerPage,
+      })
+    );
+  }
+
+  const otherResponses = await Promise.all(pageRequests);
+
+  const otherUsers = otherResponses.flatMap((response) =>
+    extractUsers(response)
+  );
+
+  return [...firstUsers, ...otherUsers];
+}
+
+function normalizeUser(item) {
+  return {
+    id: item.id,
+    name: item.name ?? "",
+    username: item.username ?? "",
+    email: item.email ?? "",
+    phone: item.phone ?? "",
+    role: getRoleName(item),
+    status: getStatusLabel(item),
+  };
+}
+
 export default function Users() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
@@ -77,18 +130,18 @@ export default function Users() {
     queryFn: () => getUsersApi({ per_page: 100 }),
   });
 
-  const rawUsers = extractUsers(usersResponse);
+  const statsQuery = useQuery({
+    queryKey: ["users", "all-for-stats"],
+    queryFn: getAllUsersForStats,
+    keepPreviousData: true,
+  });
+
+  const rawUsers = useMemo(() => {
+    return extractUsers(usersResponse);
+  }, [usersResponse]);
 
   const users = useMemo(() => {
-    return rawUsers.map((item) => ({
-      id: item.id,
-      name: item.name ?? "",
-      username: item.username ?? "",
-      email: item.email ?? "",
-      phone: item.phone ?? "",
-      role: getRoleName(item),
-      status: getStatusLabel(item),
-    }));
+    return rawUsers.map((item) => normalizeUser(item));
   }, [rawUsers]);
 
   const filteredUsers = useMemo(() => {
@@ -103,11 +156,22 @@ export default function Users() {
     );
   }, [search, users]);
 
-  const totalUsers = users.length;
-  const activeUsers = users.filter((item) => item.status === "Active").length;
-  const inactiveUsers = users.filter(
-    (item) => item.status === "Inactive"
-  ).length;
+  const summary = useMemo(() => {
+    const allUsersRaw = Array.isArray(statsQuery.data)
+      ? statsQuery.data
+      : extractUsers(statsQuery.data);
+
+    const allUsers = allUsersRaw.map((item) => normalizeUser(item));
+
+    const total = allUsers.length;
+    const active = allUsers.filter((item) => item.status === "Active").length;
+
+    return {
+      total,
+      active,
+      inactive: total - active,
+    };
+  }, [statsQuery.data]);
 
   const theme = {
     pageTitle: isDark ? "text-white" : "text-zinc-900",
@@ -207,10 +271,14 @@ export default function Users() {
     }
   };
 
+  const invalidateUsers = () => {
+    queryClient.invalidateQueries({ queryKey: ["users"] });
+  };
+
   const createMutation = useMutation({
     mutationFn: createUserApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+      invalidateUsers();
       closeModal();
     },
     onError: (err) => handleServerError(err, "Create user failed."),
@@ -219,7 +287,7 @@ export default function Users() {
   const updateMutation = useMutation({
     mutationFn: updateUserApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+      invalidateUsers();
       closeModal();
     },
     onError: (err) => handleServerError(err, "Update user failed."),
@@ -228,7 +296,7 @@ export default function Users() {
   const statusMutation = useMutation({
     mutationFn: updateUserStatusApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+      invalidateUsers();
     },
     onError: (err) => {
       alert(err?.response?.data?.message || "Update status failed.");
@@ -283,11 +351,18 @@ export default function Users() {
   return (
     <section className="space-y-6">
       <UserStats
-        totalUsers={totalUsers}
-        activeUsers={activeUsers}
-        inactiveUsers={inactiveUsers}
+        totalUsers={summary.total}
+        activeUsers={summary.active}
+        inactiveUsers={summary.inactive}
         theme={theme}
       />
+
+      {statsQuery.isError && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
+          {statsQuery.error?.response?.data?.message ||
+            "Failed to load user summary."}
+        </div>
+      )}
 
       <UserToolbar
         search={search}

@@ -14,10 +14,11 @@ import {
   FiSearch,
 } from "react-icons/fi";
 
-import { getCategoriesApi } from "../../../services/category.service";
+import { getAllCategoriesApi } from "../../../services/Category.service";
 
 import {
   deleteProductApi,
+  getProductStatsApi,
   getProductsApi,
   updateProductApi,
 } from "../../../services/product.service";
@@ -111,9 +112,6 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
-// ទាញ active rate + khr_rounding ពី list /exchange-rates
-// យក record status === "active" ដែលមាន rate_date ថ្មីបំផុត
-// return { rate, rounding }
 function extractActiveRate(response) {
   const empty = { rate: 0, rounding: "ceil" };
   if (!response || response?.success === false) return empty;
@@ -128,28 +126,38 @@ function extractActiveRate(response) {
 
   const pool = activeRecords.length > 0 ? activeRecords : list;
 
-  // sort តាម rate_date ថ្មីបំផុត (fallback id)
   const sorted = [...pool].sort((a, b) => {
     const dateA = new Date(a.rate_date || a.rateDate || 0).getTime();
     const dateB = new Date(b.rate_date || b.rateDate || 0).getTime();
+
     if (dateB !== dateA) return dateB - dateA;
+
     return Number(b.id || 0) - Number(a.id || 0);
   });
 
   const chosen = sorted[0];
+
   if (!chosen) return empty;
 
   const rate =
     chosen.usd_to_khr_rate ?? chosen.usdToKhrRate ?? chosen.rate ?? null;
 
   const num = Number(rate);
-  const rounding =
-    chosen.khr_rounding || chosen.khrRounding || "ceil";
+  const rounding = chosen.khr_rounding || chosen.khrRounding || "ceil";
 
   return {
     rate: Number.isFinite(num) && num > 0 ? num : 0,
     rounding,
   };
+}
+
+function isActiveStatus(value) {
+  return (
+    value === 1 ||
+    value === "1" ||
+    value === true ||
+    String(value).toLowerCase() === "active"
+  );
 }
 
 export default function Products() {
@@ -254,18 +262,36 @@ export default function Products() {
   };
 
   const categoriesQuery = useQuery({
-    queryKey: ["categories"],
-    queryFn: () => getCategoriesApi({ per_page: 500 }),
+    queryKey: ["categories", "all-for-products"],
+    queryFn: () => getAllCategoriesApi(),
+    keepPreviousData: true,
   });
 
   const productsQuery = useQuery({
-    queryKey: ["products", { page, perPage }],
+    queryKey: [
+      "products",
+      { page, perPage, searchTerm, categoryFilter, statusFilter },
+    ],
     queryFn: () =>
       getProductsApi({
         page,
         per_page: perPage,
+        search: searchTerm || undefined,
+        category_id: categoryFilter === "All" ? undefined : categoryFilter,
+        status:
+          statusFilter === "All"
+            ? undefined
+            : statusFilter === "Active"
+              ? "active"
+              : "inactive",
       }),
     keepPreviousData: true,
+  });
+
+  const productStatsQuery = useQuery({
+    queryKey: ["products", "stats"],
+    queryFn: getProductStatsApi,
+    staleTime: 1000 * 60 * 2,
   });
 
   const variantsQuery = useQuery({
@@ -288,7 +314,6 @@ export default function Products() {
     queryFn: () => getUnitsApi({ per_page: 500 }),
   });
 
-  // active exchange rate ពី list (ប្រើជំនួស hardcoded 4000)
   const activeRateQuery = useQuery({
     queryKey: ["exchange-rates", "list-for-active"],
     queryFn: () => getExchangeRatesApi({ per_page: 100 }),
@@ -297,15 +322,23 @@ export default function Products() {
 
   const { activeExchangeRate, activeKhrRounding } = useMemo(() => {
     const { rate, rounding } = extractActiveRate(activeRateQuery.data);
+
     return {
-      activeExchangeRate: rate || 0, // 0 -> backend throw "No active rate"
+      activeExchangeRate: rate || 0,
       activeKhrRounding: rounding || "ceil",
     };
   }, [activeRateQuery.data]);
 
   const categories = useMemo(() => {
-    return extractApiData(categoriesQuery.data);
+    return Array.isArray(categoriesQuery.data) ? categoriesQuery.data : [];
   }, [categoriesQuery.data]);
+
+  const activeCategories = useMemo(() => {
+    return categories.filter((category) => {
+      const status = category.status ?? category.is_active;
+      return isActiveStatus(status);
+    });
+  }, [categories]);
 
   const units = useMemo(() => {
     return extractApiData(unitsQuery.data);
@@ -340,6 +373,19 @@ export default function Products() {
     return getPaginationMeta(productsQuery.data, products.length);
   }, [productsQuery.data, products.length]);
 
+  const productStats = useMemo(() => {
+    const data = productStatsQuery.data?.data || productStatsQuery.data || {};
+
+    return {
+      total: Number(data.total_products || pagination.total || 0),
+      active: Number(data.active_products || 0),
+      inactive: Number(data.inactive_products || 0),
+      variants: Number(data.total_variants || 0),
+      priceRules: Number(data.total_price_rule || data.total_price_rules || 0),
+      noVariant: Number(data.products_without_variants || 0),
+    };
+  }, [productStatsQuery.data, pagination.total]);
+
   useEffect(() => {
     if (!selectedProduct) return;
 
@@ -372,8 +418,6 @@ export default function Products() {
       return;
     }
 
-    // update តែពេល data ពិតប្រែ (រួមទាំង nested priceRules)
-    // ការពារ stale KHR ក្រោយ update price rule
     const changed =
       JSON.stringify(freshProduct) !== JSON.stringify(manageProduct);
 
@@ -401,11 +445,14 @@ export default function Products() {
   const invalidateProductQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["categories"] });
     queryClient.invalidateQueries({ queryKey: ["products"] });
+    queryClient.invalidateQueries({ queryKey: ["products", "stats"] });
     queryClient.invalidateQueries({ queryKey: ["product-variants"] });
     queryClient.invalidateQueries({ queryKey: ["product-variant-units"] });
     queryClient.invalidateQueries({ queryKey: ["price-rules"] });
     queryClient.invalidateQueries({ queryKey: ["units"] });
-    queryClient.invalidateQueries({ queryKey: ["exchange-rates", "list-for-active"] });
+    queryClient.invalidateQueries({
+      queryKey: ["exchange-rates", "list-for-active"],
+    });
   };
 
   const getCreatedId = (response) => {
@@ -585,51 +632,19 @@ export default function Products() {
     },
   });
 
-  const activeProducts = products.filter(
-    (product) => product.status === "Active"
-  ).length;
-
-  const totalVariants = products.reduce(
-    (total, product) => total + product.variants.length,
-    0
-  );
-
-  const totalPriceRules = products.reduce(
-    (total, product) =>
-      total +
-      product.variants.reduce(
-        (variantTotal, variant) => variantTotal + variant.priceRules.length,
-        0
-      ),
-    0
-  );
-
-  const productsWithoutVariants = products.filter(
-    (product) => product.variants.length === 0
-  ).length;
-
-  const isCategoryActive = (category) => {
-    const status = category.status ?? category.is_active;
-    return (
-      status === 1 ||
-      status === "1" ||
-      status === true ||
-      status === "active"
-    );
-  };
-
   const categoryOptions = [
     { value: "All", label: "All Categories" },
-    ...categories.filter(isCategoryActive).map((category) => ({
+    ...activeCategories.map((category) => ({
       value: String(category.id),
       label: category.name,
     })),
   ];
 
   const filteredProducts = products.filter((product) => {
-    const search = searchTerm.toLowerCase();
+    const search = searchTerm.toLowerCase().trim();
 
     const matchesSearch =
+      !search ||
       product.name.toLowerCase().includes(search) ||
       String(product.id).includes(search) ||
       product.categoryName.toLowerCase().includes(search) ||
@@ -655,7 +670,6 @@ export default function Products() {
   };
 
   const handleSaveProductSetup = (values) => {
-    // pass active rate + rounding mode ទៅ orchestrator (pre-fill; backend re-calc)
     createProductSetupMutation.mutate({
       ...values,
       exchangeRate: activeExchangeRate,
@@ -715,7 +729,6 @@ export default function Products() {
         return;
       }
 
-      // Create each unit row; map local_key -> real product_variant_unit_id
       const unitKeyToId = {};
 
       for (const unit of values.units || []) {
@@ -739,7 +752,6 @@ export default function Products() {
         unitKeyToId[local_key] = variantUnitId;
       }
 
-      // Create price rules; resolve unit by local_unit_key
       for (const rule of values.priceRules || []) {
         const { local_unit_key, ...rulePayload } = rule;
         const variantUnitId = unitKeyToId[local_unit_key];
@@ -946,6 +958,7 @@ export default function Products() {
   const handleRefresh = () => {
     categoriesQuery.refetch();
     productsQuery.refetch();
+    productStatsQuery.refetch();
     variantsQuery.refetch();
     variantUnitsQuery.refetch();
     priceRulesQuery.refetch();
@@ -1008,43 +1021,50 @@ export default function Products() {
         <SummaryCard
           theme={theme}
           icon={<FiBox className="text-[34px] text-red-500" />}
-          title="Total Products"
-          value={pagination.total}
+          title="Products"
+          value={productStats.total}
           iconBg="bg-red-500/10"
         />
 
         <SummaryCard
           theme={theme}
           icon={<FiCheckCircle className="text-[34px] text-emerald-500" />}
-          title="Active Products"
-          value={activeProducts}
+          title="Active"
+          value={productStats.active}
           iconBg="bg-emerald-500/10"
         />
 
         <SummaryCard
           theme={theme}
           icon={<FiLayers className="text-[34px] text-blue-500" />}
-          title="Variants on Page"
-          value={totalVariants}
+          title="Variants"
+          value={productStats.variants}
           iconBg="bg-blue-500/10"
         />
 
         <SummaryCard
           theme={theme}
           icon={<FiDollarSign className="text-[34px] text-emerald-500" />}
-          title="Price Rules on Page"
-          value={totalPriceRules}
+          title="Prices"
+          value={productStats.priceRules}
           iconBg="bg-emerald-500/10"
         />
 
         <SummaryCard
           theme={theme}
           icon={<FiAlertTriangle className="text-[34px] text-amber-500" />}
-          title="No Variant on Page"
-          value={productsWithoutVariants}
+          title="No Variant"
+          value={productStats.noVariant}
           iconBg="bg-amber-500/10"
         />
       </div>
+
+      {productStatsQuery.isError && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
+          {productStatsQuery.error?.response?.data?.message ||
+            "Failed to load product stats."}
+        </div>
+      )}
 
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="grid w-full grid-cols-1 gap-3 xl:max-w-6xl xl:grid-cols-[1fr_220px_200px_160px]">
@@ -1090,6 +1110,7 @@ export default function Products() {
               className={`h-12 w-full appearance-none rounded-2xl border px-4 pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
             >
               <option value={10}>10 / page</option>
+              <option value={20}>20 / page</option>
               <option value={25}>25 / page</option>
               <option value={50}>50 / page</option>
             </select>
@@ -1178,7 +1199,7 @@ export default function Products() {
 
       {setupModalOpen && (
         <ProductSetupFormModal
-          categories={categories}
+          categories={activeCategories}
           units={units}
           theme={theme}
           activeExchangeRate={activeExchangeRate}
@@ -1225,7 +1246,7 @@ export default function Products() {
         <ProductFormModal
           mode={formMode}
           product={editingProduct}
-          categories={categories}
+          categories={activeCategories}
           theme={theme}
           isSaving={updateProductMutation.isPending}
           onClose={closeProductForm}
