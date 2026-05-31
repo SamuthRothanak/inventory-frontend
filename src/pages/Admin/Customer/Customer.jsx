@@ -15,6 +15,7 @@ import {
   getCustomersApi,
   createCustomerApi,
   updateCustomerApi,
+  deleteCustomerApi,
 } from "../../../services/customer.service";
 
 import SummaryCard from "./components/SummaryCard";
@@ -24,7 +25,6 @@ import ViewCustomerModal from "./components/ViewCustomerModal";
 
 import {
   extractCustomers,
-  filterCustomers,
   toCustomerPayload,
 } from "./utils/customerUtils";
 
@@ -51,6 +51,61 @@ function useLockBodyScroll(isOpen) {
   }, [isOpen]);
 }
 
+function getPaginationMeta(response, fallbackLength = 0) {
+  const data = response?.data;
+  const meta = data?.meta || response?.meta || null;
+
+  if (meta) {
+    return {
+      currentPage: Number(meta.current_page || meta.currentPage || 1),
+      perPage: Number(meta.per_page || meta.perPage || 10),
+      total: Number(meta.total || fallbackLength),
+      lastPage: Number(meta.last_page || meta.lastPage || 1),
+      from: Number(meta.from || 0),
+      to: Number(meta.to || 0),
+    };
+  }
+
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    return {
+      currentPage: Number(data.current_page || 1),
+      perPage: Number(data.per_page || 10),
+      total: Number(data.total || fallbackLength),
+      lastPage: Number(data.last_page || 1),
+      from: Number(data.from || 0),
+      to: Number(data.to || 0),
+    };
+  }
+
+  return {
+    currentPage: 1,
+    perPage: 10,
+    total: fallbackLength,
+    lastPage: Math.max(1, Math.ceil(fallbackLength / 10)),
+    from: fallbackLength > 0 ? 1 : 0,
+    to: fallbackLength,
+  };
+}
+
+function getSummaryFromResponse(response, customers) {
+  const data = response?.data;
+  const summary = data?.summary || response?.summary || null;
+
+  if (summary) {
+    return {
+      total: Number(summary.total || 0),
+      active: Number(summary.active || 0),
+      inactive: Number(summary.inactive || 0),
+    };
+  }
+
+  return {
+    total: customers.length,
+    active: customers.filter((item) => item.status === "Active").length,
+    inactive: customers.filter((item) => item.status === "Inactive").length,
+  };
+}
+
 export default function Customer() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
@@ -58,58 +113,46 @@ export default function Customer() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   useLockBodyScroll(Boolean(modalMode));
 
-  const {
-    data: customers = [],
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["customers"],
-    queryFn: getCustomersApi,
-    select: extractCustomers,
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, statusFilter, perPage]);
+
+  const customersQuery = useQuery({
+    queryKey: ["customers", { page, perPage, searchTerm, statusFilter }],
+    queryFn: () =>
+      getCustomersApi({
+        page,
+        per_page: perPage,
+        search: searchTerm || undefined,
+        status:
+          statusFilter === "All"
+            ? undefined
+            : statusFilter === "Active"
+              ? "active"
+              : "inactive",
+      }),
+    keepPreviousData: true,
   });
 
-  const createMutation = useMutation({
-    mutationFn: createCustomerApi,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
-      closeModal();
-    },
-  });
+  const customers = useMemo(() => {
+    return extractCustomers(customersQuery.data);
+  }, [customersQuery.data]);
 
-  const updateMutation = useMutation({
-    mutationFn: updateCustomerApi,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
-      closeModal();
-    },
-  });
+  const pagination = useMemo(() => {
+    return getPaginationMeta(customersQuery.data, customers.length);
+  }, [customersQuery.data, customers.length]);
 
-  const toggleStatusMutation = useMutation({
-    mutationFn: updateCustomerApi,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
-    },
-  });
-
-  const totalCustomers = customers.length;
-
-  const activeCustomers = customers.filter(
-    (item) => item.status === "Active"
-  ).length;
-
-  const inactiveCustomers = customers.filter(
-    (item) => item.status === "Inactive"
-  ).length;
-
-  const filteredCustomers = useMemo(() => {
-    return filterCustomers(customers, searchTerm, statusFilter);
-  }, [customers, searchTerm, statusFilter]);
+  const summary = useMemo(() => {
+    return getSummaryFromResponse(customersQuery.data, customers);
+  }, [customersQuery.data, customers]);
 
   const theme = {
     pageTitle: isDark ? "text-white" : "text-zinc-900",
@@ -161,6 +204,41 @@ export default function Customer() {
       : "border-zinc-200 bg-white",
   };
 
+  const createMutation = useMutation({
+    mutationFn: createCustomerApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      closeModal();
+    },
+    onError: (error) => {
+      alert(error?.response?.data?.message || "Failed to create customer.");
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: updateCustomerApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      closeModal();
+    },
+    onError: (error) => {
+      alert(error?.response?.data?.message || "Failed to update customer.");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteCustomerApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+    },
+    onError: (error) => {
+      alert(
+        error?.response?.data?.message ||
+          "Failed to delete customer. This customer may already be used in sales."
+      );
+    },
+  });
+
   const openAddModal = () => {
     setSelectedCustomer(null);
     setModalMode("add");
@@ -197,23 +275,25 @@ export default function Customer() {
     }
   };
 
-  const handleToggleStatus = (customer) => {
-    const nextStatus = customer.status === "Active" ? "Inactive" : "Active";
+  const handleDeleteCustomer = (customer) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${customer.shopName}"?`
+    );
 
-    toggleStatusMutation.mutate({
-      id: customer.id,
-      payload: {
-        shop_name: customer.shopName,
-        contact_name: customer.contactName,
-        phone: customer.phone,
-        address: customer.address,
-        description: customer.note,
-        status: nextStatus === "Active",
-      },
-    });
+    if (!confirmed) return;
+
+    deleteMutation.mutate(customer.id);
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  const actionError =
+    createMutation.error || updateMutation.error || deleteMutation.error;
+
+  const actionErrorMessage =
+    actionError?.response?.data?.message ||
+    actionError?.message ||
+    "Something went wrong.";
 
   return (
     <section className="space-y-6">
@@ -221,7 +301,7 @@ export default function Customer() {
         <SummaryCard
           theme={theme}
           title="Total Customers"
-          value={totalCustomers}
+          value={summary.total}
           icon={<FiUsers className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
@@ -229,7 +309,7 @@ export default function Customer() {
         <SummaryCard
           theme={theme}
           title="Active Customers"
-          value={activeCustomers}
+          value={summary.active}
           icon={<FiCheckCircle className="text-[44px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
         />
@@ -237,14 +317,14 @@ export default function Customer() {
         <SummaryCard
           theme={theme}
           title="Inactive Customers"
-          value={inactiveCustomers}
+          value={summary.inactive}
           icon={<FiXCircle className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
       </div>
 
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full grid-cols-1 gap-3 xl:max-w-4xl xl:grid-cols-[1fr_220px]">
+        <div className="grid w-full grid-cols-1 gap-3 xl:max-w-4xl xl:grid-cols-[1fr_220px_160px]">
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -278,6 +358,22 @@ export default function Customer() {
               className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
             />
           </div>
+
+          <div className="relative">
+            <select
+              value={perPage}
+              onChange={(event) => setPerPage(Number(event.target.value))}
+              className={`h-12 w-full appearance-none rounded-2xl border px-4 pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
+            >
+              <option value={10}>10 / page</option>
+              <option value={25}>25 / page</option>
+              <option value={50}>50 / page</option>
+            </select>
+
+            <FiChevronDown
+              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
+            />
+          </div>
         </div>
 
         <button
@@ -290,15 +386,33 @@ export default function Customer() {
         </button>
       </div>
 
+      {customersQuery.isError && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
+          {customersQuery.error?.response?.data?.message ||
+            "Failed to load customers."}
+        </div>
+      )}
+
+      {actionError && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
+          {actionErrorMessage}
+        </div>
+      )}
+
       <CustomerTable
         theme={theme}
         customers={customers}
-        filteredCustomers={filteredCustomers}
-        isLoading={isLoading}
-        isError={isError}
+        totalCustomers={pagination.total}
+        pagination={pagination}
+        page={page}
+        onPageChange={setPage}
+        isFetching={customersQuery.isFetching}
+        isLoading={customersQuery.isLoading}
+        isError={customersQuery.isError}
+        isDeleting={deleteMutation.isPending}
         onView={openViewModal}
         onEdit={openEditModal}
-        onToggleStatus={handleToggleStatus}
+        onDelete={handleDeleteCustomer}
       />
 
       {modalMode === "view" && selectedCustomer && (

@@ -13,6 +13,7 @@ import {
 
 import {
   createSupplierApi,
+  deleteSupplierApi,
   getSuppliersApi,
   updateSupplierApi,
 } from "../../../services/supplier.service";
@@ -22,11 +23,7 @@ import SupplierTable from "./components/SupplierTable";
 import SupplierFormModal from "./components/SupplierFormModal";
 import ViewSupplierModal from "./components/ViewSupplierModal";
 
-import {
-  extractSuppliers,
-  filterSuppliers,
-  toSupplierPayload,
-} from "./utils/supplierUtils";
+import { extractSuppliers, toSupplierPayload } from "./utils/supplierUtils";
 
 function useLockBodyScroll(isOpen) {
   useEffect(() => {
@@ -51,6 +48,61 @@ function useLockBodyScroll(isOpen) {
   }, [isOpen]);
 }
 
+function getPaginationMeta(response, fallbackLength = 0) {
+  const data = response?.data;
+  const meta = data?.meta || response?.meta || null;
+
+  if (meta) {
+    return {
+      currentPage: Number(meta.current_page || meta.currentPage || 1),
+      perPage: Number(meta.per_page || meta.perPage || 10),
+      total: Number(meta.total || fallbackLength),
+      lastPage: Number(meta.last_page || meta.lastPage || 1),
+      from: Number(meta.from || 0),
+      to: Number(meta.to || 0),
+    };
+  }
+
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    return {
+      currentPage: Number(data.current_page || 1),
+      perPage: Number(data.per_page || 10),
+      total: Number(data.total || fallbackLength),
+      lastPage: Number(data.last_page || 1),
+      from: Number(data.from || 0),
+      to: Number(data.to || 0),
+    };
+  }
+
+  return {
+    currentPage: 1,
+    perPage: 10,
+    total: fallbackLength,
+    lastPage: Math.max(1, Math.ceil(fallbackLength / 10)),
+    from: fallbackLength > 0 ? 1 : 0,
+    to: fallbackLength,
+  };
+}
+
+function getSummaryFromResponse(response, suppliers) {
+  const data = response?.data;
+  const summary = data?.summary || response?.summary || null;
+
+  if (summary) {
+    return {
+      total: Number(summary.total || 0),
+      active: Number(summary.active || 0),
+      inactive: Number(summary.inactive || 0),
+    };
+  }
+
+  return {
+    total: suppliers.length,
+    active: suppliers.filter((item) => item.status === "Active").length,
+    inactive: suppliers.filter((item) => item.status === "Inactive").length,
+  };
+}
+
 export default function Supplier() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
@@ -58,27 +110,55 @@ export default function Supplier() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
 
   useLockBodyScroll(Boolean(modalMode));
 
-  const {
-    data: suppliers = [],
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: getSuppliersApi,
-    select: extractSuppliers,
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, statusFilter, perPage]);
+
+  const suppliersQuery = useQuery({
+    queryKey: ["suppliers", { page, perPage, searchTerm, statusFilter }],
+    queryFn: () =>
+      getSuppliersApi({
+        page,
+        per_page: perPage,
+        search: searchTerm || undefined,
+        status:
+          statusFilter === "All"
+            ? undefined
+            : statusFilter === "Active"
+              ? "active"
+              : "inactive",
+      }),
+    keepPreviousData: true,
   });
+
+  const suppliers = useMemo(() => {
+    return extractSuppliers(suppliersQuery.data);
+  }, [suppliersQuery.data]);
+
+  const pagination = useMemo(() => {
+    return getPaginationMeta(suppliersQuery.data, suppliers.length);
+  }, [suppliersQuery.data, suppliers.length]);
+
+  const summary = useMemo(() => {
+    return getSummaryFromResponse(suppliersQuery.data, suppliers);
+  }, [suppliersQuery.data, suppliers]);
 
   const createMutation = useMutation({
     mutationFn: createSupplierApi,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
       closeModal();
+    },
+    onError: (error) => {
+      alert(error?.response?.data?.message || "Failed to create supplier.");
     },
   });
 
@@ -88,28 +168,23 @@ export default function Supplier() {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
       closeModal();
     },
-  });
-
-  const toggleStatusMutation = useMutation({
-    mutationFn: updateSupplierApi,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+    onError: (error) => {
+      alert(error?.response?.data?.message || "Failed to update supplier.");
     },
   });
 
-  const totalSuppliers = suppliers.length;
-
-  const activeSuppliers = suppliers.filter(
-    (item) => item.status === "Active"
-  ).length;
-
-  const inactiveSuppliers = suppliers.filter(
-    (item) => item.status === "Inactive"
-  ).length;
-
-  const filteredSuppliers = useMemo(() => {
-    return filterSuppliers(suppliers, searchTerm, statusFilter);
-  }, [suppliers, searchTerm, statusFilter]);
+  const deleteMutation = useMutation({
+    mutationFn: deleteSupplierApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+    },
+    onError: (error) => {
+      alert(
+        error?.response?.data?.message ||
+          "Failed to delete supplier. This supplier may already be used in purchases."
+      );
+    },
+  });
 
   const theme = {
     pageTitle: isDark ? "text-white" : "text-zinc-900",
@@ -199,24 +274,25 @@ export default function Supplier() {
     }
   };
 
-  const handleToggleStatus = (supplier) => {
-    const nextStatus = supplier.status === "Active" ? "inactive" : "active";
+  const handleDeleteSupplier = (supplier) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${supplier.name}"?`
+    );
 
-    toggleStatusMutation.mutate({
-      id: supplier.id,
-      payload: {
-        name: supplier.name,
-        contact_person: supplier.contactPerson,
-        phone: supplier.phone,
-        email: supplier.email,
-        address: supplier.address,
-        note: supplier.note,
-        status: nextStatus,
-      },
-    });
+    if (!confirmed) return;
+
+    deleteMutation.mutate(supplier.id);
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  const actionError =
+    createMutation.error || updateMutation.error || deleteMutation.error;
+
+  const actionErrorMessage =
+    actionError?.response?.data?.message ||
+    actionError?.message ||
+    "Something went wrong.";
 
   return (
     <section className="space-y-6">
@@ -224,7 +300,7 @@ export default function Supplier() {
         <SummaryCard
           theme={theme}
           title="Total Suppliers"
-          value={totalSuppliers}
+          value={summary.total}
           icon={<FiTruck className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
@@ -232,7 +308,7 @@ export default function Supplier() {
         <SummaryCard
           theme={theme}
           title="Active Suppliers"
-          value={activeSuppliers}
+          value={summary.active}
           icon={<FiCheckCircle className="text-[44px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
         />
@@ -240,14 +316,14 @@ export default function Supplier() {
         <SummaryCard
           theme={theme}
           title="Inactive Suppliers"
-          value={inactiveSuppliers}
+          value={summary.inactive}
           icon={<FiXCircle className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
       </div>
 
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full grid-cols-1 gap-3 xl:max-w-4xl xl:grid-cols-[1fr_220px]">
+        <div className="grid w-full grid-cols-1 gap-3 xl:max-w-4xl xl:grid-cols-[1fr_220px_160px]">
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -281,6 +357,22 @@ export default function Supplier() {
               className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
             />
           </div>
+
+          <div className="relative">
+            <select
+              value={perPage}
+              onChange={(event) => setPerPage(Number(event.target.value))}
+              className={`h-12 w-full appearance-none rounded-2xl border px-4 pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
+            >
+              <option value={10}>10 / page</option>
+              <option value={25}>25 / page</option>
+              <option value={50}>50 / page</option>
+            </select>
+
+            <FiChevronDown
+              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
+            />
+          </div>
         </div>
 
         <button
@@ -293,15 +385,33 @@ export default function Supplier() {
         </button>
       </div>
 
+      {suppliersQuery.isError && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
+          {suppliersQuery.error?.response?.data?.message ||
+            "Failed to load suppliers."}
+        </div>
+      )}
+
+      {actionError && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
+          {actionErrorMessage}
+        </div>
+      )}
+
       <SupplierTable
         theme={theme}
         suppliers={suppliers}
-        filteredSuppliers={filteredSuppliers}
-        isLoading={isLoading}
-        isError={isError}
+        totalSuppliers={pagination.total}
+        pagination={pagination}
+        page={page}
+        onPageChange={setPage}
+        isFetching={suppliersQuery.isFetching}
+        isLoading={suppliersQuery.isLoading}
+        isError={suppliersQuery.isError}
+        isDeleting={deleteMutation.isPending}
         onView={openViewModal}
         onEdit={openEditModal}
-        onToggleStatus={handleToggleStatus}
+        onDelete={handleDeleteSupplier}
       />
 
       {modalMode === "view" && selectedSupplier && (

@@ -1,51 +1,39 @@
+import React from "react";
 import {
   FiCheckCircle,
   FiChevronLeft,
   FiChevronRight,
   FiEdit2,
   FiEye,
-  FiFileText,
-  FiMail,
-  FiMapPin,
-  FiPhone,
   FiSearch,
+  FiTag,
   FiTrash2,
-  FiTruck,
-  FiUser,
   FiXCircle,
 } from "react-icons/fi";
 
+import ProductThumb from "./ProductThumb";
 import TableLoading from "../../../../components/TableLoading";
 
-function StatusBadge({ status }) {
-  return (
-    <span
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
-        status === "Active"
-          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-          : "bg-red-500/10 text-red-500 dark:text-red-400"
-      }`}
-    >
-      {status === "Active" ? <FiCheckCircle /> : <FiXCircle />}
-      {status}
-    </span>
-  );
-}
+import {
+  getPriceRange,
+  getPriceRuleCount,
+  getUnitsText,
+} from "../utils/productHelpers";
 
-export default function SupplierTable({
+export default function ProductTable({
   theme,
-  suppliers,
-  totalSuppliers,
+  products,
+  totalProducts,
   pagination,
   page,
   onPageChange,
   isFetching,
   isLoading,
   isError,
-  isDeleting = false,
-  onView,
-  onEdit,
-  onDelete,
+  isDeleting,
+  onViewProduct,
+  onEditProduct,
+  onDeleteProduct,
 }) {
   const totalPages = Number(pagination?.lastPage || 1);
   const currentPage = Number(pagination?.currentPage || page || 1);
@@ -61,13 +49,13 @@ export default function SupplierTable({
       <div className="flex flex-col gap-3 border-b border-zinc-200 px-5 py-4 dark:border-white/10 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className={`text-base font-semibold ${theme.pageTitle}`}>
-            Supplier List
+            Product List
           </h2>
 
           <p className={`mt-1 text-xs ${theme.muted}`}>
             {isLoading
-              ? "Loading suppliers..."
-              : `Showing ${from || 0}-${to || suppliers.length} of ${totalSuppliers} suppliers`}
+              ? "Loading products..."
+              : `Showing ${from || 0}-${to || products.length} of ${totalProducts} products`}
           </p>
         </div>
 
@@ -79,26 +67,34 @@ export default function SupplierTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px]">
+        <table className="w-full min-w-[1080px]">
           <thead className="bg-red-600 text-white">
             <tr>
-              <th className="px-5 py-3 text-left text-sm font-semibold">
-                Supplier
+              <th className="px-4 py-4 text-left text-sm font-semibold">
+                Product
               </th>
 
-              <th className="px-5 py-3 text-left text-sm font-semibold">
-                Contact
+              <th className="px-4 py-4 text-left text-sm font-semibold">
+                Category
               </th>
 
-              <th className="px-5 py-3 text-left text-sm font-semibold">
-                Address / Note
+              <th className="px-4 py-4 text-center text-sm font-semibold">
+                Variants
               </th>
 
-              <th className="px-5 py-3 text-center text-sm font-semibold">
+              <th className="px-4 py-4 text-left text-sm font-semibold">
+                Units
+              </th>
+
+              <th className="px-4 py-4 text-left text-sm font-semibold">
+                Price Range
+              </th>
+
+              <th className="px-4 py-4 text-center text-sm font-semibold">
                 Status
               </th>
 
-              <th className="px-5 py-3 text-center text-sm font-semibold">
+              <th className="px-4 py-4 text-center text-sm font-semibold">
                 Actions
               </th>
             </tr>
@@ -108,102 +104,94 @@ export default function SupplierTable({
             {isLoading ? (
               <TableLoading
                 theme={theme}
-                colSpan={5}
-                text="Loading suppliers..."
+                colSpan={7}
+                text="Loading products..."
               />
             ) : isError ? (
               <tr className={`border-t ${theme.row}`}>
-                <td colSpan="5" className="px-4 py-14 text-center">
+                <td colSpan="7" className="px-4 py-14 text-center">
                   <p className="text-sm font-semibold text-red-500">
-                    Failed to load suppliers.
+                    Failed to load products.
                   </p>
                 </td>
               </tr>
-            ) : suppliers.length > 0 ? (
-              suppliers.map((item) => (
+            ) : products.length > 0 ? (
+              products.map((product) => (
                 <tr
-                  key={item.id}
+                  key={product.id}
                   className={`border-t transition ${theme.row}`}
                 >
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
-                        <FiTruck size={20} />
-                      </div>
+                      <ProductThumb product={product} />
 
                       <div>
-                        <p className="text-sm font-semibold leading-5">
-                          {item.name}
+                        <p className="text-sm font-semibold">{product.name}</p>
+                        <p className={`mt-1 text-xs ${theme.subText}`}>
+                          ID: {product.id}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td className="px-4 py-4">
+                    <p className="text-sm font-medium">
+                      {product.categoryName}
+                    </p>
+                    <p className={`mt-1 text-xs ${theme.subText}`}>
+                      Category ID: {product.categoryId || "-"}
+                    </p>
+                  </td>
+
+                  <td className="px-4 py-4 text-center">
+                    <span
+                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
+                    >
+                      {product.variants.length} variants
+                    </span>
+                  </td>
+
+                  <td className="px-4 py-4">
+                    <div className="flex max-w-[220px] flex-wrap gap-1.5">
+                      {getUnitsText(product)
+                        .split(", ")
+                        .map((unit) => (
+                          <span
+                            key={`${product.id}-${unit}`}
+                            className={`rounded-full border px-2.5 py-1 text-xs ${theme.badge}`}
+                          >
+                            {unit}
+                          </span>
+                        ))}
+                    </div>
+                  </td>
+
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-2">
+                      <FiTag className="text-red-500" />
+
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {getPriceRange(product)}
                         </p>
 
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <span
-                            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${theme.badge}`}
-                          >
-                            {item.supplierCode}
-                          </span>
-
-                          <span className={`text-xs ${theme.muted}`}>
-                            Updated: {item.updatedAt}
-                          </span>
-                        </div>
+                        <p className={`mt-1 text-xs ${theme.subText}`}>
+                          {getPriceRuleCount(product)} price rules
+                        </p>
                       </div>
                     </div>
                   </td>
 
-                  <td className="px-5 py-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <FiUser className={theme.muted} />
-                        <span>{item.contactPerson || "No contact person"}</span>
-                      </div>
-
-                      <div className="flex items-center gap-2 text-sm">
-                        <FiPhone className={theme.muted} />
-                        <span>{item.phone || "-"}</span>
-                      </div>
-
-                      {item.email && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <FiMail className={theme.muted} />
-                          <span className={theme.muted}>{item.email}</span>
-                        </div>
-                      )}
-                    </div>
+                  <td className="px-4 py-4 text-center">
+                    <StatusBadge status={product.status} />
                   </td>
 
-                  <td className="px-5 py-4">
-                    <div className="space-y-2">
-                      <div
-                        className={`flex max-w-[380px] gap-2 text-sm leading-6 ${theme.address}`}
-                      >
-                        <FiMapPin className="mt-1 shrink-0" />
-                        <span className="line-clamp-2">
-                          {item.address || "-"}
-                        </span>
-                      </div>
-
-                      {item.note && (
-                        <div
-                          className={`flex max-w-[380px] gap-2 text-xs leading-5 ${theme.note}`}
-                        >
-                          <FiFileText className="mt-0.5 shrink-0" />
-                          <span className="line-clamp-1">{item.note}</span>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="px-5 py-4 text-center">
-                    <StatusBadge status={item.status} />
-                  </td>
-
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-4">
                     <div className="flex items-center justify-center gap-2">
                       <button
                         type="button"
-                        onClick={() => onView(item)}
-                        title="View supplier"
+                        onClick={() => onViewProduct(product)}
+                        title="View product"
                         className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
                       >
                         <FiEye size={16} />
@@ -211,8 +199,8 @@ export default function SupplierTable({
 
                       <button
                         type="button"
-                        onClick={() => onEdit(item)}
-                        title="Edit supplier"
+                        onClick={() => onEditProduct(product)}
+                        title="Edit product"
                         className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
                       >
                         <FiEdit2 size={16} />
@@ -221,8 +209,8 @@ export default function SupplierTable({
                       <button
                         type="button"
                         disabled={isDeleting}
-                        onClick={() => onDelete(item)}
-                        title="Delete supplier"
+                        onClick={() => onDeleteProduct(product)}
+                        title="Delete product"
                         className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <FiTrash2 size={16} />
@@ -233,7 +221,7 @@ export default function SupplierTable({
               ))
             ) : (
               <tr className={`border-t ${theme.row}`}>
-                <td colSpan="5" className="px-4 py-14 text-center">
+                <td colSpan="7" className="px-4 py-14 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <div
                       className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}
@@ -244,11 +232,11 @@ export default function SupplierTable({
                     <p
                       className={`mt-4 text-sm font-semibold ${theme.pageTitle}`}
                     >
-                      No suppliers found
+                      No products found
                     </p>
 
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      Try changing your search keyword or status filter.
+                      Try changing your search keyword or filters.
                     </p>
                   </div>
                 </td>
@@ -275,10 +263,10 @@ export default function SupplierTable({
               Previous
             </button>
 
-            {pageNumbers.map((item) =>
+            {pageNumbers.map((item, index) =>
               item === "..." ? (
                 <span
-                  key={item}
+                  key={`ellipsis-${index}`}
                   className={`px-2 text-sm font-semibold ${theme.muted}`}
                 >
                   ...
@@ -346,4 +334,21 @@ function getPageNumbers(currentPage, totalPages) {
     "...",
     totalPages,
   ];
+}
+
+function StatusBadge({ status }) {
+  const isActive = status === "Active";
+
+  return (
+    <span
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+        isActive
+          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+          : "bg-red-500/10 text-red-500 dark:text-red-400"
+      }`}
+    >
+      {isActive ? <FiCheckCircle /> : <FiXCircle />}
+      {status}
+    </span>
+  );
 }

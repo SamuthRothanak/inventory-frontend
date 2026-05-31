@@ -50,6 +50,7 @@ import Supplier from "./pages/Admin/Suppliers/Supplier";
 import Products from "./pages/Admin/Products/Products";
 import Inventory from "./pages/Admin/Inventory/Inventory";
 import Purchases from "./pages/Admin/Purcheases/Purchases";
+import ExchangeRate from "./pages/Admin/ExchangeRate/ExchangeRate";
 
 export default function App() {
   return (
@@ -76,6 +77,7 @@ export default function App() {
         <Route path="products" element={<Products/>}/>
         <Route path="inventory" element={<Inventory/>}/>
         <Route path="purchases" element={<Purchases/>}/>
+        <Route path="exchange-rate" element={<ExchangeRate/>} />
       </Route>
 
       <Route

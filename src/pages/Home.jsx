@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   FiBell,
   FiMoon,
@@ -14,29 +14,29 @@ import {
   FiArchive,
   FiShoppingCart,
   FiDollarSign,
-  FiClipboard,
   FiUser,
   FiShield,
   FiFileText,
   FiSettings,
   FiDatabase,
   FiActivity,
+  FiRefreshCcw,
   FiLogOut,
 } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
+
 import { logoutApi } from "../services/auth.service";
 import { useAuthStore } from "../store/authStore";
+
 const mainMenus = [
   { label: "Dashboard", icon: FiGrid, path: "/home", end: true },
-  { label: "Products", icon: FiBox, path: "/home/products" },
   { label: "Categories", icon: FiTag, path: "/home/categories" },
-  { label: "Customer", icon: FiUsers, path: "/home/customer" },
+  { label: "Products", icon: FiBox, path: "/home/products" },
   { label: "Suppliers", icon: FiTruck, path: "/home/suppliers" },
-  { label: "Inventory", icon: FiArchive, path: "/home/inventory" },
   { label: "Purchases", icon: FiShoppingCart, path: "/home/purchases" },
+  { label: "Inventory", icon: FiArchive, path: "/home/inventory" },
+  { label: "Customer", icon: FiUsers, path: "/home/customer" },
   { label: "Sales", icon: FiDollarSign, path: "/home/sales" },
-  // { label: "Orders", icon: FiClipboard, path: "/home/orders" },
   { label: "Reports", icon: FiFileText, path: "/home/reports" },
 ];
 
@@ -47,6 +47,7 @@ const adminMenus = [
 
 const systemMenus = [
   { label: "Settings", icon: FiSettings, path: "/home/settings" },
+  { label: "Exchange Rate", icon: FiRefreshCcw, path: "/home/exchange-rate" },
   { label: "Backup Data", icon: FiDatabase, path: "/home/backup-data" },
   { label: "Audit Log", icon: FiActivity, path: "/home/audit-log" },
 ];
@@ -58,22 +59,39 @@ function MenuLink({ item, collapsed, isDark }) {
     <NavLink
       to={item.path}
       end={item.end}
+      title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
         [
-          "group flex items-center rounded-xl text-sm font-medium transition-all duration-200",
+          "group relative flex items-center rounded-xl text-[15px] font-semibold transition-all duration-200",
           collapsed
-            ? "mx-auto h-12 w-12 justify-center px-0"
-            : "w-full gap-3 px-3 py-2.5",
+            ? "mx-auto h-11 w-11 justify-center"
+            : "h-11 w-full gap-3 px-3",
           isActive
-            ? "bg-red-500 text-white shadow-sm"
+            ? "bg-red-500 text-white shadow-sm shadow-red-500/20"
             : isDark
-              ? "text-zinc-200 hover:bg-zinc-800"
-              : "text-zinc-700 hover:bg-zinc-100",
+            ? "text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950",
         ].join(" ")
       }
     >
-      <Icon className="shrink-0 text-[19px]" />
-      {!collapsed && <span className="truncate">{item.label}</span>}
+      {({ isActive }) => (
+        <>
+          <span
+            className={[
+              "flex h-6 w-6 shrink-0 items-center justify-center",
+              isActive ? "text-white" : "",
+            ].join(" ")}
+          >
+            <Icon className="text-[19px]" />
+          </span>
+
+          {!collapsed && (
+            <span className="min-w-0 flex-1 truncate leading-none">
+              {item.label}
+            </span>
+          )}
+        </>
+      )}
     </NavLink>
   );
 }
@@ -90,29 +108,40 @@ function MenuGroup({
   return (
     <div className="mt-4">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className={`flex rounded-xl text-sm font-semibold transition ${
+        title={collapsed ? title : undefined}
+        className={[
+          "flex rounded-xl text-[15px] font-bold transition-all duration-200",
           collapsed
-            ? "mx-auto h-12 w-12 items-center justify-center"
-            : "w-full items-center justify-between px-3 py-2.5"
-        } ${
+            ? "mx-auto h-11 w-11 items-center justify-center"
+            : "h-11 w-full items-center justify-between px-3",
           isDark
             ? "text-zinc-200 hover:bg-zinc-800"
-            : "text-zinc-700 hover:bg-zinc-100"
-        }`}
+            : "text-zinc-800 hover:bg-zinc-100",
+        ].join(" ")}
       >
         <div
-          className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}
+          className={[
+            "flex min-w-0 items-center",
+            collapsed ? "justify-center" : "gap-3",
+          ].join(" ")}
         >
-          <Icon className="text-[19px] shrink-0" />
-          {!collapsed && <span>{title}</span>}
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center">
+            <Icon className="text-[19px]" />
+          </span>
+
+          {!collapsed && (
+            <span className="min-w-0 truncate leading-none">{title}</span>
+          )}
         </div>
 
         {!collapsed && (
           <FiChevronDown
-            className={`shrink-0 transition-transform duration-200 ${
-              open ? "rotate-0" : "-rotate-90"
-            }`}
+            className={[
+              "shrink-0 text-[18px] transition-transform duration-200",
+              open ? "rotate-0" : "-rotate-90",
+            ].join(" ")}
           />
         )}
       </button>
@@ -133,9 +162,12 @@ function MenuGroup({
   );
 }
 
-export default function HomeLayout() {
+export default function Home() {
   const navigate = useNavigate();
+  const location = useLocation();
+
   const clearAuth = useAuthStore((state) => state.clearAuth);
+
   const logoutMutation = useMutation({
     mutationFn: logoutApi,
     onSettled: () => {
@@ -144,10 +176,23 @@ export default function HomeLayout() {
     },
   });
 
-  const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
-  const [openAdmin, setOpenAdmin] = useState(true);
-  const [openSystem, setOpenSystem] = useState(true);
+
+  const isAdminPath = adminMenus.some(
+    (item) =>
+      location.pathname === item.path ||
+      location.pathname.startsWith(item.path + "/")
+  );
+
+  const isSystemPath = systemMenus.some(
+    (item) =>
+      location.pathname === item.path ||
+      location.pathname.startsWith(item.path + "/")
+  );
+
+  const [openAdmin, setOpenAdmin] = useState(isAdminPath);
+  const [openSystem, setOpenSystem] = useState(isSystemPath);
+
   const [isDark, setIsDark] = useState(() => {
     return localStorage.getItem("theme") === "dark";
   });
@@ -156,14 +201,25 @@ export default function HomeLayout() {
     localStorage.setItem("theme", isDark ? "dark" : "light");
   }, [isDark]);
 
+  useEffect(() => {
+    if (isAdminPath) {
+      setOpenAdmin(true);
+    }
+
+    if (isSystemPath) {
+      setOpenSystem(true);
+    }
+  }, [isAdminPath, isSystemPath]);
+
   const pageTitle = useMemo(() => {
     const pathname = location.pathname;
+
     const allMenus = [...mainMenus, ...adminMenus, ...systemMenus].sort(
-      (a, b) => b.path.length - a.path.length,
+      (a, b) => b.path.length - a.path.length
     );
 
     const found = allMenus.find(
-      (item) => pathname === item.path || pathname.startsWith(item.path + "/"),
+      (item) => pathname === item.path || pathname.startsWith(item.path + "/")
     );
 
     return found ? found.label : "Dashboard";
@@ -171,21 +227,27 @@ export default function HomeLayout() {
 
   const theme = {
     app: isDark ? "bg-zinc-950" : "bg-zinc-100",
+
     sidebar: isDark
       ? "bg-zinc-900 border-zinc-800"
       : "bg-white border-zinc-200",
+
     brandBox: isDark
       ? "bg-zinc-950 border-zinc-800"
       : "bg-zinc-50 border-zinc-200",
+
     header: isDark
       ? "bg-zinc-900/95 border-zinc-800"
       : "bg-white/95 border-zinc-200",
+
     title: isDark ? "text-white" : "text-zinc-900",
     subTitle: isDark ? "text-zinc-400" : "text-zinc-500",
     border: isDark ? "border-zinc-800" : "border-zinc-200",
+
     toggle: isDark
       ? "bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800"
       : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50",
+
     contentWrap: isDark ? "bg-zinc-950" : "bg-zinc-100",
   };
 
@@ -193,32 +255,43 @@ export default function HomeLayout() {
     <div className={`h-screen overflow-hidden ${theme.app}`}>
       <div className="flex h-full">
         <aside
-          className={`relative shrink-0 border-r transition-all duration-300 ${
-            collapsed ? "w-[88px]" : "w-[270px]"
-          } ${theme.sidebar}`}
+          className={[
+            "relative shrink-0 border-r transition-all duration-300",
+            collapsed ? "w-[82px]" : "w-[260px]",
+            theme.sidebar,
+          ].join(" ")}
         >
           <div className="flex h-full flex-col overflow-hidden">
-            {/* Logo */}
             <div className={`border-b p-3 ${theme.border}`}>
               <div
-                className={`rounded-2xl border p-3 ${
+                className={[
+                  "rounded-2xl border transition-all duration-300",
                   collapsed
-                    ? "mx-auto flex h-[60px] w-[56px] items-center justify-center"
-                    : "flex items-center gap-3"
-                } ${theme.brandBox}`}
+                    ? "mx-auto flex h-[56px] w-[54px] items-center justify-center p-0"
+                    : "flex min-h-[68px] items-center gap-3 px-3 py-3",
+                  theme.brandBox,
+                ].join(" ")}
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500 text-white font-bold">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500 text-base font-bold text-white shadow-sm">
                   L
                 </div>
 
                 {!collapsed && (
                   <div className="min-w-0 leading-tight">
                     <h2
-                      className={`truncate text-base font-bold ${theme.title}`}
+                      className={[
+                        "truncate text-base font-extrabold",
+                        theme.title,
+                      ].join(" ")}
                     >
                       Hak Ly Mart
                     </h2>
-                    <p className={`text-xs font-medium ${theme.subTitle}`}>
+                    <p
+                      className={[
+                        "mt-1 truncate text-xs font-semibold",
+                        theme.subTitle,
+                      ].join(" ")}
+                    >
                       Admin
                     </p>
                   </div>
@@ -226,7 +299,7 @@ export default function HomeLayout() {
               </div>
             </div>
 
-            <div className="scrollbar-hide flex-1 overflow-y-auto px-2 py-3">
+            <div className="scrollbar-hide flex-1 overflow-y-auto px-3 py-4">
               <div className="space-y-1">
                 {mainMenus.map((item) => (
                   <MenuLink
@@ -260,24 +333,38 @@ export default function HomeLayout() {
             </div>
 
             <div className={`border-t p-3 ${theme.border}`}>
-              {/* Logout */}
               <button
+                type="button"
                 onClick={() => logoutMutation.mutate()}
-                className={`flex items-center justify-center rounded-xl bg-red-500 text-sm font-semibold text-white transition hover:bg-red-600 ${
-                  collapsed ? "mx-auto h-12 w-12" : "w-full gap-2 px-4 py-3"
-                }`}
+                disabled={logoutMutation.isPending}
+                className={[
+                  "flex items-center justify-center rounded-xl bg-red-500 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70",
+                  collapsed ? "mx-auto h-11 w-11" : "h-11 w-full gap-2 px-4",
+                ].join(" ")}
               >
                 <FiLogOut className="text-[18px]" />
-                {!collapsed && <span>Logout</span>}
+
+                {!collapsed && (
+                  <span>
+                    {logoutMutation.isPending ? "Logging out..." : "Logout"}
+                  </span>
+                )}
               </button>
             </div>
 
             <button
+              type="button"
               onClick={() => setCollapsed(!collapsed)}
-              className={`absolute -right-4 top-18 z-20 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition ${theme.toggle}`}
+              className={[
+                "absolute -right-4 top-[92px] z-20 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition",
+                theme.toggle,
+              ].join(" ")}
             >
               <FiChevronLeft
-                className={`${collapsed ? "rotate-180" : ""} transition-transform`}
+                className={[
+                  "text-[18px] transition-transform",
+                  collapsed ? "rotate-180" : "",
+                ].join(" ")}
               />
             </button>
           </div>
@@ -285,21 +372,31 @@ export default function HomeLayout() {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header
-            className={`sticky top-0 z-10 flex h-[74px] shrink-0 items-center justify-between border-b px-6 backdrop-blur ${theme.header}`}
+            className={[
+              "sticky top-0 z-10 flex h-[74px] shrink-0 items-center justify-between border-b px-6 backdrop-blur",
+              theme.header,
+            ].join(" ")}
           >
             <div className="min-w-0">
-              <h1 className={`truncate text-2xl font-bold ${theme.title}`}>
+              <h1 className={`truncate text-2xl font-extrabold ${theme.title}`}>
                 {pageTitle}
               </h1>
-              <p className={`text-sm ${theme.subTitle}`}>Management panel</p>
+
+              <p className={`mt-0.5 text-sm ${theme.subTitle}`}>
+                Management panel
+              </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <button className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600">
+              <button
+                type="button"
+                className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
+              >
                 <FiBell className="text-[18px]" />
               </button>
 
               <button
+                type="button"
                 onClick={() => setIsDark((prev) => !prev)}
                 className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
               >
