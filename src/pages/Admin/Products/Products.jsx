@@ -14,10 +14,11 @@ import {
   FiSearch,
 } from "react-icons/fi";
 
-import { getAllCategoriesApi } from "../../../services/Category.service";
+import { getAllCategoriesApi } from "../../../services/category.service";
 
 import {
   deleteProductApi,
+  getProductByIdApi,
   getProductStatsApi,
   getProductsApi,
   updateProductApi,
@@ -28,21 +29,18 @@ import { createProductSetupApi } from "../../../services/productSetup.service";
 import {
   createProductVariantApi,
   deleteProductVariantApi,
-  getProductVariantsApi,
   updateProductVariantApi,
 } from "../../../services/productVariant.service";
 
 import {
   createProductVariantUnitApi,
   deleteProductVariantUnitApi,
-  getProductVariantUnitsApi,
   updateProductVariantUnitApi,
 } from "../../../services/productVariantUnit.service";
 
 import {
   createPriceRuleApi,
   deletePriceRuleApi,
-  getPriceRulesApi,
   updatePriceRuleApi,
 } from "../../../services/priceRule.service";
 
@@ -54,6 +52,7 @@ import {
 } from "../../../services/unit.service";
 
 import { getExchangeRatesApi } from "../../../services/exchangeRate.service";
+import { useNotification } from "../../../components/AppNotification";
 
 import ProductTable from "./components/ProductTable";
 import ProductFormModal from "./components/ProductFormModal";
@@ -67,113 +66,33 @@ import PriceRuleFormModal from "./components/PriceRuleFormModal";
 import SummaryCard from "./components/SummaryCard";
 import FilterSelect from "./components/FilterSelect";
 
+import { extractApiData } from "./utils/productHelpers";
+import { extractActiveRate } from "./utils/productExchangeRate";
 import {
-  attachProductChildren,
-  extractApiData,
-  normalizePriceRules,
-  normalizeProducts,
-  normalizeVariantUnits,
-  normalizeVariants,
-} from "./utils/productHelpers";
-
-function getPaginationMeta(response, fallbackLength = 0) {
-  const data = response?.data;
-  const meta = data?.meta || response?.meta || null;
-
-  if (meta) {
-    return {
-      currentPage: Number(meta.current_page || meta.currentPage || 1),
-      perPage: Number(meta.per_page || meta.perPage || 10),
-      total: Number(meta.total || fallbackLength),
-      lastPage: Number(meta.last_page || meta.lastPage || 1),
-      from: Number(meta.from || 0),
-      to: Number(meta.to || 0),
-    };
-  }
-
-  if (data && typeof data === "object" && !Array.isArray(data)) {
-    return {
-      currentPage: Number(data.current_page || 1),
-      perPage: Number(data.per_page || 10),
-      total: Number(data.total || fallbackLength),
-      lastPage: Number(data.last_page || 1),
-      from: Number(data.from || 0),
-      to: Number(data.to || 0),
-    };
-  }
-
-  return {
-    currentPage: 1,
-    perPage: 10,
-    total: fallbackLength,
-    lastPage: Math.max(1, Math.ceil(fallbackLength / 10)),
-    from: fallbackLength > 0 ? 1 : 0,
-    to: fallbackLength,
-  };
-}
-
-function extractActiveRate(response) {
-  const empty = { rate: 0, rounding: "ceil" };
-  if (!response || response?.success === false) return empty;
-
-  const list = extractApiData(response);
-  if (!Array.isArray(list) || list.length === 0) return empty;
-
-  const activeRecords = list.filter((item) => {
-    const status = String(item.status ?? "").toLowerCase();
-    return status === "active" || item.status === 1 || item.status === true;
-  });
-
-  const pool = activeRecords.length > 0 ? activeRecords : list;
-
-  const sorted = [...pool].sort((a, b) => {
-    const dateA = new Date(a.rate_date || a.rateDate || 0).getTime();
-    const dateB = new Date(b.rate_date || b.rateDate || 0).getTime();
-
-    if (dateB !== dateA) return dateB - dateA;
-
-    return Number(b.id || 0) - Number(a.id || 0);
-  });
-
-  const chosen = sorted[0];
-
-  if (!chosen) return empty;
-
-  const rate =
-    chosen.usd_to_khr_rate ?? chosen.usdToKhrRate ?? chosen.rate ?? null;
-
-  const num = Number(rate);
-  const rounding = chosen.khr_rounding || chosen.khrRounding || "ceil";
-
-  return {
-    rate: Number.isFinite(num) && num > 0 ? num : 0,
-    rounding,
-  };
-}
-
-function isActiveStatus(value) {
-  return (
-    value === 1 ||
-    value === "1" ||
-    value === true ||
-    String(value).toLowerCase() === "active"
-  );
-}
+  getSingleProductFromResponse,
+  isActiveStatus,
+  normalizeProduct,
+} from "./utils/productNormalizers";
+import { getPaginationMeta } from "./utils/productPagination";
 
 export default function Products() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
 
   const queryClient = useQueryClient();
+  const notify = useNotification();
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [manageProduct, setManageProduct] = useState(null);
+  const [selectedProductId, setSelectedProductId] = useState(null);
+  const [manageProductId, setManageProductId] = useState(null);
 
   const [setupModalOpen, setSetupModalOpen] = useState(false);
 
@@ -208,8 +127,16 @@ export default function Products() {
   });
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
     setPage(1);
-  }, [searchTerm, categoryFilter, statusFilter, perPage]);
+  }, [debouncedSearchTerm, categoryFilter, statusFilter, perPage]);
 
   const theme = {
     pageTitle: isDark ? "text-white" : "text-zinc-900",
@@ -262,21 +189,28 @@ export default function Products() {
   };
 
   const categoriesQuery = useQuery({
-    queryKey: ["categories", "all-for-products"],
-    queryFn: () => getAllCategoriesApi(),
+    queryKey: ["categories", "active-for-products", { status: "active" }],
+    queryFn: () => getAllCategoriesApi({ status: "active" }),
     keepPreviousData: true,
+    staleTime: 1000 * 60 * 5,
   });
 
   const productsQuery = useQuery({
     queryKey: [
       "products",
-      { page, perPage, searchTerm, categoryFilter, statusFilter },
+      {
+        page,
+        perPage,
+        search: debouncedSearchTerm,
+        categoryFilter,
+        statusFilter,
+      },
     ],
     queryFn: () =>
       getProductsApi({
         page,
         per_page: perPage,
-        search: searchTerm || undefined,
+        search: debouncedSearchTerm || undefined,
         category_id: categoryFilter === "All" ? undefined : categoryFilter,
         status:
           statusFilter === "All"
@@ -294,30 +228,35 @@ export default function Products() {
     staleTime: 1000 * 60 * 2,
   });
 
-  const variantsQuery = useQuery({
-    queryKey: ["product-variants", "all"],
-    queryFn: () => getProductVariantsApi({ per_page: 500 }),
-  });
-
-  const variantUnitsQuery = useQuery({
-    queryKey: ["product-variant-units", "all"],
-    queryFn: () => getProductVariantUnitsApi({ per_page: 500 }),
-  });
-
-  const priceRulesQuery = useQuery({
-    queryKey: ["price-rules", "all"],
-    queryFn: () => getPriceRulesApi({ per_page: 500 }),
-  });
+  const shouldLoadUnits =
+    setupModalOpen ||
+    variantSetupState.open ||
+    variantUnitFormState.open;
 
   const unitsQuery = useQuery({
     queryKey: ["units", "all"],
     queryFn: () => getUnitsApi({ per_page: 500 }),
+    enabled: shouldLoadUnits,
+    staleTime: 1000 * 60 * 5,
   });
 
   const activeRateQuery = useQuery({
     queryKey: ["exchange-rates", "list-for-active"],
     queryFn: () => getExchangeRatesApi({ per_page: 100 }),
     retry: false,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const selectedProductQuery = useQuery({
+    queryKey: ["products", "detail", selectedProductId],
+    queryFn: () => getProductByIdApi(selectedProductId),
+    enabled: Boolean(selectedProductId),
+  });
+
+  const manageProductQuery = useQuery({
+    queryKey: ["products", "detail", manageProductId],
+    queryFn: () => getProductByIdApi(manageProductId),
+    enabled: Boolean(manageProductId),
   });
 
   const { activeExchangeRate, activeKhrRounding } = useMemo(() => {
@@ -329,8 +268,19 @@ export default function Products() {
     };
   }, [activeRateQuery.data]);
 
+  const requireActiveExchangeRate = () => {
+    if (Number(activeExchangeRate || 0) > 0) return true;
+
+    notify.error(
+      "No active exchange rate",
+      "Please create and activate an exchange rate before saving product prices."
+    );
+
+    return false;
+  };
+
   const categories = useMemo(() => {
-    return Array.isArray(categoriesQuery.data) ? categoriesQuery.data : [];
+    return extractApiData(categoriesQuery.data);
   }, [categoriesQuery.data]);
 
   const activeCategories = useMemo(() => {
@@ -346,28 +296,9 @@ export default function Products() {
 
   const products = useMemo(() => {
     const productItems = extractApiData(productsQuery.data);
-    const variantItems = extractApiData(variantsQuery.data);
-    const variantUnitItems = extractApiData(variantUnitsQuery.data);
-    const priceRuleItems = extractApiData(priceRulesQuery.data);
 
-    const normalizedProducts = normalizeProducts(productItems, categories);
-    const normalizedVariants = normalizeVariants(variantItems);
-    const normalizedVariantUnits = normalizeVariantUnits(variantUnitItems);
-    const normalizedPriceRules = normalizePriceRules(priceRuleItems);
-
-    return attachProductChildren({
-      products: normalizedProducts,
-      variants: normalizedVariants,
-      variantUnits: normalizedVariantUnits,
-      priceRules: normalizedPriceRules,
-    });
-  }, [
-    productsQuery.data,
-    variantsQuery.data,
-    variantUnitsQuery.data,
-    priceRulesQuery.data,
-    categories,
-  ]);
+    return productItems.map((product) => normalizeProduct(product, categories));
+  }, [productsQuery.data, categories]);
 
   const pagination = useMemo(() => {
     return getPaginationMeta(productsQuery.data, products.length);
@@ -386,69 +317,46 @@ export default function Products() {
     };
   }, [productStatsQuery.data, pagination.total]);
 
-  useEffect(() => {
-    if (!selectedProduct) return;
+  const selectedProduct = useMemo(() => {
+    if (!selectedProductId) return null;
 
-    const freshProduct = products.find(
-      (product) => Number(product.id) === Number(selectedProduct.id)
+    const detail = getSingleProductFromResponse(selectedProductQuery.data);
+
+    if (detail) {
+      return normalizeProduct(detail, categories);
+    }
+
+    return (
+      products.find(
+        (product) => Number(product.id) === Number(selectedProductId)
+      ) || null
     );
+  }, [selectedProductId, selectedProductQuery.data, products, categories]);
 
-    if (!freshProduct) {
-      setSelectedProduct(null);
-      return;
+  const manageProduct = useMemo(() => {
+    if (!manageProductId) return null;
+
+    const detail = getSingleProductFromResponse(manageProductQuery.data);
+
+    if (detail) {
+      return normalizeProduct(detail, categories);
     }
 
-    const changed =
-      JSON.stringify(freshProduct) !== JSON.stringify(selectedProduct);
-
-    if (changed) {
-      setSelectedProduct(freshProduct);
-    }
-  }, [products, selectedProduct]);
-
-  useEffect(() => {
-    if (!manageProduct) return;
-
-    const freshProduct = products.find(
-      (product) => Number(product.id) === Number(manageProduct.id)
+    return (
+      products.find(
+        (product) => Number(product.id) === Number(manageProductId)
+      ) || null
     );
+  }, [manageProductId, manageProductQuery.data, products, categories]);
 
-    if (!freshProduct) {
-      setManageProduct(null);
-      return;
-    }
+  const isLoading = categoriesQuery.isLoading || productsQuery.isLoading;
 
-    const changed =
-      JSON.stringify(freshProduct) !== JSON.stringify(manageProduct);
-
-    if (changed) {
-      setManageProduct(freshProduct);
-    }
-  }, [products, manageProduct]);
-
-  const isLoading =
-    categoriesQuery.isLoading ||
-    productsQuery.isLoading ||
-    variantsQuery.isLoading ||
-    variantUnitsQuery.isLoading ||
-    priceRulesQuery.isLoading ||
-    unitsQuery.isLoading;
-
-  const isError =
-    categoriesQuery.isError ||
-    productsQuery.isError ||
-    variantsQuery.isError ||
-    variantUnitsQuery.isError ||
-    priceRulesQuery.isError ||
-    unitsQuery.isError;
+  const isError = categoriesQuery.isError || productsQuery.isError;
 
   const invalidateProductQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ["categories"] });
     queryClient.invalidateQueries({ queryKey: ["products"] });
     queryClient.invalidateQueries({ queryKey: ["products", "stats"] });
-    queryClient.invalidateQueries({ queryKey: ["product-variants"] });
-    queryClient.invalidateQueries({ queryKey: ["product-variant-units"] });
-    queryClient.invalidateQueries({ queryKey: ["price-rules"] });
+    queryClient.invalidateQueries({ queryKey: ["categories"] });
     queryClient.invalidateQueries({ queryKey: ["units"] });
     queryClient.invalidateQueries({
       queryKey: ["exchange-rates", "list-for-active"],
@@ -464,6 +372,17 @@ export default function Products() {
       response?.data?.data?.data?.data?.id ||
       null
     );
+  };
+
+  const getApiErrorMessage = (error, fallback = "Action failed.") => {
+    const response = error?.response?.data;
+
+    if (response?.message && response?.errors) {
+      const firstError = Object.values(response.errors)?.[0]?.[0];
+      return firstError || response.message;
+    }
+
+    return response?.message || error?.message || fallback;
   };
 
   const closeProductSetupForm = () => {
@@ -510,13 +429,22 @@ export default function Products() {
     });
   };
 
+  const openViewProduct = (product) => {
+    setManageProductId(null);
+    setSelectedProductId(product.id);
+  };
+
   const openManageProduct = (product) => {
-    setSelectedProduct(null);
-    setManageProduct(product);
+    setSelectedProductId(null);
+    setManageProductId(product.id);
+  };
+
+  const closeViewProduct = () => {
+    setSelectedProductId(null);
   };
 
   const closeManageProduct = () => {
-    setManageProduct(null);
+    setManageProductId(null);
   };
 
   const createProductSetupMutation = useMutation({
@@ -524,6 +452,10 @@ export default function Products() {
     onSuccess: () => {
       invalidateProductQueries();
       closeProductSetupForm();
+    },
+    onError: (error) => {
+      invalidateProductQueries();
+      notify.error("Create product failed", getApiErrorMessage(error));
     },
   });
 
@@ -594,6 +526,9 @@ export default function Products() {
       invalidateProductQueries();
       closePriceRuleForm();
     },
+    onError: (error) => {
+      notify.error("Save price failed", getApiErrorMessage(error));
+    },
   });
 
   const updatePriceRuleMutation = useMutation({
@@ -601,6 +536,9 @@ export default function Products() {
     onSuccess: () => {
       invalidateProductQueries();
       closePriceRuleForm();
+    },
+    onError: (error) => {
+      notify.error("Update price failed", getApiErrorMessage(error));
     },
   });
 
@@ -640,36 +578,18 @@ export default function Products() {
     })),
   ];
 
-  const filteredProducts = products.filter((product) => {
-    const search = searchTerm.toLowerCase().trim();
-
-    const matchesSearch =
-      !search ||
-      product.name.toLowerCase().includes(search) ||
-      String(product.id).includes(search) ||
-      product.categoryName.toLowerCase().includes(search) ||
-      product.variants.some(
-        (variant) =>
-          variant.variantName.toLowerCase().includes(search) ||
-          variant.variantCode.toLowerCase().includes(search) ||
-          variant.packageType.toLowerCase().includes(search)
-      );
-
-    const matchesCategory =
-      categoryFilter === "All" ||
-      String(product.categoryId) === String(categoryFilter);
-
-    const matchesStatus =
-      statusFilter === "All" || product.status === statusFilter;
-
-    return matchesSearch && matchesCategory && matchesStatus;
-  });
-
   const openAddProductForm = () => {
     setSetupModalOpen(true);
+
+    queryClient.prefetchQuery({
+      queryKey: ["units", "all"],
+      queryFn: () => getUnitsApi({ per_page: 500 }),
+    });
   };
 
   const handleSaveProductSetup = (values) => {
+    if (!requireActiveExchangeRate()) return;
+
     createProductSetupMutation.mutate({
       ...values,
       exchangeRate: activeExchangeRate,
@@ -700,12 +620,12 @@ export default function Products() {
 
     deleteProductMutation.mutate(product.id);
 
-    if (selectedProduct?.id === product.id) {
-      setSelectedProduct(null);
+    if (Number(selectedProductId) === Number(product.id)) {
+      setSelectedProductId(null);
     }
 
-    if (manageProduct?.id === product.id) {
-      setManageProduct(null);
+    if (Number(manageProductId) === Number(product.id)) {
+      setManageProductId(null);
     }
   };
 
@@ -714,9 +634,16 @@ export default function Products() {
       open: true,
       product,
     });
+
+    queryClient.prefetchQuery({
+      queryKey: ["units", "all"],
+      queryFn: () => getUnitsApi({ per_page: 500 }),
+    });
   };
 
   const handleSaveVariantSetup = async (values) => {
+    if (!requireActiveExchangeRate()) return;
+
     try {
       const variantResponse = await createVariantMutation.mutateAsync(
         values.variant
@@ -767,18 +694,25 @@ export default function Products() {
         await createPriceRuleMutation.mutateAsync({
           ...rulePayload,
           product_variant_unit_id: variantUnitId,
+          exchange_rate_used: activeExchangeRate,
         });
       }
 
       invalidateProductQueries();
+
+      if (manageProductId) {
+        queryClient.invalidateQueries({
+          queryKey: ["products", "detail", manageProductId],
+        });
+      }
+
       closeVariantSetupForm();
     } catch (error) {
       console.error("Create variant setup failed:", error);
 
-      alert(
-        error?.response?.data?.message ||
-          error?.message ||
-          "Create variant setup failed."
+      notify.error(
+        "Create variant failed",
+        getApiErrorMessage(error, "Create variant setup failed.")
       );
     }
   };
@@ -830,6 +764,11 @@ export default function Products() {
       variant,
       variantUnit: null,
     });
+
+    queryClient.prefetchQuery({
+      queryKey: ["units", "all"],
+      queryFn: () => getUnitsApi({ per_page: 500 }),
+    });
   };
 
   const openEditVariantUnitForm = (variant, variantUnit) => {
@@ -838,6 +777,11 @@ export default function Products() {
       mode: "edit",
       variant,
       variantUnit,
+    });
+
+    queryClient.prefetchQuery({
+      queryKey: ["units", "all"],
+      queryFn: () => getUnitsApi({ per_page: 500 }),
     });
   };
 
@@ -921,6 +865,8 @@ export default function Products() {
   };
 
   const handleSavePriceRule = (values) => {
+    if (!requireActiveExchangeRate()) return;
+
     const productVariantUnitId =
       priceRuleFormState.variantUnit?.id ||
       priceRuleFormState.variantUnit?.productVariantUnitId ||
@@ -934,6 +880,7 @@ export default function Products() {
     const payload = {
       ...values,
       product_variant_unit_id: productVariantUnitId,
+      exchange_rate_used: activeExchangeRate,
     };
 
     if (priceRuleFormState.mode === "edit" && priceRuleFormState.priceRule) {
@@ -959,11 +906,19 @@ export default function Products() {
     categoriesQuery.refetch();
     productsQuery.refetch();
     productStatsQuery.refetch();
-    variantsQuery.refetch();
-    variantUnitsQuery.refetch();
-    priceRulesQuery.refetch();
-    unitsQuery.refetch();
     activeRateQuery.refetch();
+
+    if (shouldLoadUnits) {
+      unitsQuery.refetch();
+    }
+
+    if (selectedProductId) {
+      selectedProductQuery.refetch();
+    }
+
+    if (manageProductId) {
+      manageProductQuery.refetch();
+    }
   };
 
   const hasActionError =
@@ -1075,7 +1030,7 @@ export default function Products() {
 
             <input
               type="text"
-              placeholder="Search product, category, variant, package..."
+              placeholder="Search product or category..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
@@ -1156,7 +1111,7 @@ export default function Products() {
 
       <ProductTable
         theme={theme}
-        products={filteredProducts}
+        products={products}
         totalProducts={pagination.total}
         pagination={pagination}
         page={page}
@@ -1165,7 +1120,7 @@ export default function Products() {
         isLoading={isLoading}
         isError={isError}
         isDeleting={deleteProductMutation.isPending}
-        onViewProduct={setSelectedProduct}
+        onViewProduct={openViewProduct}
         onEditProduct={openManageProduct}
         onDeleteProduct={handleDeleteProduct}
       />
@@ -1174,7 +1129,8 @@ export default function Products() {
         <ProductDetailModal
           product={selectedProduct}
           theme={theme}
-          onClose={() => setSelectedProduct(null)}
+          isLoading={selectedProductQuery.isFetching}
+          onClose={closeViewProduct}
           onManageProduct={openManageProduct}
         />
       )}
@@ -1183,6 +1139,7 @@ export default function Products() {
         <ProductManageModal
           product={manageProduct}
           theme={theme}
+          isLoading={manageProductQuery.isFetching}
           onClose={closeManageProduct}
           onEditProduct={openEditProductForm}
           onAddVariant={openAddVariantSetupForm}

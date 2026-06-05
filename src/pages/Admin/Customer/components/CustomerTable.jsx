@@ -53,11 +53,6 @@ export default function CustomerTable({
           </p>
         </div>
 
-        {isFetching && !isLoading && (
-          <span className="inline-flex w-fit items-center rounded-full bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-500">
-            Updating...
-          </span>
-        )}
       </div>
 
       <div className="overflow-x-auto">

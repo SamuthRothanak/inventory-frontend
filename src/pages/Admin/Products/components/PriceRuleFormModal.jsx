@@ -11,7 +11,7 @@ import {
 
 import ModalShell from "./ModalShell";
 
-const DEFAULT_EXCHANGE_RATE = 4000;
+const DEFAULT_EXCHANGE_RATE = 0;
 
 function onlyPositiveNumber(value, allowDecimal = true) {
   let nextValue = String(value || "");

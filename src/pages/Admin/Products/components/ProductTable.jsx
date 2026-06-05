@@ -14,12 +14,6 @@ import {
 import ProductThumb from "./ProductThumb";
 import TableLoading from "../../../../components/TableLoading";
 
-import {
-  getPriceRange,
-  getPriceRuleCount,
-  getUnitsText,
-} from "../utils/productHelpers";
-
 export default function ProductTable({
   theme,
   products,
@@ -59,11 +53,6 @@ export default function ProductTable({
           </p>
         </div>
 
-        {isFetching && !isLoading && (
-          <span className="inline-flex w-fit items-center rounded-full bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-500">
-            Updating...
-          </span>
-        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -116,109 +105,130 @@ export default function ProductTable({
                 </td>
               </tr>
             ) : products.length > 0 ? (
-              products.map((product) => (
-                <tr
-                  key={product.id}
-                  className={`border-t transition ${theme.row}`}
-                >
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <ProductThumb product={product} />
+              products.map((product) => {
+                const variantsCount = getVariantsCount(product);
+                const units = getUnitsArray(product);
+                const priceRange = getProductPriceRange(product);
+                const priceRulesCount = getProductPriceRuleCount(product);
 
-                      <div>
-                        <p className="text-sm font-semibold">{product.name}</p>
-                        <p className={`mt-1 text-xs ${theme.subText}`}>
-                          ID: {product.id}
-                        </p>
+                return (
+                  <tr
+                    key={product.id}
+                    className={`border-t transition ${theme.row}`}
+                  >
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <ProductThumb product={product} />
+
+                        <div>
+                          <p className="text-sm font-semibold">
+                            {product.name}
+                          </p>
+
+                          <p className={`mt-1 text-xs ${theme.subText}`}>
+                            ID: {product.id}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  <td className="px-4 py-4">
-                    <p className="text-sm font-medium">
-                      {product.categoryName}
-                    </p>
-                    <p className={`mt-1 text-xs ${theme.subText}`}>
-                      Category ID: {product.categoryId || "-"}
-                    </p>
-                  </td>
+                    <td className="px-4 py-4">
+                      <p className="text-sm font-medium">
+                        {product.categoryName ||
+                          product.category_name ||
+                          product.category?.name ||
+                          "-"}
+                      </p>
 
-                  <td className="px-4 py-4 text-center">
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
-                    >
-                      {product.variants.length} variants
-                    </span>
-                  </td>
+                      <p className={`mt-1 text-xs ${theme.subText}`}>
+                        Category ID:{" "}
+                        {product.categoryId || product.category_id || "-"}
+                      </p>
+                    </td>
 
-                  <td className="px-4 py-4">
-                    <div className="flex max-w-[220px] flex-wrap gap-1.5">
-                      {getUnitsText(product)
-                        .split(", ")
-                        .map((unit) => (
+                    <td className="px-4 py-4 text-center">
+                      <span
+                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
+                      >
+                        {variantsCount} variants
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-4">
+                      <div className="flex max-w-[220px] flex-wrap gap-1.5">
+                        {units.length > 0 ? (
+                          units.map((unit) => (
+                            <span
+                              key={`${product.id}-${unit}`}
+                              className={`rounded-full border px-2.5 py-1 text-xs ${theme.badge}`}
+                            >
+                              {unit}
+                            </span>
+                          ))
+                        ) : (
                           <span
-                            key={`${product.id}-${unit}`}
                             className={`rounded-full border px-2.5 py-1 text-xs ${theme.badge}`}
                           >
-                            {unit}
+                            -
                           </span>
-                        ))}
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-2">
-                      <FiTag className="text-red-500" />
-
-                      <div>
-                        <p className="text-sm font-semibold">
-                          {getPriceRange(product)}
-                        </p>
-
-                        <p className={`mt-1 text-xs ${theme.subText}`}>
-                          {getPriceRuleCount(product)} price rules
-                        </p>
+                        )}
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  <td className="px-4 py-4 text-center">
-                    <StatusBadge status={product.status} />
-                  </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <FiTag className="text-red-500" />
 
-                  <td className="px-4 py-4">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onViewProduct(product)}
-                        title="View product"
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
-                      >
-                        <FiEye size={16} />
-                      </button>
+                        <div>
+                          <p className="text-sm font-semibold">
+                            {priceRange}
+                          </p>
 
-                      <button
-                        type="button"
-                        onClick={() => onEditProduct(product)}
-                        title="Edit product"
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
-                      >
-                        <FiEdit2 size={16} />
-                      </button>
+                          <p className={`mt-1 text-xs ${theme.subText}`}>
+                            {priceRulesCount} price rules
+                          </p>
+                        </div>
+                      </div>
+                    </td>
 
-                      <button
-                        type="button"
-                        disabled={isDeleting}
-                        onClick={() => onDeleteProduct(product)}
-                        title="Delete product"
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <FiTrash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                    <td className="px-4 py-4 text-center">
+                      <StatusBadge status={product.status} />
+                    </td>
+
+                    <td className="px-4 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onViewProduct(product)}
+                          title="View product"
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
+                        >
+                          <FiEye size={16} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onEditProduct(product)}
+                          title="Edit product"
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                        >
+                          <FiEdit2 size={16} />
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          onClick={() => onDeleteProduct(product)}
+                          title="Delete product"
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <FiTrash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               <tr className={`border-t ${theme.row}`}>
                 <td colSpan="7" className="px-4 py-14 text-center">
@@ -304,6 +314,78 @@ export default function ProductTable({
   );
 }
 
+function getVariantsCount(product) {
+  return Number(
+    product.variants_count ??
+      product.variantsCount ??
+      product.variants?.length ??
+      0
+  );
+}
+
+function getUnitsArray(product) {
+  const unitsText = product.units_text ?? product.unitsText ?? "";
+
+  if (!unitsText || unitsText === "-") {
+    return [];
+  }
+
+  return String(unitsText)
+    .split(",")
+    .map((unit) => unit.trim())
+    .filter(Boolean);
+}
+
+function getProductPriceRuleCount(product) {
+  return Number(
+    product.price_rules_count ??
+      product.priceRulesCount ??
+      0
+  );
+}
+
+function getProductPriceRange(product) {
+  const min =
+    product.min_price_usd ??
+    product.minPriceUsd ??
+    product.minPrice ??
+    null;
+
+  const max =
+    product.max_price_usd ??
+    product.maxPriceUsd ??
+    product.maxPrice ??
+    null;
+
+  const minNumber = min !== null ? Number(min) : null;
+  const maxNumber = max !== null ? Number(max) : null;
+
+  if (
+    minNumber === null ||
+    maxNumber === null ||
+    Number.isNaN(minNumber) ||
+    Number.isNaN(maxNumber)
+  ) {
+    return "No price";
+  }
+
+  if (minNumber === maxNumber) {
+    return `$${formatPrice(minNumber)}`;
+  }
+
+  return `$${formatPrice(minNumber)} - $${formatPrice(maxNumber)}`;
+}
+
+function formatPrice(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return "0.00";
+  }
+
+  return number.toFixed(2);
+}
+
 function getPageNumbers(currentPage, totalPages) {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -337,7 +419,15 @@ function getPageNumbers(currentPage, totalPages) {
 }
 
 function StatusBadge({ status }) {
-  const isActive = status === "Active";
+  const normalized = String(status ?? "").toLowerCase();
+
+  const isActive =
+    normalized === "active" ||
+    normalized === "1" ||
+    status === 1 ||
+    status === true;
+
+  const label = isActive ? "Active" : "Inactive";
 
   return (
     <span
@@ -348,7 +438,7 @@ function StatusBadge({ status }) {
       }`}
     >
       {isActive ? <FiCheckCircle /> : <FiXCircle />}
-      {status}
+      {label}
     </span>
   );
 }

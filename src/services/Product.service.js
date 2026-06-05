@@ -1,7 +1,7 @@
 import api from "../lib/axios";
 
-// products table: id, name, category_id, images, description, status, timestamps
-// មិនមាន expiry_date / product_code / has_expiry
+// products table: id, name, category_id, images, description, status, timestamps.
+// No expiry_date / product_code / has_expiry fields are sent here.
 
 export const getProductsApi = async (params = {}) => {
   const response = await api.get("/products", { params });
@@ -18,15 +18,17 @@ export const createProductApi = async (payload) => {
 
   formData.append("name", payload.name);
 
-  // category_id nullable ក្នុង table — ផ្ញើតែពេលមាន
-  if (payload.category_id !== undefined && payload.category_id !== null && payload.category_id !== "") {
+  if (
+    payload.category_id !== undefined &&
+    payload.category_id !== null &&
+    payload.category_id !== ""
+  ) {
     formData.append("category_id", payload.category_id);
   }
 
   formData.append("description", payload.description || "");
   formData.append("status", payload.status || "active");
 
-  // images = column name ក្នុង table (single file)
   if (payload.imageFile instanceof File) {
     formData.append("images", payload.imageFile);
   }
@@ -44,7 +46,11 @@ export const updateProductApi = async ({ id, payload }) => {
   formData.append("_method", "PUT");
   formData.append("name", payload.name);
 
-  if (payload.category_id !== undefined && payload.category_id !== null && payload.category_id !== "") {
+  if (
+    payload.category_id !== undefined &&
+    payload.category_id !== null &&
+    payload.category_id !== ""
+  ) {
     formData.append("category_id", payload.category_id);
   }
 

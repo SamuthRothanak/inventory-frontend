@@ -105,7 +105,6 @@ export default function ProductDetailModal({
             <InfoLine label="Product ID" value={product.id} />
             <InfoLine label="Category" value={product.categoryName} />
             <InfoLine label="Status" value={product.status} />
-            <InfoLine label="Expiry Date" value={product.expiryDate || "-"} />
             <InfoLine label="Description" value={product.description || "-"} />
           </div>
         </div>

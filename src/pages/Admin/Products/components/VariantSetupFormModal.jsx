@@ -17,7 +17,7 @@ import {
 
 import ModalShell from "./ModalShell";
 
-const DEFAULT_EXCHANGE_RATE = 4000;
+const DEFAULT_EXCHANGE_RATE = 0;
 const makeLocalKey = (prefix) => `${prefix}_${Date.now()}_${Math.random()}`;
 
 function onlyPositiveNumber(value, allowDecimal = true) {
@@ -68,7 +68,7 @@ function roundKhr(value, mode = "ceil") {
 
 function convertPrice(inputPrice, inputCurrency, exchangeRate, khrMode = "ceil") {
   const price = Number(inputPrice || 0);
-  const rate = Number(exchangeRate || DEFAULT_EXCHANGE_RATE);
+  const rate = Number(exchangeRate || 0);
   if (!price || !rate) return { unit_price_usd: 0, unit_price_khr: 0 };
   if (inputCurrency === "KHR") {
     return {
@@ -287,6 +287,12 @@ export default function VariantSetupFormModal({
           </div>
         )}
 
+        {Number(activeExchangeRate || 0) <= 0 && (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm font-semibold text-amber-500">
+            No active exchange rate found. Please create and activate an exchange rate before saving product prices.
+          </div>
+        )}
+
         <Section theme={theme} icon={<FiPackage />} title="1. Variant Information"
           subtitle="Example: Beer Can 330ml, Beer Bottle 330ml, Coca Cola Case.">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -440,7 +446,9 @@ export default function VariantSetupFormModal({
                           </div>
                           <div className="mt-3 flex items-center justify-between">
                             <p className={`text-[11px] ${theme.muted}`}>
-                              Rate: 1 USD = {Number(activeExchangeRate || 4000).toLocaleString()}៛ · {activeKhrRounding}
+                              {Number(activeExchangeRate || 0) > 0
+                                ? `Rate: 1 USD = ${Number(activeExchangeRate).toLocaleString()}៛ · ${activeKhrRounding}`
+                                : "No active exchange rate"}
                             </p>
                             <button type="button" onClick={() => removePriceRule(idx)}
                               className="inline-flex h-7 items-center gap-1 rounded-lg bg-red-500 px-2.5 text-[11px] font-semibold text-white hover:bg-red-600">

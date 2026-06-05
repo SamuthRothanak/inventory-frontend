@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FiAlertTriangle,
-  FiCalendar,
   FiCheckCircle,
   FiChevronDown,
   FiClock,
@@ -28,436 +28,91 @@ import {
   FiXCircle,
 } from "react-icons/fi";
 
-const STATUS = {
-  DRAFT: "Draft",
-  PENDING_RECEIVE: "Pending Receive",
-  PENDING_STOCK_IN: "Pending Stock In",
-  PENDING_CLAIM: "Pending Claim",
-  RECEIVED: "Received",
-  CANCELLED: "Cancelled",
-};
+import {
+  createPurchaseApi,
+  createPurchaseReturnApi,
+  getPurchaseByIdApi,
+  getPurchaseReturnsApi,
+  getPurchasesApi,
+  syncPurchaseItemsApi,
+  updatePurchaseApi,
+  updatePurchaseReturnApi,
+} from "../../../services/purchase.service";
+import { getActiveSuppliersApi } from "../../../services/supplier.service";
+import { getActiveExchangeRateApi } from "../../../services/exchangeRate.service";
+import { getProductVariantUnitsApi } from "../../../services/productVariantUnit.service";
+import { useNotification } from "../../../components/AppNotification";
 
-const RETURN_STATUS = {
-  DRAFT: "Draft",
-  SUBMITTED: "Submitted",
-  APPROVED: "Approved",
-  WAITING_REPLACEMENT: "Waiting Replacement",
-  COMPLETED: "Completed",
-  CANCELLED: "Cancelled",
-};
-
-const paymentModeOptions = [
-  { value: "pay_after_check", label: "Pay After Check" },
-  { value: "prepaid", label: "Prepaid" },
-  { value: "partial_prepaid", label: "Partial Prepaid" },
-];
-
-const paymentStatusOptions = [
-  { value: "unpaid", label: "Unpaid" },
-  { value: "partial", label: "Partial" },
-  { value: "paid", label: "Paid" },
-];
-
-const deliveryOptions = [
-  { value: "none", label: "None" },
-  { value: "supplier_delivery", label: "Supplier Delivery" },
-  { value: "shop_pickup", label: "Shop Pickup" },
-  { value: "third_party_delivery", label: "Third Party Delivery" },
-];
-
-const deliveryPaidByOptions = [
-  { value: "shop", label: "Shop" },
-  { value: "supplier", label: "Supplier" },
-  { value: "included_in_invoice", label: "Included in Invoice" },
-];
-
-const initialSuppliers = [
-  {
-    id: 1,
-    supplierCode: "SUP-001",
-    name: "Thai Huot Trading",
-    contactPerson: "Sok Dara",
-    phone: "0887193924",
-    trustMode: "pay_after_check",
-    note: "High-trust supplier. Pay after checking goods.",
-  },
-  {
-    id: 2,
-    supplierCode: "SUP-002",
-    name: "Mengly Wholesale",
-    contactPerson: "Mengly",
-    phone: "0887193925",
-    trustMode: "prepaid",
-    note: "Low-trust supplier. Prepayment required.",
-  },
-];
-
-const initialVariantUnits = [
-  {
-    id: 1,
-    productName: "Coca-Cola",
-    variantName: "Coca-Cola Can 330ml",
-    variantCode: "COKE-CAN-330",
-    unitName: "Case",
-    baseUnit: "Can",
-    conversionQty: 24,
-    defaultCost: 7.2,
-    isExpirable: true,
-  },
-  {
-    id: 2,
-    productName: "Coca-Cola",
-    variantName: "Coca-Cola Big Bottle 1.5L",
-    variantCode: "COKE-BTL-1500",
-    unitName: "Case",
-    baseUnit: "Bottle",
-    conversionQty: 6,
-    defaultCost: 5.1,
-    isExpirable: true,
-  },
-  {
-    id: 3,
-    productName: "Face Mask",
-    variantName: "Face Mask Box",
-    variantCode: "MASK-BOX",
-    unitName: "Set",
-    baseUnit: "Box",
-    conversionQty: 6,
-    defaultCost: 2.7,
-    isExpirable: true,
-  },
-  {
-    id: 4,
-    productName: "Sugar",
-    variantName: "Sugar Loose",
-    variantCode: "SUGAR-LOOSE",
-    unitName: "Kg",
-    baseUnit: "Gram",
-    conversionQty: 1000,
-    defaultCost: 0.75,
-    isExpirable: false,
-  },
-  {
-    id: 5,
-    productName: "Dove Shampoo",
-    variantName: "Dove Shampoo 250ml",
-    variantCode: "DOVE-250",
-    unitName: "Box",
-    baseUnit: "Bottle",
-    conversionQty: 12,
-    defaultCost: 18,
-    isExpirable: true,
-  },
-  {
-    id: 6,
-    productName: "Instant Noodle",
-    variantName: "Instant Noodle Chicken Box",
-    variantCode: "NOODLE-CHICKEN-BOX",
-    unitName: "Box",
-    baseUnit: "Pack",
-    conversionQty: 30,
-    defaultCost: 9.5,
-    isExpirable: true,
-  },
-];
-
-const initialPurchases = [
-  {
-    id: 1,
-    purchaseNo: "PUR-001",
-    supplierId: 1,
-    supplierName: "Thai Huot Trading",
-    createdBy: "Admin",
-    purchaseDate: "2026-05-01",
-    paymentMode: "pay_after_check",
-    paymentStatus: "unpaid",
-    subtotal: 1368,
-    discountTotal: 0,
-    deliveryOption: "supplier_delivery",
-    deliveryFee: 2,
-    deliveryFeeCurrency: "USD",
-    deliveryPaidBy: "shop",
-    grandTotal: 1370,
-    paidAmount: 0,
-    balanceAmount: 1370,
-    note: "Pay after check. Supplier brought 200 Case, 10 damaged, shop accepts and pays only 190 Case.",
-    status: STATUS.PENDING_STOCK_IN,
-    createdAt: "2026-05-01",
-    updatedAt: "2026-05-01",
-    items: [
-      {
-        id: 101,
-        variantUnitId: 1,
-        productName: "Coca-Cola",
-        variantName: "Coca-Cola Can 330ml",
-        variantCode: "COKE-CAN-330",
-        unitName: "Case",
-        baseUnit: "Can",
-        conversionQty: 24,
-        invoicedQty: 200,
-        paidQty: 190,
-        receivedQty: 200,
-        acceptedQty: 190,
-        damagedQty: 10,
-        claimQty: 0,
-        unitCost: 7.2,
-        unitCostBase: 0.3,
-        lineTotal: 1368,
-        expiredDate: "2026-12-31",
-      },
-    ],
-  },
-  {
-    id: 2,
-    purchaseNo: "PUR-002",
-    supplierId: 2,
-    supplierName: "Mengly Wholesale",
-    createdBy: "Admin",
-    purchaseDate: "2026-05-02",
-    paymentMode: "prepaid",
-    paymentStatus: "paid",
-    subtotal: 270,
-    discountTotal: 0,
-    deliveryOption: "shop_pickup",
-    deliveryFee: 0,
-    deliveryFeeCurrency: "USD",
-    deliveryPaidBy: "shop",
-    grandTotal: 270,
-    paidAmount: 270,
-    balanceAmount: 0,
-    note: "Prepaid purchase. Paid for 100 Set, 10 Set arrived damaged, supplier claim required.",
-    status: STATUS.PENDING_CLAIM,
-    createdAt: "2026-05-02",
-    updatedAt: "2026-05-02",
-    items: [
-      {
-        id: 201,
-        variantUnitId: 3,
-        productName: "Face Mask",
-        variantName: "Face Mask Box",
-        variantCode: "MASK-BOX",
-        unitName: "Set",
-        baseUnit: "Box",
-        conversionQty: 6,
-        invoicedQty: 100,
-        paidQty: 100,
-        receivedQty: 100,
-        acceptedQty: 90,
-        damagedQty: 10,
-        claimQty: 10,
-        unitCost: 2.7,
-        unitCostBase: 0.45,
-        lineTotal: 270,
-        expiredDate: "2026-10-10",
-      },
-    ],
-  },
-  {
-    id: 3,
-    purchaseNo: "PUR-003",
-    supplierId: 2,
-    supplierName: "Mengly Wholesale",
-    createdBy: "Admin",
-    purchaseDate: "2026-05-04",
-    paymentMode: "prepaid",
-    paymentStatus: "paid",
-    subtotal: 37.5,
-    discountTotal: 0,
-    deliveryOption: "third_party_delivery",
-    deliveryFee: 1.5,
-    deliveryFeeCurrency: "USD",
-    deliveryPaidBy: "shop",
-    grandTotal: 39,
-    paidAmount: 39,
-    balanceAmount: 0,
-    note: "Prepaid before goods arrive. Waiting for supplier delivery.",
-    status: STATUS.PENDING_RECEIVE,
-    createdAt: "2026-05-04",
-    updatedAt: "2026-05-04",
-    items: [
-      {
-        id: 301,
-        variantUnitId: 4,
-        productName: "Sugar",
-        variantName: "Sugar Loose",
-        variantCode: "SUGAR-LOOSE",
-        unitName: "Kg",
-        baseUnit: "Gram",
-        conversionQty: 1000,
-        invoicedQty: 50,
-        paidQty: 50,
-        receivedQty: 0,
-        acceptedQty: 0,
-        damagedQty: 0,
-        claimQty: 0,
-        unitCost: 0.75,
-        unitCostBase: 0.00075,
-        lineTotal: 37.5,
-        expiredDate: "",
-      },
-    ],
-  },
-];
-
-const initialPurchaseReturns = [
-  {
-    id: 1,
-    purchaseReturnNo: "PRET-001",
-    purchaseId: 2,
-    purchaseNo: "PUR-002",
-    supplierId: 2,
-    supplierName: "Mengly Wholesale",
-    returnDate: "2026-05-03",
-    returnType: "partial_return",
-    returnReason: "damaged",
-    resolutionType: "replacement",
-    resolutionStatus: "submitted",
-    subtotal: 27,
-    note: "10 Set Face Mask arrived damaged after prepaid purchase. Request replacement from supplier.",
-    status: RETURN_STATUS.SUBMITTED,
-    createdBy: "Admin",
-    createdAt: "2026-05-03",
-    updatedAt: "2026-05-03",
-    resolvedAt: null,
-    items: [
-      {
-        id: 1001,
-        purchaseReturnId: 1,
-        purchaseItemId: 201,
-        variantUnitId: 3,
-        productName: "Face Mask",
-        variantName: "Face Mask Box",
-        variantCode: "MASK-BOX",
-        unitName: "Set",
-        baseUnit: "Box",
-        conversionQty: 6,
-        qtyReturned: 10,
-        baseQtyReturned: 60,
-        unitCost: 2.7,
-        unitCostBase: 0.45,
-        lineTotal: 27,
-        condition: "damaged",
-        stockAction: "no_stock_change",
-        reason: "Damaged before stock in. No stock deduction because only accepted quantity entered inventory.",
-      },
-    ],
-  },
-];
-
-const emptyPurchaseForm = {
-  purchaseNo: "",
-  supplierId: "",
-  purchaseDate: new Date().toISOString().slice(0, 10),
-  paymentMode: "pay_after_check",
-  paymentStatus: "unpaid",
-  discountTotal: 0,
-  deliveryOption: "none",
-  deliveryFee: 0,
-  deliveryFeeCurrency: "USD",
-  deliveryPaidBy: "shop",
-  paidAmount: 0,
-  note: "",
-  status: STATUS.DRAFT,
-};
-
-const emptyItemForm = {
-  variantUnitId: "",
-  invoicedQty: "",
-  paidQty: "",
-  receivedQty: "",
-  acceptedQty: "",
-  damagedQty: 0,
-  claimQty: 0,
-  unitCost: "",
-  expiredDate: "",
-};
-
-const emptyPurchaseReturnForm = {
-  purchaseReturnNo: "",
-  purchaseId: "",
-  supplierId: "",
-  returnDate: new Date().toISOString().slice(0, 10),
-  returnType: "partial_return",
-  returnReason: "damaged",
-  resolutionType: "replacement",
-  resolutionStatus: "draft",
-  note: "",
-  status: RETURN_STATUS.DRAFT,
-};
-
-const emptyPurchaseReturnItemForm = {
-  purchaseItemId: "",
-  qtyReturned: "",
-  condition: "damaged",
-  reason: "",
-};
-
-function useLockBodyScroll(isOpen) {
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const originalOverflow = document.body.style.overflow;
-    const originalPaddingRight = document.body.style.paddingRight;
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-
-    document.body.style.overflow = "hidden";
-    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      document.body.style.paddingRight = originalPaddingRight;
-    };
-  }, [isOpen]);
-}
-
-function formatSnake(value = "") {
-  return String(value || "-").replaceAll("_", " ");
-}
-
-function formatMoney(value) {
-  return `$${Number(value || 0).toFixed(2)}`;
-}
-
-function formatPaymentMode(value = "") {
-  const found = paymentModeOptions.find((item) => item.value === value);
-  return found?.label || value || "-";
-}
-
-function buildTheme(isDark) {
-  return {
-    pageTitle: isDark ? "text-white" : "text-zinc-900",
-    card: isDark ? "border-white/10 bg-zinc-900 text-white" : "border-zinc-200 bg-white text-zinc-900",
-    modal: isDark ? "border-white/10 bg-[#111113] text-white" : "border-zinc-200 bg-white text-zinc-900",
-    modalHeader: isDark ? "border-white/10 bg-[#111113]" : "border-zinc-200 bg-white",
-    modalBody: isDark ? "bg-[#151518]" : "bg-zinc-50/70",
-    muted: isDark ? "text-zinc-400" : "text-zinc-500",
-    input: isDark
-      ? "border-white/10 bg-[#1b1b1f] text-white placeholder:text-zinc-500 focus:border-red-500 focus:ring-red-500/20"
-      : "border-zinc-300 bg-white text-zinc-900 placeholder:text-zinc-400 focus:border-red-400 focus:ring-red-400/20",
-    select: isDark
-      ? "border-white/10 bg-[#1b1b1f] text-white focus:border-red-500 focus:ring-red-500/20"
-      : "border-zinc-300 bg-white text-zinc-900 focus:border-red-400 focus:ring-red-400/20",
-    tableWrap: isDark ? "border-white/10 bg-zinc-900" : "border-zinc-200 bg-white",
-    row: isDark ? "border-white/10 text-zinc-200 hover:bg-white/[0.04]" : "border-zinc-200 text-zinc-700 hover:bg-zinc-50",
-    badge: isDark ? "border-white/10 bg-white/5 text-zinc-200" : "border-zinc-200 bg-zinc-100 text-zinc-700",
-    softCard: isDark ? "border-white/10 bg-white/[0.04]" : "border-zinc-200 bg-white",
-    section: isDark ? "border-white/10 bg-[#18181b]" : "border-zinc-200 bg-white",
-  };
-}
+import {
+  AlertMiniCard,
+  EmptyState,
+  FilterSelect,
+  PurchaseFormModal,
+  PurchaseItemModal,
+  PurchaseMobileCard,
+  PurchaseReturnModal,
+  ReceiveReplacementModal,
+  PurchaseTable,
+  SummaryCard,
+  ViewPurchaseModal,
+} from "./components";
+import {
+  emptyItemForm,
+  emptyPurchaseForm,
+  emptyPurchaseReturnForm,
+  emptyPurchaseReturnItemForm,
+} from "./schemas/purchaseSchemas";
+import {
+  initialPurchaseReturns,
+  initialPurchases,
+  initialSuppliers,
+  initialVariantUnits,
+  paymentModeOptions,
+  RETURN_STATUS,
+  STATUS,
+} from "./utils/purchaseConstants";
+import {
+  buildTheme,
+  calculateCurrencyPreview,
+  convertCost,
+  currencyToApi,
+  extractApiData,
+  extractApiObject,
+  formatCurrencyPair,
+  formatDateOnly,
+  formatMoney,
+  formatSnake,
+  getErrorMessage,
+  getPaginationMeta,
+  normalizePurchase,
+  normalizeDeliveryOption,
+  normalizeDeliveryPaidBy,
+  normalizeSupplier,
+  normalizeVariantUnit,
+  statusToApi,
+  useLockBodyScroll,
+} from "./utils/purchaseUtils";
 
 export default function Purchases() {
   const navigate = useNavigate();
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
   const theme = buildTheme(isDark);
+  const queryClient = useQueryClient();
+  const notify = useNotification();
 
-  const [purchases, setPurchases] = useState(initialPurchases);
+  const [localPurchases, setLocalPurchases] = useState(initialPurchases);
   const [purchaseReturns, setPurchaseReturns] = useState(initialPurchaseReturns);
   const [stockMovements, setStockMovements] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [paymentModeFilter, setPaymentModeFilter] = useState("All");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [variantUnitSearch, setVariantUnitSearch] = useState("");
+  const [debouncedVariantUnitSearch, setDebouncedVariantUnitSearch] = useState("");
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
@@ -477,7 +132,167 @@ export default function Purchases() {
   const [purchaseReturnItemForm, setPurchaseReturnItemForm] = useState(emptyPurchaseReturnItemForm);
   const [purchaseReturnItemErrors, setPurchaseReturnItemErrors] = useState({});
 
-  useLockBodyScroll(Boolean(modalMode || itemModalOpen));
+  const [replacementModalOpen, setReplacementModalOpen] = useState(false);
+  const [replacementPurchase, setReplacementPurchase] = useState(null);
+  const [replacementReturn, setReplacementReturn] = useState(null);
+  const [replacementItems, setReplacementItems] = useState([]);
+  const [replacementErrors, setReplacementErrors] = useState({});
+
+  useLockBodyScroll(Boolean(modalMode || itemModalOpen || replacementModalOpen));
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedVariantUnitSearch(variantUnitSearch.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [variantUnitSearch]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchTerm, statusFilter, paymentModeFilter, perPage]);
+
+  const purchasesQuery = useQuery({
+    queryKey: [
+      "purchases",
+      {
+        page,
+        perPage,
+        search: debouncedSearchTerm,
+        statusFilter,
+        paymentModeFilter,
+      },
+    ],
+    queryFn: () =>
+      getPurchasesApi({
+        page,
+        per_page: perPage,
+        search: debouncedSearchTerm || undefined,
+        status: statusFilter === "All" ? undefined : statusToApi(statusFilter),
+        payment_mode:
+          paymentModeFilter === "All" ? undefined : paymentModeFilter,
+      }),
+    keepPreviousData: true,
+  });
+
+  const purchaseReturnsQuery = useQuery({
+    queryKey: ["purchase-returns", "purchase-page"],
+    queryFn: () => getPurchaseReturnsApi({ per_page: 500 }),
+    staleTime: 1000 * 60,
+  });
+
+  const suppliersQuery = useQuery({
+    queryKey: ["suppliers", "active-for-purchases"],
+    queryFn: () => getActiveSuppliersApi({ per_page: 500 }),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const activeRateQuery = useQuery({
+    queryKey: ["exchange-rates", "active"],
+    queryFn: getActiveExchangeRateApi,
+    retry: false,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const variantUnitsQuery = useQuery({
+    queryKey: [
+      "product-variant-units",
+      "purchase-search",
+      { search: debouncedVariantUnitSearch },
+    ],
+    queryFn: () =>
+      getProductVariantUnitsApi({
+        per_page: 20,
+        search: debouncedVariantUnitSearch || undefined,
+        status: "active",
+      }),
+    enabled: itemModalOpen,
+    staleTime: 1000 * 60,
+  });
+
+  const suppliers = useMemo(() => {
+    const data = extractApiData(suppliersQuery.data).map(normalizeSupplier);
+    return data.length > 0 ? data : initialSuppliers;
+  }, [suppliersQuery.data]);
+
+  useEffect(() => {
+    const data = extractApiData(purchaseReturnsQuery.data);
+    if (data.length === 0) return;
+
+    setPurchaseReturns(data.map((item) => ({
+      id: item.id,
+      purchaseReturnNo: item.purchase_return_no || item.purchaseReturnNo || "",
+      purchaseId: item.purchase_id || item.purchaseId || "",
+      purchaseNo: item.purchase_no || item.purchaseNo || "",
+      supplierId: item.supplier_id || item.supplierId || "",
+      supplierName: item.supplier_name || item.supplierName || item.supplier?.name || "",
+      returnDate: item.return_date || item.returnDate || "",
+      returnType: item.return_type || item.returnType || "",
+      returnReason: item.return_reason || item.returnReason || "",
+      resolutionType: normalizeReturnResolutionType(item.resolution_type || item.resolutionType || ""),
+      resolutionStatus: item.resolution_status || item.resolutionStatus || "",
+      subtotal: Number(item.total_amount_usd ?? item.subtotal_usd ?? item.subtotal ?? 0),
+      subtotalUsd: Number(item.total_amount_usd ?? item.subtotal_usd ?? item.subtotalUsd ?? 0),
+      subtotalKhr: Number(item.total_amount_khr ?? item.subtotal_khr ?? item.subtotalKhr ?? 0),
+      note: item.note || "",
+      status: normalizeReturnStatusLabel(item.status || item.resolution_status || item.resolutionStatus || RETURN_STATUS.SUBMITTED),
+      items: item.items || item.purchase_return_items || [],
+      raw: item,
+    })));
+  }, [purchaseReturnsQuery.data]);
+
+  const activeExchangeRate = useMemo(() => {
+    const data = extractApiObject(activeRateQuery.data);
+    const rate =
+      data?.usd_to_khr_rate ??
+      data?.usdToKhrRate ??
+      data?.rate ??
+      data?.exchange_rate_used ??
+      0;
+
+    return Number(rate || 0);
+  }, [activeRateQuery.data]);
+
+  const activeKhrRounding = useMemo(() => {
+    const data = extractApiObject(activeRateQuery.data);
+    return data?.khr_rounding || data?.khrRounding || "floor";
+  }, [activeRateQuery.data]);
+
+  useEffect(() => {
+    if (modalMode !== "add" || !activeExchangeRate) return;
+
+    setPurchaseForm((previous) => {
+      if (Number(previous.exchangeRateUsed || 0) > 0) return previous;
+      return {
+        ...previous,
+        exchangeRateUsed: activeExchangeRate,
+        khrRounding: activeKhrRounding,
+        exchangeRateSource: "system",
+      };
+    });
+  }, [activeExchangeRate, activeKhrRounding, modalMode]);
+
+  const variantUnits = useMemo(() => {
+    const data = extractApiData(variantUnitsQuery.data).map(normalizeVariantUnit);
+    return data.length > 0 ? data : initialVariantUnits;
+  }, [variantUnitsQuery.data]);
+
+  const serverPurchases = useMemo(() => {
+    return extractApiData(purchasesQuery.data).map(normalizePurchase);
+  }, [purchasesQuery.data]);
+
+  const purchases = serverPurchases.length > 0 ? serverPurchases : localPurchases;
+  const pagination = useMemo(() => {
+    return getPaginationMeta(purchasesQuery.data, purchases.length);
+  }, [purchasesQuery.data, purchases.length]);
 
   const calculateSubtotal = (items) => items.reduce((total, item) => total + Number(item.lineTotal || 0), 0);
 
@@ -496,62 +311,6 @@ export default function Purchases() {
   const getClaimRequiredCount = (purchase) => purchase.items.reduce((total, item) => total + Number(item.claimQty || 0), 0);
   const getDamagedCount = (purchase) => purchase.items.reduce((total, item) => total + Number(item.damagedQty || 0), 0);
 
-  const getNearestExpiryItem = (purchase) => {
-    const expiryItems = purchase.items.filter((item) => item.expiredDate && String(item.expiredDate).trim() !== "");
-    if (expiryItems.length === 0) return null;
-    return expiryItems.reduce((nearest, item) => {
-      if (!nearest) return item;
-      return new Date(item.expiredDate) < new Date(nearest.expiredDate) ? item : nearest;
-    }, null);
-  };
-
-  const getDaysUntilExpiry = (dateString) => {
-    if (!dateString) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const expiry = new Date(dateString);
-    expiry.setHours(0, 0, 0, 0);
-    return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  };
-
-  const getExpirySummary = (purchase) => {
-    const nearest = getNearestExpiryItem(purchase);
-    if (!nearest) {
-      return {
-        label: "No expiry tracking",
-        detail: "Non-expiry item or not received yet",
-        pill: "bg-zinc-500/10 text-zinc-500 dark:text-zinc-400",
-      };
-    }
-
-    const days = getDaysUntilExpiry(nearest.expiredDate);
-    if (days < 0) {
-      return {
-        label: `Expired ${Math.abs(days)}d ago`,
-        detail: `${nearest.variantName} · ${nearest.expiredDate}`,
-        pill: "bg-red-500/10 text-red-600 dark:text-red-400",
-      };
-    }
-    if (days <= 30) {
-      return {
-        label: `Expires in ${days}d`,
-        detail: `${nearest.variantName} · ${nearest.expiredDate}`,
-        pill: "bg-red-500/10 text-red-600 dark:text-red-400",
-      };
-    }
-    if (days <= 90) {
-      return {
-        label: "Expiring soon",
-        detail: `${nearest.variantName} · ${nearest.expiredDate}`,
-        pill: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-      };
-    }
-    return {
-      label: `Nearest exp: ${nearest.expiredDate}`,
-      detail: nearest.variantName,
-      pill: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    };
-  };
 
   const filteredPurchases = useMemo(() => {
     const search = searchTerm.toLowerCase();
@@ -574,12 +333,6 @@ export default function Purchases() {
   const pendingReceive = purchases.filter((item) => item.status === STATUS.PENDING_RECEIVE).length;
   const pendingStockIn = purchases.filter((item) => item.status === STATUS.PENDING_STOCK_IN).length;
   const pendingClaims = purchases.filter((item) => item.status === STATUS.PENDING_CLAIM).length;
-  const expiryAlerts = purchases.filter((purchase) => {
-    const nearest = getNearestExpiryItem(purchase);
-    if (!nearest) return false;
-    return getDaysUntilExpiry(nearest.expiredDate) <= 90;
-  }).length;
-
   const totalPurchaseReturnAmount = purchaseReturns.reduce((total, item) => total + Number(item.subtotal || 0), 0);
 
   const getStatusClass = (status) => {
@@ -605,6 +358,7 @@ export default function Purchases() {
     if (status === RETURN_STATUS.SUBMITTED || status === RETURN_STATUS.APPROVED) return "bg-blue-500/10 text-blue-600 dark:text-blue-400";
     if (status === RETURN_STATUS.WAITING_REPLACEMENT) return "bg-purple-500/10 text-purple-600 dark:text-purple-400";
     if (status === RETURN_STATUS.DRAFT) return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+    if (status === RETURN_STATUS.REJECTED) return "bg-red-500/10 text-red-600 dark:text-red-400";
     return "bg-red-500/10 text-red-500 dark:text-red-400";
   };
 
@@ -613,25 +367,83 @@ export default function Purchases() {
     if (status === RETURN_STATUS.SUBMITTED || status === RETURN_STATUS.APPROVED) return <FiClock />;
     if (status === RETURN_STATUS.WAITING_REPLACEMENT) return <FiTruck />;
     if (status === RETURN_STATUS.DRAFT) return <FiFileText />;
+    if (status === RETURN_STATUS.REJECTED) return <FiXCircle />;
     return <FiXCircle />;
+  };
+
+  const normalizeReturnStatusLabel = (value = RETURN_STATUS.DRAFT) => {
+    const status = String(value || "").trim().toLowerCase();
+    const map = {
+      submitted: RETURN_STATUS.SUBMITTED,
+      approved: RETURN_STATUS.APPROVED,
+      rejected: RETURN_STATUS.REJECTED,
+      resolved: RETURN_STATUS.COMPLETED,
+      completed: RETURN_STATUS.COMPLETED,
+      cancelled: RETURN_STATUS.CANCELLED,
+      canceled: RETURN_STATUS.CANCELLED,
+    };
+    return map[status] || value || RETURN_STATUS.SUBMITTED;
+  };
+
+  const getRelatedPurchaseReturns = (purchase) => {
+    if (!purchase?.id) return [];
+    const fromPurchase = Array.isArray(purchase.returns) ? purchase.returns : [];
+    const fromQuery = purchaseReturns.filter((item) => String(item.purchaseId) === String(purchase.id));
+    const merged = [...fromPurchase, ...fromQuery];
+    return merged.filter((item, index, list) => list.findIndex((current) => String(current.id) === String(item.id)) === index);
+  };
+
+  const getOpenSupplierClaim = (purchase) => {
+    return getRelatedPurchaseReturns(purchase).find((item) =>
+      ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(
+        normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status)
+      )
+    );
+  };
+
+  const hasResolvedSupplierClaim = (purchase) => {
+    return getRelatedPurchaseReturns(purchase).some((item) =>
+      normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status) === RETURN_STATUS.COMPLETED
+    );
+  };
+
+  const getEffectivePurchaseStatus = (purchase) => {
+    if (purchase.status === STATUS.PENDING_CLAIM && hasResolvedSupplierClaim(purchase) && !getOpenSupplierClaim(purchase)) {
+      return STATUS.PENDING_STOCK_IN;
+    }
+    return purchase.status;
+  };
+
+  const getOpenReplacementClaim = (purchase) => {
+    return getRelatedPurchaseReturns(purchase).find((item) => {
+      const status = normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status);
+      const resolutionType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type);
+      return resolutionType === "replacement" && status !== RETURN_STATUS.COMPLETED && status !== RETURN_STATUS.CANCELLED;
+    });
   };
 
   const getPurchaseProblemLabel = (purchase) => {
     const claimQty = getClaimRequiredCount(purchase);
     const damagedQty = getDamagedCount(purchase);
+    const replacementClaim = getOpenReplacementClaim(purchase);
+    if (replacementClaim) return "Waiting supplier replacement";
+    if (purchase.status === STATUS.PENDING_CLAIM && hasResolvedSupplierClaim(purchase) && !getOpenSupplierClaim(purchase)) return "Supplier claim resolved";
+    if (getOpenSupplierClaim(purchase)) return "Supplier claim created";
     if ((purchase.paymentMode === "prepaid" || purchase.paymentMode === "partial_prepaid") && claimQty > 0) return `${claimQty} claim required`;
     if (purchase.paymentMode === "pay_after_check" && damagedQty > 0) return `${damagedQty} damaged excluded`;
     if (purchase.status === STATUS.PENDING_RECEIVE) return "Waiting goods";
-    if (purchase.status === STATUS.RECEIVED) return "Stocked in";
-    return "No issue";
+    return "";
   };
 
   const getNextActionLabel = (purchase) => {
-    if (purchase.status === STATUS.DRAFT) return "Continue editing";
-    if (purchase.status === STATUS.PENDING_RECEIVE) return "Receive goods";
-    if (purchase.status === STATUS.PENDING_CLAIM) return "Create supplier claim";
-    if (purchase.status === STATUS.PENDING_STOCK_IN) return "Open Inventory";
-    if (purchase.status === STATUS.RECEIVED) return "Completed";
+    const effectiveStatus = getEffectivePurchaseStatus(purchase);
+    if (effectiveStatus === STATUS.DRAFT) return "Continue editing";
+    if (effectiveStatus === STATUS.PENDING_RECEIVE) return "Receive goods";
+    if (getOpenReplacementClaim(purchase)) return "Receive replacement";
+    if (getOpenSupplierClaim(purchase)) return "Supplier claim created";
+    if (effectiveStatus === STATUS.PENDING_CLAIM) return "Create supplier claim";
+    if (effectiveStatus === STATUS.PENDING_STOCK_IN) return "Open Inventory";
+    if (effectiveStatus === STATUS.RECEIVED) return "Completed";
     return "No action";
   };
 
@@ -648,78 +460,218 @@ export default function Purchases() {
     return "Save Purchase";
   };
 
+  const invalidatePurchaseQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["purchases"] });
+    queryClient.invalidateQueries({ queryKey: ["purchases", "detail"] });
+    queryClient.removeQueries({ queryKey: ["purchases", "detail"] });
+    queryClient.invalidateQueries({ queryKey: ["purchase-returns"] });
+  };
+
+  const createPurchaseMutation = useMutation({
+    mutationFn: createPurchaseApi,
+    onSuccess: () => {
+      invalidatePurchaseQueries();
+      notify.success("Purchase created", "The purchase invoice has been saved.");
+      closeModal();
+    },
+    onError: (error) => {
+      notify.error("Create failed", getErrorMessage(error));
+    },
+  });
+
+  const updatePurchaseMutation = useMutation({
+    mutationFn: updatePurchaseApi,
+    onSuccess: () => {
+      invalidatePurchaseQueries();
+      notify.success("Purchase updated", "The purchase invoice has been updated.");
+      closeModal();
+    },
+    onError: (error) => {
+      notify.error("Update failed", getErrorMessage(error));
+    },
+  });
+
+  const createPurchaseReturnMutation = useMutation({
+    mutationFn: createPurchaseReturnApi,
+    onSuccess: () => {
+      invalidatePurchaseQueries();
+      notify.success("Supplier claim saved", "The purchase return has been saved.");
+      closeModal();
+    },
+    onError: (error) => {
+      notify.error("Claim failed", getErrorMessage(error));
+    },
+  });
+
+  const sanitizePurchaseItemsForApi = (payload = {}) => ({
+    ...payload,
+    items: Array.isArray(payload.items)
+      ? payload.items.map((item) => {
+          const expiredDate = formatDateOnly(item.expired_date || item.expiry_date || item.expiredDate || item.expiryDate);
+          return {
+            ...item,
+            expired_date: expiredDate === "-" ? null : expiredDate,
+            expiry_date: expiredDate === "-" ? null : expiredDate,
+          };
+        })
+      : payload.items,
+  });
+
+  const receiveReplacementMutation = useMutation({
+    mutationFn: async ({ purchaseReturn, payload, purchasePayload, purchaseId }) => {
+      const response = await updatePurchaseReturnApi({
+        id: purchaseReturn.id,
+        payload,
+      });
+
+      if (purchasePayload && purchaseId) {
+        const sanitizedPayload = sanitizePurchaseItemsForApi(purchasePayload);
+        await syncPurchaseItemsApi({
+          purchaseId,
+          items: sanitizedPayload.items || [],
+        });
+      }
+
+      return response;
+    },
+    onSuccess: () => {
+      invalidatePurchaseQueries();
+      notify.success("Replacement received", "Supplier replacement has been marked as received.");
+      closeReplacementModal();
+      closeModal();
+    },
+    onError: (error) => {
+      notify.error("Receive replacement failed", getErrorMessage(error));
+    },
+  });
+
+  const loadPurchaseDetail = async (purchase) => {
+    if (!purchasesQuery.data || !purchase?.id || String(purchase.id).startsWith("local-")) {
+      return purchase;
+    }
+
+    try {
+      const response = await queryClient.fetchQuery({
+        queryKey: ["purchases", "detail", purchase.id],
+        queryFn: () => getPurchaseByIdApi(purchase.id),
+        staleTime: 0,
+      });
+
+      return normalizePurchase(extractApiObject(response));
+    } catch (error) {
+      notify.error("Purchase detail failed", getErrorMessage(error));
+      return purchase;
+    }
+  };
+
   const openAddModal = () => {
+    const dateKey = new Date().toISOString().slice(0, 10).replaceAll("-", "");
     setSelectedPurchase(null);
     setPurchaseErrors({});
     setPurchaseForm({
       ...emptyPurchaseForm,
-      purchaseNo: `PUR-${String(purchases.length + 1).padStart(3, "0")}`,
+      purchaseNo: `PUR-${dateKey}-${String((pagination.total || purchases.length) + 1).padStart(4, "0")}`,
+      exchangeRateUsed: activeExchangeRate,
+      khrRounding: activeKhrRounding,
+      exchangeRateSource: activeExchangeRate ? "system" : "manual",
     });
     setPurchaseItems([]);
     setModalMode("add");
   };
 
-  const openViewModal = (purchase) => {
-    setSelectedPurchase(purchase);
+  const openViewModal = async (purchase) => {
+    const detail = await loadPurchaseDetail(purchase);
+    setSelectedPurchase(detail);
     setModalMode("view");
   };
 
-  const openEditModal = (purchase) => {
-    setSelectedPurchase(purchase);
+  const openEditModal = async (purchase) => {
+    const detail = await loadPurchaseDetail(purchase);
+    setSelectedPurchase(detail);
     setPurchaseErrors({});
     setPurchaseForm({
-      purchaseNo: purchase.purchaseNo,
-      supplierId: purchase.supplierId,
-      purchaseDate: purchase.purchaseDate,
-      paymentMode: purchase.paymentMode || "pay_after_check",
-      paymentStatus: purchase.paymentStatus || "unpaid",
-      discountTotal: purchase.discountTotal,
-      deliveryOption: purchase.deliveryOption,
-      deliveryFee: purchase.deliveryFee,
-      deliveryFeeCurrency: purchase.deliveryFeeCurrency,
-      deliveryPaidBy: purchase.deliveryPaidBy,
-      paidAmount: purchase.paidAmount || 0,
-      note: purchase.note,
-      status: purchase.status,
+      purchaseNo: detail.purchaseNo,
+      supplierId: detail.supplierId,
+      purchaseDate: detail.purchaseDate,
+      inputCurrency: detail.inputCurrency || "USD",
+      exchangeRateUsed: detail.exchangeRateUsed || activeExchangeRate,
+      khrRounding: detail.khrRounding || "floor",
+      exchangeRateSource: detail.exchangeRateSource || "manual",
+      exchangeRateNote: detail.exchangeRateNote || "",
+      paymentMode: detail.paymentMode || "pay_after_check",
+      paymentStatus: detail.paymentStatus || "unpaid",
+      discountTotal: detail.discountTotal,
+      discountCurrency: detail.discountCurrency || "USD",
+      deliveryOption: detail.deliveryOption,
+      deliveryFee: detail.deliveryFee,
+      deliveryFeeCurrency: detail.deliveryFeeCurrency,
+      deliveryPaidBy: detail.deliveryPaidBy,
+      paidAmount: detail.paidAmount || 0,
+      paidCurrency: detail.paidCurrency || "USD",
+      note: detail.note,
+      status: detail.status,
     });
-    setPurchaseItems(purchase.items);
+    setPurchaseItems(detail.items || []);
     setModalMode("edit");
   };
 
-  const openReceiveGoodsModal = (purchase) => {
-    setSelectedPurchase(purchase);
+  const openReceiveGoodsModal = async (purchase) => {
+    const detail = await loadPurchaseDetail(purchase);
+    setSelectedPurchase(detail);
     setPurchaseForm({
-      purchaseNo: purchase.purchaseNo,
-      supplierId: purchase.supplierId,
-      purchaseDate: purchase.purchaseDate,
-      paymentMode: purchase.paymentMode || "prepaid",
-      paymentStatus: purchase.paymentStatus || "paid",
-      discountTotal: purchase.discountTotal,
-      deliveryOption: purchase.deliveryOption,
-      deliveryFee: purchase.deliveryFee,
-      deliveryFeeCurrency: purchase.deliveryFeeCurrency,
-      deliveryPaidBy: purchase.deliveryPaidBy,
-      paidAmount: purchase.paidAmount || 0,
-      note: purchase.note,
-      status: purchase.status,
+      purchaseNo: detail.purchaseNo,
+      supplierId: detail.supplierId,
+      purchaseDate: detail.purchaseDate,
+      inputCurrency: detail.inputCurrency || "USD",
+      exchangeRateUsed: detail.exchangeRateUsed || activeExchangeRate,
+      khrRounding: detail.khrRounding || "floor",
+      exchangeRateSource: detail.exchangeRateSource || "manual",
+      exchangeRateNote: detail.exchangeRateNote || "",
+      paymentMode: detail.paymentMode || "prepaid",
+      paymentStatus: detail.paymentStatus || "paid",
+      discountTotal: detail.discountTotal,
+      discountCurrency: detail.discountCurrency || "USD",
+      deliveryOption: detail.deliveryOption,
+      deliveryFee: detail.deliveryFee,
+      deliveryFeeCurrency: detail.deliveryFeeCurrency,
+      deliveryPaidBy: detail.deliveryPaidBy,
+      paidAmount: detail.paidAmount || 0,
+      paidCurrency: detail.paidCurrency || "USD",
+      note: detail.note,
+      status: detail.status,
     });
-    setPurchaseItems(purchase.items);
+    setPurchaseItems(detail.items || []);
     setModalMode("receive_goods");
   };
 
-  const openPurchaseReturnModal = (purchase) => {
-    setSelectedPurchase(purchase);
+  const openPurchaseReturnModal = async (purchase) => {
+    const detail = await loadPurchaseDetail(purchase);
+    const claimItems = (detail.items || [])
+      .filter((item) => Number(item.claimQty || 0) > 0 || Number(item.damagedQty || 0) > 0)
+      .map((item) =>
+        buildPurchaseReturnItemFromPurchaseItem(item, {
+          purchaseContext: detail,
+          qtyReturned: Number(item.claimQty || item.damagedQty || 0),
+          condition: "damaged",
+          reason: "Damaged item claimed to supplier.",
+        })
+      );
+
+    setSelectedPurchase(detail);
     setPurchaseReturnErrors({});
     setPurchaseReturnItemErrors({});
     setPurchaseReturnForm({
       ...emptyPurchaseReturnForm,
       purchaseReturnNo: `PRET-${String(purchaseReturns.length + 1).padStart(3, "0")}`,
-      purchaseId: purchase.id,
-      supplierId: purchase.supplierId,
+      purchaseId: detail.id,
+      supplierId: detail.supplierId,
       returnDate: new Date().toISOString().slice(0, 10),
-      returnReason: getClaimRequiredCount(purchase) > 0 ? "damaged" : "other",
+      returnReason: getClaimRequiredCount(detail) > 0 ? "damaged" : "other",
+      resolutionType: "replacement",
+      resolutionStatus: "submitted",
+      status: RETURN_STATUS.SUBMITTED,
     });
-    setPurchaseReturnItems([]);
+    setPurchaseReturnItems(claimItems);
     setPurchaseReturnItemForm(emptyPurchaseReturnItemForm);
     setModalMode("purchase_return");
   };
@@ -778,7 +730,11 @@ export default function Purchases() {
   const openAddItemModal = () => {
     setItemErrors({});
     setItemEditIndex(null);
-    setItemForm(emptyItemForm);
+    setItemForm({
+      ...emptyItemForm,
+      receivedQty: purchaseForm.paymentMode === "prepaid" ? 0 : "",
+      acceptedQty: purchaseForm.paymentMode === "prepaid" ? 0 : "",
+    });
     setItemModalOpen(true);
   };
 
@@ -793,8 +749,10 @@ export default function Purchases() {
       acceptedQty: item.acceptedQty,
       damagedQty: item.damagedQty,
       claimQty: item.claimQty,
+      inputCurrency: item.inputCurrency || "USD",
+      inputUnitCost: item.inputUnitCost || item.unitCost,
       unitCost: item.unitCost,
-      expiredDate: item.expiredDate,
+      expiredDate: formatDateOnly(item.expiredDate) === "-" ? "" : formatDateOnly(item.expiredDate),
     });
     setItemModalOpen(true);
   };
@@ -804,15 +762,18 @@ export default function Purchases() {
       const next = { ...previous, [field]: value };
 
       if (field === "variantUnitId") {
-        const selected = initialVariantUnits.find((unit) => String(unit.id) === String(value));
+        const selected = variantUnits.find((unit) => String(unit.id) === String(value));
         if (selected) {
-          next.unitCost = selected.defaultCost;
-          next.expiredDate = selected.isExpirable ? next.expiredDate || "" : "";
+          next.inputUnitCost = next.inputUnitCost || selected.defaultCost;
+          next.unitCost = next.unitCost || selected.defaultCost;
         }
       }
 
       if (field === "invoicedQty") {
-        next.receivedQty = next.receivedQty || value;
+        if (purchaseForm.paymentMode === "pay_after_check" && next.receivedQty === "") {
+          next.receivedQty = value;
+          next.acceptedQty = value;
+        }
         if (purchaseForm.paymentMode === "prepaid") next.paidQty = value;
       }
 
@@ -846,15 +807,20 @@ export default function Purchases() {
 
   const validatePurchaseItem = () => {
     const nextErrors = {};
-    const selectedUnit = initialVariantUnits.find((unit) => String(unit.id) === String(itemForm.variantUnitId));
+    const selectedUnit = variantUnits.find((unit) => String(unit.id) === String(itemForm.variantUnitId));
 
     if (!itemForm.variantUnitId) nextErrors.variantUnitId = "Please select product variant.";
+    if (!itemForm.inputCurrency) nextErrors.inputCurrency = "Currency is required.";
+    if (!itemForm.inputUnitCost || Number(itemForm.inputUnitCost) <= 0) nextErrors.inputUnitCost = "Unit cost must be greater than 0.";
     if (!itemForm.invoicedQty || Number(itemForm.invoicedQty) <= 0) nextErrors.invoicedQty = "Invoiced quantity must be greater than 0.";
+    if (purchaseForm.paymentMode === "partial_prepaid" && (itemForm.paidQty === "" || Number(itemForm.paidQty) < 0)) nextErrors.paidQty = "Paid quantity is required.";
+    if (Number(itemForm.paidQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.paidQty = "Paid quantity cannot exceed invoiced qty.";
     if (itemForm.receivedQty === "" || Number(itemForm.receivedQty) < 0) nextErrors.receivedQty = "Received quantity cannot be negative.";
     if (itemForm.acceptedQty === "" || Number(itemForm.acceptedQty) < 0) nextErrors.acceptedQty = "Accepted quantity cannot be negative.";
+    if (Number(itemForm.acceptedQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.acceptedQty = "Accepted quantity cannot exceed invoiced qty.";
+    if (Number(itemForm.acceptedQty || 0) + Number(itemForm.damagedQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.damagedQty = "Accepted plus damaged qty cannot exceed invoiced qty.";
     if (Number(itemForm.acceptedQty || 0) > Number(itemForm.receivedQty || 0)) nextErrors.acceptedQty = "Accepted quantity cannot exceed received qty.";
     if (Number(itemForm.damagedQty || 0) < 0) nextErrors.damagedQty = "Damaged quantity cannot be negative.";
-    if (!itemForm.unitCost || Number(itemForm.unitCost) <= 0) nextErrors.unitCost = "Unit cost must be greater than 0.";
     if (selectedUnit?.isExpirable && Number(itemForm.receivedQty || 0) > 0 && !itemForm.expiredDate) {
       nextErrors.expiredDate = "Expiry date is required after goods are received.";
     }
@@ -864,7 +830,7 @@ export default function Purchases() {
   };
 
   const buildPurchaseItemFromForm = () => {
-    const selectedUnit = initialVariantUnits.find((unit) => String(unit.id) === String(itemForm.variantUnitId));
+    const selectedUnit = variantUnits.find((unit) => String(unit.id) === String(itemForm.variantUnitId));
     if (!selectedUnit) return null;
 
     const paymentMode = purchaseForm.paymentMode;
@@ -872,7 +838,14 @@ export default function Purchases() {
     const receivedQty = Number(itemForm.receivedQty || 0);
     const acceptedQty = Number(itemForm.acceptedQty || 0);
     const damagedQty = Number(itemForm.damagedQty || 0);
-    const unitCost = Number(itemForm.unitCost || 0);
+    const inputCurrency = itemForm.inputCurrency || "USD";
+    const inputUnitCost = Number(itemForm.inputUnitCost || itemForm.unitCost || 0);
+    const exchangeRate = Number(purchaseForm.exchangeRateUsed || activeExchangeRate || 0);
+    const { unitCostUsd, unitCostKhr } = convertCost({
+      inputCurrency,
+      inputUnitCost,
+      exchangeRate,
+    });
 
     let paidQty = Number(itemForm.paidQty || 0);
     let claimQty = Number(itemForm.claimQty || 0);
@@ -891,8 +864,9 @@ export default function Purchases() {
       claimQty = Math.max(0, paidQty - acceptedQty);
     }
 
-    const lineTotal = calculateLineTotalByPaymentMode({ paymentMode, acceptedQty, paidQty, unitCost });
-    const unitCostBase = unitCost / Number(selectedUnit.conversionQty || 1);
+    const lineTotalUsd = calculateLineTotalByPaymentMode({ paymentMode, acceptedQty, paidQty, unitCost: unitCostUsd });
+    const lineTotalKhr = calculateLineTotalByPaymentMode({ paymentMode, acceptedQty, paidQty, unitCost: unitCostKhr });
+    const unitCostBase = unitCostUsd / Number(selectedUnit.conversionQty || 1);
 
     return {
       id: Date.now(),
@@ -909,10 +883,16 @@ export default function Purchases() {
       acceptedQty,
       damagedQty,
       claimQty,
-      unitCost,
+      inputCurrency,
+      inputUnitCost,
+      unitCost: unitCostUsd,
+      unitCostUsd,
+      unitCostKhr,
       unitCostBase,
-      lineTotal,
-      expiredDate: selectedUnit.isExpirable ? itemForm.expiredDate : "",
+      lineTotal: lineTotalUsd,
+      lineTotalUsd,
+      lineTotalKhr,
+      expiredDate: itemForm.expiredDate || "",
     };
   };
 
@@ -944,18 +924,33 @@ export default function Purchases() {
     if (!purchaseForm.purchaseNo.trim()) nextErrors.purchaseNo = "Purchase number is required.";
     if (!purchaseForm.supplierId) nextErrors.supplierId = "Please select supplier.";
     if (!purchaseForm.purchaseDate) nextErrors.purchaseDate = "Purchase date is required.";
+    if (!purchaseForm.exchangeRateUsed || Number(purchaseForm.exchangeRateUsed) <= 0) nextErrors.exchangeRateUsed = "Exchange rate must be greater than 0.";
     if (!purchaseForm.paymentMode) nextErrors.paymentMode = "Payment mode is required.";
     if (!purchaseForm.paymentStatus) nextErrors.paymentStatus = "Payment status is required.";
     if (Number(purchaseForm.discountTotal || 0) < 0) nextErrors.discountTotal = "Discount cannot be negative.";
     if (Number(purchaseForm.deliveryFee || 0) < 0) nextErrors.deliveryFee = "Delivery fee cannot be negative.";
+    if (Number(purchaseForm.paidAmount || 0) < 0) nextErrors.paidAmount = "Paid amount cannot be negative.";
     if (purchaseItems.length === 0) nextErrors.items = "Please add at least one purchase item.";
+
+    const totals = calculateCurrencyPreview({
+      items: purchaseItems,
+      form: purchaseForm,
+    });
+
+    if (
+      purchaseForm.paymentStatus !== "paid" &&
+      (totals.paidAmountUsd > totals.grandTotalUsd + 0.0001 ||
+        totals.paidAmountKhr > totals.grandTotalKhr + 1)
+    ) {
+      nextErrors.paidAmount = "Paid amount cannot exceed grand total.";
+    }
 
     setPurchaseErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
   const buildPurchasePayload = (statusOverride = null) => {
-    const supplier = initialSuppliers.find((item) => String(item.id) === String(purchaseForm.supplierId));
+    const supplier = suppliers.find((item) => String(item.id) === String(purchaseForm.supplierId));
     const subtotal = calculateSubtotal(purchaseItems);
     const grandTotal = calculateGrandTotal(purchaseItems, purchaseForm);
     const paidAmount = purchaseForm.paymentStatus === "paid" ? grandTotal : Number(purchaseForm.paidAmount || 0);
@@ -983,6 +978,8 @@ export default function Purchases() {
       supplierName: supplier?.name || "",
       createdBy: "Admin",
       purchaseDate: purchaseForm.purchaseDate,
+      inputCurrency: purchaseForm.inputCurrency || "USD",
+      exchangeRateUsed: Number(purchaseForm.exchangeRateUsed || 0),
       paymentMode: purchaseForm.paymentMode,
       paymentStatus: purchaseForm.paymentStatus,
       subtotal,
@@ -1002,25 +999,209 @@ export default function Purchases() {
     };
   };
 
+  const buildBackendPurchaseItemPayload = (item, options = {}) => {
+    const inputCurrency = item.inputCurrency || "USD";
+    const inputUnitCost = Number(item.inputUnitCost ?? item.unitCost ?? item.unitCostUsd ?? 0);
+    const exchangeRate = Number(options.exchangeRate ?? purchaseForm.exchangeRateUsed ?? activeExchangeRate ?? 0);
+    const paymentMode = options.paymentMode || purchaseForm.paymentMode;
+    const expiredDate = formatDateOnly(item.expiredDate);
+    const converted = convertCost({
+      inputCurrency,
+      inputUnitCost,
+      exchangeRate,
+    });
+    const unitCostUsd = Number(item.unitCostUsd ?? item.unitCost ?? converted.unitCostUsd ?? 0);
+    const unitCostKhr = Number(item.unitCostKhr ?? converted.unitCostKhr ?? 0);
+    const payableQty =
+      paymentMode === "pay_after_check"
+        ? Number(item.acceptedQty || 0)
+        : Number(item.paidQty ?? item.invoicedQty ?? 0);
+
+    return {
+      id: item.id,
+      product_variant_unit_id: item.variantUnitId,
+      invoiced_qty: Number(item.invoicedQty || 0),
+      paid_qty: Number(item.paidQty || 0),
+      received_qty: Number(item.receivedQty || 0),
+      accepted_qty: Number(item.acceptedQty || 0),
+      stocked_in_qty: Number(item.stockedInQty || 0),
+      damaged_qty: Number(item.damagedQty || 0),
+      claim_qty: Number(item.claimQty || 0),
+      input_currency: currencyToApi(inputCurrency),
+      input_unit_cost: inputUnitCost,
+      unit_cost_usd: unitCostUsd,
+      unit_cost_khr: unitCostKhr,
+      line_total_usd: Number(item.lineTotalUsd ?? item.lineTotal ?? payableQty * unitCostUsd),
+      line_total_khr: Number(item.lineTotalKhr ?? payableQty * unitCostKhr),
+      expired_date: expiredDate === "-" ? null : expiredDate,
+      expiry_date: expiredDate === "-" ? null : expiredDate,
+    };
+  };
+
+  const buildBackendPurchasePayload = (statusOverride = null) => {
+    const localPayload = buildPurchasePayload(statusOverride);
+    const totals = calculateCurrencyPreview({
+      items: purchaseItems,
+      form: purchaseForm,
+    });
+
+    return {
+      purchase_no: localPayload.purchaseNo,
+      supplier_id: localPayload.supplierId,
+      purchase_date: localPayload.purchaseDate,
+      input_currency: currencyToApi(purchaseForm.inputCurrency || "USD"),
+      exchange_rate_used: Number(purchaseForm.exchangeRateUsed || 0),
+      khr_rounding: purchaseForm.khrRounding || "floor",
+      exchange_rate_source: purchaseForm.exchangeRateSource || "manual",
+      exchange_rate_note: purchaseForm.exchangeRateNote || null,
+      payment_mode: localPayload.paymentMode,
+      payment_status: localPayload.paymentStatus,
+      status: statusToApi(localPayload.status),
+      subtotal_usd: Number(totals.subtotalUsd || 0),
+      subtotal_khr: Number(totals.subtotalKhr || 0),
+      discount_currency: currencyToApi(purchaseForm.discountCurrency || "USD"),
+      discount_amount_input: Number(purchaseForm.discountTotal || 0),
+      discount_total_usd: Number(totals.discountUsd || 0),
+      discount_total_khr: Number(totals.discountKhr || 0),
+      delivery_option: normalizeDeliveryOption(localPayload.deliveryOption),
+      delivery_fee_currency: currencyToApi(localPayload.deliveryFeeCurrency || "USD"),
+      delivery_fee_input: Number(purchaseForm.deliveryFee || 0),
+      delivery_fee_usd: Number(totals.deliveryUsd || 0),
+      delivery_fee_khr: Number(totals.deliveryKhr || 0),
+      delivery_paid_by: normalizeDeliveryPaidBy(localPayload.deliveryPaidBy),
+      grand_total_usd: Number(totals.grandTotalUsd || 0),
+      grand_total_khr: Number(totals.grandTotalKhr || 0),
+      paid_currency: currencyToApi(purchaseForm.paidCurrency || "USD"),
+      paid_amount_input: Number(
+        purchaseForm.paymentStatus === "paid"
+          ? purchaseForm.paidCurrency === "KHR"
+            ? totals.grandTotalKhr
+            : totals.grandTotalUsd
+          : purchaseForm.paidAmount || 0
+      ),
+      paid_amount_usd: Number(totals.paidAmountUsd || 0),
+      paid_amount_khr: Number(totals.paidAmountKhr || 0),
+      balance_amount_usd: Number(totals.balanceUsd || 0),
+      balance_amount_khr: Number(totals.balanceKhr || 0),
+      note: localPayload.note,
+      items: purchaseItems.map(buildBackendPurchaseItemPayload),
+    };
+  };
+
+  const buildBackendPurchasePayloadFromDetail = (purchase, items) => {
+    const normalizedItems = items.map((item) => {
+      const unitCost = convertCost({
+        inputCurrency: item.inputCurrency || "USD",
+        inputUnitCost: Number(item.inputUnitCost ?? item.unitCost ?? item.unitCostUsd ?? 0),
+        exchangeRate: Number(purchase.exchangeRateUsed || activeExchangeRate || 0),
+      });
+      const unitCostUsd = Number(item.unitCostUsd ?? item.unitCost ?? unitCost.unitCostUsd ?? 0);
+      const unitCostKhr = Number(item.unitCostKhr ?? unitCost.unitCostKhr ?? 0);
+      const payableQty =
+        purchase.paymentMode === "pay_after_check"
+          ? Number(item.acceptedQty || 0)
+          : Number(item.paidQty ?? item.invoicedQty ?? 0);
+
+      return {
+        ...item,
+        unitCost: unitCostUsd,
+        unitCostUsd,
+        unitCostKhr,
+        lineTotal: payableQty * unitCostUsd,
+        lineTotalUsd: payableQty * unitCostUsd,
+        lineTotalKhr: payableQty * unitCostKhr,
+      };
+    });
+
+    const form = {
+      ...purchase,
+      exchangeRateUsed: Number(purchase.exchangeRateUsed || activeExchangeRate || 0),
+      discountCurrency: purchase.discountCurrency || "USD",
+      discountTotal: purchase.discountTotal ?? 0,
+      deliveryFeeCurrency: purchase.deliveryFeeCurrency || "USD",
+      deliveryFee: purchase.deliveryFee ?? 0,
+      paidCurrency: purchase.paidCurrency || "USD",
+      paidAmount: purchase.paymentStatus === "paid" ? purchase.paidAmount : purchase.paidAmount ?? 0,
+    };
+    const totals = calculateCurrencyPreview({ items: normalizedItems, form });
+
+    return {
+      purchase_no: purchase.purchaseNo,
+      supplier_id: purchase.supplierId,
+      purchase_date: formatDateOnly(purchase.purchaseDate),
+      input_currency: currencyToApi(purchase.inputCurrency || "USD"),
+      exchange_rate_used: Number(purchase.exchangeRateUsed || activeExchangeRate || 0),
+      khr_rounding: purchase.khrRounding || "floor",
+      exchange_rate_source: purchase.exchangeRateSource || "manual",
+      exchange_rate_note: purchase.exchangeRateNote || null,
+      payment_mode: purchase.paymentMode,
+      payment_status: purchase.paymentStatus,
+      status: statusToApi(STATUS.PENDING_STOCK_IN),
+      subtotal_usd: Number(totals.subtotalUsd || 0),
+      subtotal_khr: Number(totals.subtotalKhr || 0),
+      discount_currency: currencyToApi(purchase.discountCurrency || "USD"),
+      discount_amount_input: Number(purchase.discountTotal || 0),
+      discount_total_usd: Number(totals.discountUsd || 0),
+      discount_total_khr: Number(totals.discountKhr || 0),
+      delivery_option: normalizeDeliveryOption(purchase.deliveryOption || "none"),
+      delivery_fee_currency: currencyToApi(purchase.deliveryFeeCurrency || "USD"),
+      delivery_fee_input: Number(purchase.deliveryFee || 0),
+      delivery_fee_usd: Number(totals.deliveryUsd || 0),
+      delivery_fee_khr: Number(totals.deliveryKhr || 0),
+      delivery_paid_by: normalizeDeliveryPaidBy(purchase.deliveryPaidBy || "buyer"),
+      grand_total_usd: Number(totals.grandTotalUsd || 0),
+      grand_total_khr: Number(totals.grandTotalKhr || 0),
+      paid_currency: currencyToApi(purchase.paidCurrency || "USD"),
+      paid_amount_input: Number(purchase.paidAmount || 0),
+      paid_amount_usd: Number(totals.paidAmountUsd || 0),
+      paid_amount_khr: Number(totals.paidAmountKhr || 0),
+      balance_amount_usd: Number(totals.balanceUsd || 0),
+      balance_amount_khr: Number(totals.balanceKhr || 0),
+      note: purchase.note || "",
+      items: normalizedItems.map((item) =>
+        buildBackendPurchaseItemPayload(item, {
+          exchangeRate: Number(purchase.exchangeRateUsed || activeExchangeRate || 0),
+          paymentMode: purchase.paymentMode,
+        })
+      ),
+    };
+  };
+
   const handleSavePurchase = (statusOverride = null) => {
     if (!validatePurchaseForm()) return;
 
     const payload = buildPurchasePayload(statusOverride);
+    const backendPayload = buildBackendPurchasePayload(statusOverride);
 
     if (modalMode === "add") {
-      setPurchases((previous) => [payload, ...previous]);
+      if (purchasesQuery.data) {
+        createPurchaseMutation.mutate(backendPayload);
+        return;
+      }
+
+      setLocalPurchases((previous) => [payload, ...previous]);
+      notify.success("Purchase created", "The purchase invoice has been saved.");
       closeModal();
       return;
     }
 
     if ((modalMode === "edit" || modalMode === "receive_goods") && selectedPurchase) {
-      setPurchases((previous) => previous.map((item) => (item.id === selectedPurchase.id ? payload : item)));
+      if (purchasesQuery.data && !String(selectedPurchase.id).startsWith("local-")) {
+        updatePurchaseMutation.mutate({
+          id: selectedPurchase.id,
+          payload: backendPayload,
+        });
+        return;
+      }
+
+      setLocalPurchases((previous) => previous.map((item) => (item.id === selectedPurchase.id ? payload : item)));
+      notify.success("Purchase updated", "The purchase invoice has been updated.");
       closeModal();
     }
   };
 
   const handleConfirmStockIn = (purchase) => {
-    if (purchase.status !== STATUS.PENDING_STOCK_IN) return;
+    if (getEffectivePurchaseStatus(purchase) !== STATUS.PENDING_STOCK_IN) return;
 
     // IMPORTANT UX / DATA-SAFETY RULE:
     // Purchases prepares a purchase for stock-in only.
@@ -1029,10 +1210,338 @@ export default function Purchases() {
     navigate(`/home/inventory?stockInPurchaseId=${purchase.id}&purchaseNo=${encodeURIComponent(purchase.purchaseNo)}`);
   };
 
+  const getReturnItemReplacementQty = (item) =>
+    Number(item.replacement_qty ?? item.replacementQty ?? item.qty_returned ?? item.qtyReturned ?? item.qty ?? 0);
+
+  const getReturnItemBaseQty = (item) =>
+    Number(item.base_qty_returned ?? item.baseQtyReturned ?? item.base_qty ?? item.baseQty ?? 0);
+
+  const getReturnItems = (purchaseReturn) =>
+    Array.isArray(purchaseReturn?.items)
+      ? purchaseReturn.items
+      : Array.isArray(purchaseReturn?.purchase_return_items)
+        ? purchaseReturn.purchase_return_items
+        : [];
+
+  const getReturnItemPurchaseItemId = (item) =>
+    item.purchase_item_id || item.purchaseItemId || item.purchaseItem?.id || item.purchase_item?.id || "";
+
+  const isPurchaseAlreadyStocked = (purchase) =>
+    purchase?.status === STATUS.RECEIVED || (purchase?.items || []).some((item) => Number(item.stockedInQty || 0) > 0);
+
+  const buildReplacementItemFromPurchaseItem = (purchaseItem, qty, returnItem = null) => {
+    const replacementQty = Number(qty || purchaseItem.claimQty || purchaseItem.damagedQty || 0);
+    const originalExpiry = formatDateOnly(purchaseItem.expiredDate);
+
+    return {
+      purchaseItemId: purchaseItem.id,
+      returnItemId: returnItem?.id,
+      variantUnitId: purchaseItem.variantUnitId,
+      variantName: purchaseItem.variantName,
+      variantCode: purchaseItem.variantCode,
+      unitName: purchaseItem.unitName,
+      baseUnit: purchaseItem.baseUnit,
+      conversionQty: Number(purchaseItem.conversionQty || 1),
+      qty: replacementQty,
+      baseQty: getReturnItemBaseQty(returnItem || {}) || replacementQty * Number(purchaseItem.conversionQty || 1),
+      originalExpiry,
+      expiryDate: originalExpiry === "-" ? "" : originalExpiry,
+      unitCostUsd: Number(returnItem?.unit_cost_usd ?? returnItem?.unitCostUsd ?? purchaseItem.unitCostUsd ?? purchaseItem.unitCost ?? 0),
+      unitCostKhr: Number(returnItem?.unit_cost_khr ?? returnItem?.unitCostKhr ?? purchaseItem.unitCostKhr ?? 0),
+      lineTotalUsd: Number(
+        returnItem?.line_total_usd ??
+          returnItem?.lineTotalUsd ??
+          replacementQty * Number(purchaseItem.unitCostUsd ?? purchaseItem.unitCost ?? 0)
+      ),
+      lineTotalKhr: Number(returnItem?.line_total_khr ?? returnItem?.lineTotalKhr ?? replacementQty * Number(purchaseItem.unitCostKhr ?? 0)),
+    };
+  };
+
+  const closeReplacementModal = () => {
+    setReplacementModalOpen(false);
+    setReplacementPurchase(null);
+    setReplacementReturn(null);
+    setReplacementItems([]);
+    setReplacementErrors({});
+  };
+
+  const buildReplacementItems = (purchase, purchaseReturn) => {
+    const returnItems = getReturnItems(purchaseReturn);
+    const claimItems = (purchase.items || []).filter((item) => Number(item.claimQty || 0) > 0);
+    const fallbackQty = Number(
+      purchaseReturn?.replacement_qty ??
+        purchaseReturn?.replacementQty ??
+        claimItems.reduce((total, item) => total + Number(item.claimQty || 0), 0)
+    );
+
+    if (returnItems.length === 0 && fallbackQty > 0) {
+      const purchaseItem = claimItems[0];
+      if (!purchaseItem) return [];
+      return [buildReplacementItemFromPurchaseItem(purchaseItem, fallbackQty)];
+    }
+
+    const mappedItems = returnItems
+      .map((returnItem) => {
+        const purchaseItemId = getReturnItemPurchaseItemId(returnItem);
+        const purchaseItem =
+          (purchase.items || []).find((item) => String(item.id) === String(purchaseItemId)) ||
+          (claimItems.length === 1 ? claimItems[0] : null);
+        if (!purchaseItem) return null;
+
+        const qty = getReturnItemReplacementQty(returnItem) || Number(purchaseItem.claimQty || 0);
+        return buildReplacementItemFromPurchaseItem(purchaseItem, qty, returnItem);
+      })
+      .filter(Boolean)
+      .filter((item) => Number(item.qty || 0) > 0);
+
+    if (mappedItems.length > 0) return mappedItems;
+
+    if (claimItems.length === 0) return [];
+    if (claimItems.length === 1) {
+      return [buildReplacementItemFromPurchaseItem(claimItems[0], fallbackQty || claimItems[0].claimQty)];
+    }
+
+    return claimItems.map((item) => buildReplacementItemFromPurchaseItem(item, item.claimQty));
+  };
+
+  const handleReceiveReplacement = async (purchase, purchaseReturn = null) => {
+    const detail = await loadPurchaseDetail(purchase);
+    const activeReturn = purchaseReturn || getOpenReplacementClaim(detail) || getOpenReplacementClaim(purchase);
+    if (!activeReturn) return;
+
+    const items = buildReplacementItems(detail, activeReturn);
+    if (items.length === 0) {
+      notify.error("Receive replacement failed", "No replacement item is available for this supplier claim.");
+      return;
+    }
+
+    setReplacementPurchase(detail);
+    setReplacementReturn(activeReturn);
+    setReplacementItems(items);
+    setReplacementErrors({});
+    setReplacementModalOpen(true);
+  };
+
+  const handleReplacementItemChange = (index, field, value) => {
+    setReplacementItems((previous) =>
+      previous.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item))
+    );
+    setReplacementErrors((previous) => ({
+      ...previous,
+      items: {
+        ...(previous.items || {}),
+        [index]: {
+          ...(previous.items?.[index] || {}),
+          [field]: "",
+        },
+      },
+    }));
+  };
+
+  const validateReplacementItems = () => {
+    const itemErrors = {};
+    replacementItems.forEach((item, index) => {
+      if (!item.expiryDate) {
+        itemErrors[index] = { expiryDate: "Replacement expiry date is required." };
+      }
+      if (Number(item.qty || 0) <= 0) {
+        itemErrors[index] = { ...(itemErrors[index] || {}), qty: "Replacement quantity must be greater than 0." };
+      }
+    });
+
+    const nextErrors = Object.keys(itemErrors).length > 0 ? { items: itemErrors } : {};
+    setReplacementErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const buildItemsAfterReplacement = (purchase, receivedItems) => {
+    const nextItems = (purchase.items || []).map((item) => ({ ...item }));
+
+    receivedItems.forEach((receivedItem) => {
+      const index = nextItems.findIndex((item) => String(item.id) === String(receivedItem.purchaseItemId));
+      if (index < 0) return;
+
+      const current = nextItems[index];
+      const qty = Number(receivedItem.qty || 0);
+      const sameExpiry = formatDateOnly(current.expiredDate) === formatDateOnly(receivedItem.expiryDate);
+
+      if (sameExpiry) {
+        nextItems[index] = {
+          ...current,
+          acceptedQty: Number(current.acceptedQty || 0) + qty,
+          damagedQty: Math.max(0, Number(current.damagedQty || 0) - qty),
+          claimQty: Math.max(0, Number(current.claimQty || 0) - qty),
+          updatedAt: new Date().toISOString().slice(0, 10),
+        };
+        return;
+      }
+
+      nextItems[index] = {
+        ...current,
+        invoicedQty: Math.max(Number(current.acceptedQty || 0), Number(current.invoicedQty || 0) - qty),
+        paidQty: Math.max(0, Number(current.paidQty || 0) - qty),
+        receivedQty: Math.max(Number(current.acceptedQty || 0), Number(current.receivedQty || 0) - qty),
+        damagedQty: Math.max(0, Number(current.damagedQty || 0) - qty),
+        claimQty: Math.max(0, Number(current.claimQty || 0) - qty),
+        updatedAt: new Date().toISOString().slice(0, 10),
+      };
+
+      nextItems.push({
+        ...current,
+        id: undefined,
+        invoicedQty: qty,
+        paidQty: qty,
+        receivedQty: qty,
+        acceptedQty: qty,
+        stockedInQty: 0,
+        damagedQty: 0,
+        claimQty: 0,
+        expiredDate: receivedItem.expiryDate,
+        lineTotal: qty * Number(current.unitCostUsd ?? current.unitCost ?? 0),
+        lineTotalUsd: qty * Number(current.unitCostUsd ?? current.unitCost ?? 0),
+        lineTotalKhr: qty * Number(current.unitCostKhr || 0),
+        createdAt: new Date().toISOString().slice(0, 10),
+        updatedAt: new Date().toISOString().slice(0, 10),
+      });
+    });
+
+    return nextItems;
+  };
+
+  const buildReplacementReturnPayload = ({ purchase, purchaseReturn, items, stockInReplacement }) => {
+    const now = new Date().toISOString().slice(0, 10);
+    const replacementQty = items.reduce((total, item) => total + Number(item.qty || 0), 0);
+    const replacementReceivedQty = stockInReplacement ? replacementQty : 0;
+
+    return {
+      purchase_id: purchaseReturn.purchaseId || purchaseReturn.purchase_id || purchase.id,
+      supplier_id: purchaseReturn.supplierId || purchaseReturn.supplier_id || purchase.supplierId,
+      purchase_return_no: purchaseReturn.purchaseReturnNo || purchaseReturn.purchase_return_no,
+      return_date: purchaseReturn.returnDate || purchaseReturn.return_date || now,
+      return_type: purchaseReturn.returnType || purchaseReturn.return_type || "partial_return",
+      return_reason: purchaseReturn.returnReason || purchaseReturn.return_reason || "damaged",
+      resolution_type: "replacement",
+      resolution_status: "resolved",
+      input_currency: currencyToApi(purchase.inputCurrency || "USD"),
+      exchange_rate_used: Number(purchase.exchangeRateUsed || purchaseReturn.exchange_rate_used || 0),
+      khr_rounding: purchase.khrRounding || purchaseReturn.khr_rounding || "floor",
+      subtotal_usd: Number(purchaseReturn.subtotalUsd ?? purchaseReturn.subtotal ?? purchaseReturn.total_amount_usd ?? 0),
+      subtotal_khr: Number(purchaseReturn.subtotalKhr ?? purchaseReturn.total_amount_khr ?? 0),
+      total_amount_usd: Number(purchaseReturn.subtotalUsd ?? purchaseReturn.subtotal ?? purchaseReturn.total_amount_usd ?? 0),
+      total_amount_khr: Number(purchaseReturn.subtotalKhr ?? purchaseReturn.total_amount_khr ?? 0),
+      refund_status: "none",
+      refund_amount_usd: 0,
+      refund_amount_khr: 0,
+      replacement_qty: replacementQty,
+      replacement_received_qty: replacementReceivedQty,
+      credit_status: "none",
+      credit_amount_usd: 0,
+      credit_amount_khr: 0,
+      note: purchaseReturn.note || "Supplier replacement received.",
+      resolved_at: now,
+      items: getReturnItems(purchaseReturn).map((returnItem) => {
+        const receivedItem = items.find((item) => String(item.returnItemId || "") === String(returnItem.id || ""));
+        const itemReplacementQty = getReturnItemReplacementQty(returnItem);
+        return {
+          id: returnItem.id,
+          purchase_item_id: getReturnItemPurchaseItemId(returnItem),
+          product_variant_unit_id: returnItem.product_variant_unit_id || returnItem.productVariantUnitId || receivedItem?.variantUnitId,
+          qty: Number(returnItem.qty ?? returnItem.qty_returned ?? returnItem.qtyReturned ?? itemReplacementQty),
+          qty_returned: Number(returnItem.qty_returned ?? returnItem.qtyReturned ?? returnItem.qty ?? itemReplacementQty),
+          base_qty: Number(returnItem.base_qty ?? returnItem.baseQty ?? returnItem.base_qty_returned ?? returnItem.baseQtyReturned ?? 0),
+          base_qty_returned: Number(returnItem.base_qty_returned ?? returnItem.baseQtyReturned ?? returnItem.base_qty ?? returnItem.baseQty ?? 0),
+          input_currency: currencyToApi(returnItem.input_currency || returnItem.inputCurrency || purchase.inputCurrency || "USD"),
+          input_unit_cost: Number(returnItem.input_unit_cost ?? returnItem.inputUnitCost ?? returnItem.unit_cost_usd ?? receivedItem?.unitCostUsd ?? 0),
+          exchange_rate_used: Number(returnItem.exchange_rate_used ?? returnItem.exchangeRateUsed ?? purchase.exchangeRateUsed ?? 0),
+          khr_rounding: returnItem.khr_rounding || returnItem.khrRounding || purchase.khrRounding || "floor",
+          unit_cost_usd: Number(returnItem.unit_cost_usd ?? returnItem.unitCostUsd ?? receivedItem?.unitCostUsd ?? 0),
+          unit_cost_khr: Number(returnItem.unit_cost_khr ?? returnItem.unitCostKhr ?? receivedItem?.unitCostKhr ?? 0),
+          line_total_usd: Number(returnItem.line_total_usd ?? returnItem.lineTotalUsd ?? receivedItem?.lineTotalUsd ?? 0),
+          line_total_khr: Number(returnItem.line_total_khr ?? returnItem.lineTotalKhr ?? receivedItem?.lineTotalKhr ?? 0),
+          replacement_qty: itemReplacementQty,
+          replacement_received_qty: stockInReplacement ? Number(receivedItem?.qty || itemReplacementQty) : 0,
+          refund_amount_usd: 0,
+          refund_amount_khr: 0,
+          credit_amount_usd: 0,
+          credit_amount_khr: 0,
+          condition: returnItem.condition || "damaged",
+          stock_action: stockInReplacement ? "stock_in" : returnItem.stock_action || returnItem.stockAction || "no_stock_change",
+          note: returnItem.note || returnItem.reason || "",
+          reason: returnItem.reason || returnItem.note || "",
+        };
+      }),
+    };
+  };
+
+  const handleSaveReceiveReplacement = () => {
+    if (!replacementPurchase || !replacementReturn || !validateReplacementItems()) return;
+
+    const stockInReplacement = isPurchaseAlreadyStocked(replacementPurchase);
+    const returnPayload = buildReplacementReturnPayload({
+      purchase: replacementPurchase,
+      purchaseReturn: replacementReturn,
+      items: replacementItems,
+      stockInReplacement,
+    });
+    const nextItems = buildItemsAfterReplacement(replacementPurchase, replacementItems);
+    const purchasePayload = stockInReplacement
+      ? null
+      : buildBackendPurchasePayloadFromDetail(replacementPurchase, nextItems);
+
+    if (purchasesQuery.data && !String(replacementReturn.id).startsWith("local-")) {
+      receiveReplacementMutation.mutate({
+        purchaseReturn: replacementReturn,
+        payload: returnPayload,
+        purchasePayload,
+        purchaseId: replacementPurchase.id,
+      });
+      return;
+    }
+
+    setPurchaseReturns((previous) =>
+      previous.map((item) =>
+        item.id === replacementReturn.id
+          ? {
+              ...item,
+              status: RETURN_STATUS.COMPLETED,
+              resolutionStatus: "resolved",
+              replacementReceivedQty: stockInReplacement
+                ? replacementItems.reduce((total, current) => total + Number(current.qty || 0), 0)
+                : 0,
+              resolvedAt: new Date().toISOString().slice(0, 10),
+            }
+          : item
+      )
+    );
+    if (!stockInReplacement) {
+      setLocalPurchases((previous) =>
+        previous.map((item) =>
+          item.id === replacementPurchase.id
+            ? { ...item, status: STATUS.PENDING_STOCK_IN, items: nextItems, updatedAt: new Date().toISOString().slice(0, 10) }
+            : item
+        )
+      );
+    }
+    notify.success("Replacement received", "Supplier replacement has been marked as received.");
+    closeReplacementModal();
+    closeModal();
+  };
+
   const handleCancelPurchase = (purchase) => {
     const ok = window.confirm(`Cancel ${purchase.purchaseNo}?`);
     if (!ok) return;
-    setPurchases((previous) =>
+
+    if (purchasesQuery.data && !String(purchase.id).startsWith("local-")) {
+      updatePurchaseMutation.mutate({
+        id: purchase.id,
+        payload: {
+          status: statusToApi(STATUS.CANCELLED),
+        },
+      });
+      return;
+    }
+
+    setLocalPurchases((previous) =>
       previous.map((item) =>
         item.id === purchase.id ? { ...item, status: STATUS.CANCELLED, updatedAt: new Date().toISOString().slice(0, 10) } : item
       )
@@ -1053,8 +1562,71 @@ export default function Purchases() {
     if (condition === "damaged" && (Number(purchaseItem.claimQty || 0) > 0 || Number(purchaseItem.damagedQty || 0) > 0)) {
       return "no_stock_change";
     }
-    if (selectedPurchase?.status === STATUS.RECEIVED) return "deduct_from_stock";
+    if (selectedPurchase?.status === STATUS.RECEIVED) return "stock_out";
     return "no_stock_change";
+  };
+
+  const normalizeReturnResolutionType = (value = "replacement") => {
+    if (value === "credit") return "credit_note";
+    return value || "replacement";
+  };
+
+  const buildPurchaseReturnItemFromPurchaseItem = (
+    purchaseItem,
+    {
+      purchaseContext = selectedPurchase,
+      qtyReturned = 0,
+      condition = "damaged",
+      reason = "",
+    } = {}
+  ) => {
+    const qty = Number(qtyReturned || 0);
+    const baseQtyReturned = qty * Number(purchaseItem.conversionQty || 1);
+    const unitCostUsd = Number(purchaseItem.unitCostUsd ?? purchaseItem.unitCost ?? 0);
+    const unitCostKhr = Number(purchaseItem.unitCostKhr || 0);
+    const lineTotalUsd = qty * unitCostUsd;
+    const lineTotalKhr = qty * unitCostKhr;
+    const stockAction =
+      condition === "damaged" && (Number(purchaseItem.claimQty || 0) > 0 || Number(purchaseItem.damagedQty || 0) > 0)
+        ? "no_stock_change"
+        : purchaseContext?.status === STATUS.RECEIVED
+          ? "stock_out"
+          : "no_stock_change";
+
+    return {
+      id: Date.now() + Number(purchaseItem.id || 0),
+      purchaseReturnId: null,
+      purchaseItemId: purchaseItem.id,
+      variantUnitId: purchaseItem.variantUnitId,
+      productName: purchaseItem.productName,
+      variantName: purchaseItem.variantName,
+      variantCode: purchaseItem.variantCode,
+      unitName: purchaseItem.unitName,
+      baseUnit: purchaseItem.baseUnit,
+      conversionQty: purchaseItem.conversionQty,
+      qtyReturned: qty,
+      baseQtyReturned,
+      inputCurrency: purchaseItem.inputCurrency || purchaseContext?.inputCurrency || "USD",
+      inputUnitCost: purchaseItem.inputUnitCost ?? purchaseItem.unitCostUsd ?? purchaseItem.unitCost ?? 0,
+      exchangeRateUsed: purchaseItem.exchangeRateUsed || purchaseContext?.exchangeRateUsed || 0,
+      khrRounding: purchaseItem.khrRounding || purchaseContext?.khrRounding || "floor",
+      unitCost: purchaseItem.unitCost,
+      unitCostUsd,
+      unitCostKhr,
+      unitCostBase: purchaseItem.unitCostBase,
+      lineTotal: lineTotalUsd,
+      lineTotalUsd,
+      lineTotalKhr,
+      replacementQty: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "replacement" ? qty : 0,
+      replacementReceivedQty: 0,
+      refundAmountUsd: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "refund" ? lineTotalUsd : 0,
+      refundAmountKhr: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "refund" ? lineTotalKhr : 0,
+      creditAmountUsd: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "credit_note" ? lineTotalUsd : 0,
+      creditAmountKhr: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "credit_note" ? lineTotalKhr : 0,
+      condition,
+      stockAction,
+      reason: reason || "Supplier claim item.",
+    };
   };
 
   const handlePurchaseReturnFormChange = (field, value) => {
@@ -1062,17 +1634,32 @@ export default function Purchases() {
       const next = { ...previous, [field]: value };
       if (field === "resolutionStatus") {
         const map = {
-          draft: RETURN_STATUS.DRAFT,
           submitted: RETURN_STATUS.SUBMITTED,
           approved: RETURN_STATUS.APPROVED,
-          waiting_replacement: RETURN_STATUS.WAITING_REPLACEMENT,
-          completed: RETURN_STATUS.COMPLETED,
+          rejected: RETURN_STATUS.REJECTED,
+          resolved: RETURN_STATUS.COMPLETED,
           cancelled: RETURN_STATUS.CANCELLED,
         };
-        next.status = map[value] || RETURN_STATUS.DRAFT;
+        next.status = map[value] || RETURN_STATUS.SUBMITTED;
+      }
+      if (field === "resolutionType") {
+        next.resolutionType = normalizeReturnResolutionType(value);
       }
       return next;
     });
+    if (field === "resolutionType") {
+      const nextResolutionType = normalizeReturnResolutionType(value);
+      setPurchaseReturnItems((previous) =>
+        previous.map((item) => ({
+          ...item,
+          replacementQty: nextResolutionType === "replacement" ? Number(item.qtyReturned || 0) : 0,
+          refundAmountUsd: nextResolutionType === "refund" ? Number(item.lineTotalUsd ?? item.lineTotal ?? 0) : 0,
+          refundAmountKhr: nextResolutionType === "refund" ? Number(item.lineTotalKhr || 0) : 0,
+          creditAmountUsd: nextResolutionType === "credit_note" ? Number(item.lineTotalUsd ?? item.lineTotal ?? 0) : 0,
+          creditAmountKhr: nextResolutionType === "credit_note" ? Number(item.lineTotalKhr || 0) : 0,
+        }))
+      );
+    }
     setPurchaseReturnErrors((previous) => ({ ...previous, [field]: "" }));
   };
 
@@ -1134,31 +1721,11 @@ export default function Purchases() {
     const purchaseItem = selectedPurchase.items.find((item) => String(item.id) === String(purchaseReturnItemForm.purchaseItemId));
     if (!purchaseItem) return;
 
-    const qtyReturned = Number(purchaseReturnItemForm.qtyReturned || 0);
-    const baseQtyReturned = qtyReturned * Number(purchaseItem.conversionQty || 1);
-    const lineTotal = qtyReturned * Number(purchaseItem.unitCost || 0);
-    const stockAction = getDefaultStockAction(purchaseItem, purchaseReturnItemForm.condition);
-
-    const item = {
-      id: Date.now() + purchaseItem.id,
-      purchaseReturnId: null,
-      purchaseItemId: purchaseItem.id,
-      variantUnitId: purchaseItem.variantUnitId,
-      productName: purchaseItem.productName,
-      variantName: purchaseItem.variantName,
-      variantCode: purchaseItem.variantCode,
-      unitName: purchaseItem.unitName,
-      baseUnit: purchaseItem.baseUnit,
-      conversionQty: purchaseItem.conversionQty,
-      qtyReturned,
-      baseQtyReturned,
-      unitCost: purchaseItem.unitCost,
-      unitCostBase: purchaseItem.unitCostBase,
-      lineTotal,
+    const item = buildPurchaseReturnItemFromPurchaseItem(purchaseItem, {
+      qtyReturned: Number(purchaseReturnItemForm.qtyReturned || 0),
       condition: purchaseReturnItemForm.condition,
-      stockAction,
       reason: purchaseReturnItemForm.reason.trim(),
-    };
+    });
 
     setPurchaseReturnItems((previous) => [...previous, item]);
     setPurchaseReturnItemForm(emptyPurchaseReturnItemForm);
@@ -1181,6 +1748,7 @@ export default function Purchases() {
 
     const now = new Date().toISOString().slice(0, 10);
     const subtotal = purchaseReturnItems.reduce((total, item) => total + Number(item.lineTotal || 0), 0);
+    const subtotalKhr = purchaseReturnItems.reduce((total, item) => total + Number(item.lineTotalKhr || 0), 0);
     const newReturnId = Date.now();
 
     const payload = {
@@ -1196,6 +1764,8 @@ export default function Purchases() {
       resolutionType: purchaseReturnForm.resolutionType,
       resolutionStatus: purchaseReturnForm.resolutionStatus,
       subtotal,
+      subtotalUsd: subtotal,
+      subtotalKhr,
       note: purchaseReturnForm.note.trim(),
       status: purchaseReturnForm.status,
       createdBy: "Admin",
@@ -1205,10 +1775,74 @@ export default function Purchases() {
       items: purchaseReturnItems.map((item) => ({ ...item, purchaseReturnId: newReturnId })),
     };
 
+    if (purchasesQuery.data && !String(selectedPurchase.id).startsWith("local-")) {
+      const resolutionType = normalizeReturnResolutionType(payload.resolutionType);
+      const apiResolutionType = resolutionType;
+      const isRefund = resolutionType === "refund";
+      const isCredit = resolutionType === "credit_note";
+      const isReplacement = resolutionType === "replacement";
+
+      createPurchaseReturnMutation.mutate({
+        purchase_return_no: payload.purchaseReturnNo,
+        purchase_id: payload.purchaseId,
+        supplier_id: payload.supplierId,
+        return_date: payload.returnDate,
+        return_type: payload.returnType,
+        return_reason: payload.returnReason,
+        resolution_type: apiResolutionType,
+        resolution_status: payload.resolutionStatus,
+        status: String(payload.status || RETURN_STATUS.SUBMITTED).toLowerCase().replaceAll(" ", "_"),
+        input_currency: currencyToApi(selectedPurchase.inputCurrency || "USD"),
+        exchange_rate_used: Number(selectedPurchase.exchangeRateUsed || 0),
+        khr_rounding: selectedPurchase.khrRounding || "floor",
+        subtotal_usd: Number(subtotal || 0),
+        subtotal_khr: Number(subtotalKhr || 0),
+        total_amount_usd: Number(subtotal || 0),
+        total_amount_khr: Number(subtotalKhr || 0),
+        refund_status: isRefund ? "pending" : "none",
+        refund_amount_usd: isRefund ? Number(subtotal || 0) : 0,
+        refund_amount_khr: isRefund ? Number(subtotalKhr || 0) : 0,
+        replacement_qty: isReplacement ? purchaseReturnItems.reduce((total, item) => total + Number(item.qtyReturned || 0), 0) : 0,
+        replacement_received_qty: 0,
+        credit_amount_usd: isCredit ? Number(subtotal || 0) : 0,
+        credit_amount_khr: isCredit ? Number(subtotalKhr || 0) : 0,
+        credit_status: isCredit ? "issued" : "none",
+        note: payload.note,
+        resolved_at: null,
+        items: purchaseReturnItems.map((item) => ({
+          purchase_item_id: item.purchaseItemId,
+          product_variant_unit_id: item.variantUnitId,
+          qty: Number(item.qtyReturned || 0),
+          qty_returned: Number(item.qtyReturned || 0),
+          base_qty: Number(item.baseQtyReturned || 0),
+          base_qty_returned: Number(item.baseQtyReturned || 0),
+          input_currency: currencyToApi(item.inputCurrency || "USD"),
+          input_unit_cost: Number(item.inputUnitCost || item.unitCostUsd || item.unitCost || 0),
+          exchange_rate_used: Number(item.exchangeRateUsed || selectedPurchase.exchangeRateUsed || 0),
+          khr_rounding: item.khrRounding || selectedPurchase.khrRounding || "floor",
+          unit_cost_usd: Number(item.unitCostUsd ?? item.unitCost ?? 0),
+          unit_cost_khr: Number(item.unitCostKhr || 0),
+          line_total_usd: Number(item.lineTotalUsd ?? item.lineTotal ?? 0),
+          line_total_khr: Number(item.lineTotalKhr || 0),
+          replacement_qty: isReplacement ? Number(item.qtyReturned || 0) : 0,
+          replacement_received_qty: Number(item.replacementReceivedQty || 0),
+          refund_amount_usd: isRefund ? Number(item.lineTotalUsd ?? item.lineTotal ?? 0) : 0,
+          refund_amount_khr: isRefund ? Number(item.lineTotalKhr || 0) : 0,
+          credit_amount_usd: isCredit ? Number(item.lineTotalUsd ?? item.lineTotal ?? 0) : 0,
+          credit_amount_khr: isCredit ? Number(item.lineTotalKhr || 0) : 0,
+          condition: item.condition,
+          stock_action: item.stockAction,
+          note: item.reason,
+          reason: item.reason,
+        })),
+      });
+      return;
+    }
+
     setPurchaseReturns((previous) => [payload, ...previous]);
 
     if (selectedPurchase.status === STATUS.PENDING_CLAIM) {
-      setPurchases((previous) =>
+      setLocalPurchases((previous) =>
         previous.map((purchase) =>
           purchase.id === selectedPurchase.id ? { ...purchase, status: STATUS.PENDING_STOCK_IN, updatedAt: now } : purchase
         )
@@ -1236,7 +1870,7 @@ export default function Purchases() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard theme={theme} title="Total Purchases" value={purchases.length} icon={<FiShoppingCart className="text-[34px] text-red-500" />} iconBg="bg-red-500/10" />
+        <SummaryCard theme={theme} title="Total Purchases" value={Number(pagination.total || purchases.length)} icon={<FiShoppingCart className="text-[34px] text-red-500" />} iconBg="bg-red-500/10" />
         <SummaryCard theme={theme} title="Pending Receive" value={pendingReceive} icon={<FiTruck className="text-[34px] text-indigo-500" />} iconBg="bg-indigo-500/10" />
         <SummaryCard theme={theme} title="Pending Stock In" value={pendingStockIn} icon={<FiClock className="text-[34px] text-blue-500" />} iconBg="bg-blue-500/10" />
         <SummaryCard theme={theme} title="Supplier Claims" value={pendingClaims} icon={<FiRotateCcw className="text-[34px] text-red-500" />} iconBg="bg-red-500/10" />
@@ -1276,12 +1910,11 @@ export default function Purchases() {
         </div>
       </div>
 
-      {(pendingReceive > 0 || pendingStockIn > 0 || pendingClaims > 0 || expiryAlerts > 0) && (
-        <div className={`grid grid-cols-1 gap-4 rounded-2xl border p-5 shadow-sm xl:grid-cols-4 ${theme.card}`}>
-          <AlertMiniCard icon={<FiTruck />} title="Pending Receive" value={pendingReceive} description="Prepaid purchases waiting for goods arrival." colorClass="text-indigo-500" onClick={() => setStatusFilter(STATUS.PENDING_RECEIVE)} />
-          <AlertMiniCard icon={<FiClock />} title="Pending Stock In" value={pendingStockIn} description="Goods checked. Confirm stock one time from Inventory." colorClass="text-blue-500" onClick={() => setStatusFilter(STATUS.PENDING_STOCK_IN)} />
-          <AlertMiniCard icon={<FiAlertTriangle />} title="Pending Claim" value={pendingClaims} description="Prepaid damaged goods need supplier resolution." colorClass="text-red-500" onClick={() => setStatusFilter(STATUS.PENDING_CLAIM)} />
-          <AlertMiniCard icon={<FiCalendar />} title="Expiry Watch" value={expiryAlerts} description="Purchases with expired or soon-expiring batches." colorClass="text-amber-500" onClick={() => setSearchTerm("")} />
+      {(pendingReceive > 0 || pendingStockIn > 0 || pendingClaims > 0) && (
+        <div className={`grid grid-cols-1 gap-4 rounded-2xl border p-5 shadow-sm xl:grid-cols-3 ${theme.card}`}>
+          <AlertMiniCard theme={theme} icon={<FiTruck />} title="Pending Receive" value={pendingReceive} description="Prepaid purchases waiting for goods arrival." colorClass="text-indigo-500" onClick={() => setStatusFilter(STATUS.PENDING_RECEIVE)} />
+          <AlertMiniCard theme={theme} icon={<FiClock />} title="Pending Stock In" value={pendingStockIn} description="Goods checked. Confirm stock one time from Inventory." colorClass="text-blue-500" onClick={() => setStatusFilter(STATUS.PENDING_STOCK_IN)} />
+          <AlertMiniCard theme={theme} icon={<FiAlertTriangle />} title="Pending Claim" value={pendingClaims} description="Prepaid damaged goods need supplier resolution." colorClass="text-red-500" onClick={() => setStatusFilter(STATUS.PENDING_CLAIM)} />
         </div>
       )}
 
@@ -1289,19 +1922,19 @@ export default function Purchases() {
         <div className="flex flex-col gap-2 border-b border-zinc-200 px-5 py-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className={`text-base font-semibold ${theme.pageTitle}`}>Purchase List</h2>
-            <p className={`mt-1 text-xs ${theme.muted}`}>Showing {filteredPurchases.length} of {purchases.length} purchases</p>
+            <p className={`mt-1 text-xs ${theme.muted}`}>Showing {pagination.from || 0}-{pagination.to || filteredPurchases.length} of {pagination.total || purchases.length} purchases</p>
           </div>
           <div className={`flex flex-wrap gap-3 text-xs ${theme.muted}`}>
             <span>Claim amount: {formatMoney(totalPurchaseReturnAmount)}</span>
-            <span>Local stock movements: {stockMovements.length}</span>
           </div>
         </div>
 
-        <div className="hidden overflow-x-auto xl:block">
+        <div className="hidden xl:block">
           <PurchaseTable
             purchases={filteredPurchases}
+            purchaseReturns={purchaseReturns}
             theme={theme}
-            getExpirySummary={getExpirySummary}
+            getEffectivePurchaseStatus={getEffectivePurchaseStatus}
             getPurchaseProblemLabel={getPurchaseProblemLabel}
             getClaimRequiredCount={getClaimRequiredCount}
             getDamagedCount={getDamagedCount}
@@ -1312,6 +1945,7 @@ export default function Purchases() {
             openEditModal={openEditModal}
             openReceiveGoodsModal={openReceiveGoodsModal}
             openPurchaseReturnModal={openPurchaseReturnModal}
+            handleReceiveReplacement={handleReceiveReplacement}
             handleConfirmStockIn={handleConfirmStockIn}
             handleCancelPurchase={handleCancelPurchase}
           />
@@ -1325,8 +1959,9 @@ export default function Purchases() {
               <PurchaseMobileCard
                 key={purchase.id}
                 purchase={purchase}
+                purchaseReturns={purchaseReturns}
                 theme={theme}
-                expiry={getExpirySummary(purchase)}
+                effectiveStatus={getEffectivePurchaseStatus(purchase)}
                 problemLabel={getPurchaseProblemLabel(purchase)}
                 nextActionLabel={getNextActionLabel(purchase)}
                 getStatusClass={getStatusClass}
@@ -1335,12 +1970,51 @@ export default function Purchases() {
                 openEditModal={openEditModal}
                 openReceiveGoodsModal={openReceiveGoodsModal}
                 openPurchaseReturnModal={openPurchaseReturnModal}
+                handleReceiveReplacement={handleReceiveReplacement}
                 handleConfirmStockIn={handleConfirmStockIn}
                 handleCancelPurchase={handleCancelPurchase}
               />
             ))
           )}
         </div>
+
+        {!purchasesQuery.isLoading && pagination.lastPage > 1 && (
+          <div className="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 dark:border-white/10 md:flex-row md:items-center md:justify-between">
+            <p className={`text-xs ${theme.muted}`}>
+              Page {pagination.currentPage} of {pagination.lastPage}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1 || purchasesQuery.isFetching}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="h-9 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              >
+                Previous
+              </button>
+
+              <select
+                value={perPage}
+                onChange={(event) => setPerPage(Number(event.target.value))}
+                className={`h-9 rounded-xl border px-3 text-xs outline-none ${theme.select}`}
+              >
+                <option value={10}>10 / page</option>
+                <option value={20}>20 / page</option>
+                <option value={50}>50 / page</option>
+              </select>
+
+              <button
+                type="button"
+                disabled={page >= pagination.lastPage || purchasesQuery.isFetching}
+                onClick={() => setPage((current) => Math.min(pagination.lastPage, current + 1))}
+                className="h-9 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {modalMode === "view" && selectedPurchase && (
@@ -1351,10 +2025,12 @@ export default function Purchases() {
           theme={theme}
           getStatusClass={getStatusClass}
           getStatusIcon={getStatusIcon}
+          effectiveStatus={getEffectivePurchaseStatus(selectedPurchase)}
           getPurchaseReturnStatusClass={getPurchaseReturnStatusClass}
           getPurchaseReturnStatusIcon={getPurchaseReturnStatusIcon}
           onClose={closeModal}
           onReturn={() => openPurchaseReturnModal(selectedPurchase)}
+          onReceiveReplacement={(purchaseReturn) => handleReceiveReplacement(selectedPurchase, purchaseReturn)}
           onConfirmStockIn={() => handleConfirmStockIn(selectedPurchase)}
         />
       )}
@@ -1365,7 +2041,7 @@ export default function Purchases() {
           form={purchaseForm}
           errors={purchaseErrors}
           items={purchaseItems}
-          suppliers={initialSuppliers}
+          suppliers={suppliers}
           theme={theme}
           onChange={handlePurchaseFormChange}
           onAddItem={openAddItemModal}
@@ -1375,8 +2051,7 @@ export default function Purchases() {
           onSaveDraft={() => handleSavePurchase(STATUS.DRAFT)}
           onSavePrimary={() => handleSavePurchase(STATUS.PENDING_STOCK_IN)}
           primarySaveLabel={getPrimarySaveLabel()}
-          calculateSubtotal={calculateSubtotal}
-          calculateGrandTotal={calculateGrandTotal}
+          isSaving={createPurchaseMutation.isPending || updatePurchaseMutation.isPending}
         />
       )}
 
@@ -1399,12 +2074,29 @@ export default function Purchases() {
         />
       )}
 
+      {replacementModalOpen && replacementPurchase && replacementReturn && (
+        <ReceiveReplacementModal
+          purchase={replacementPurchase}
+          purchaseReturn={replacementReturn}
+          items={replacementItems}
+          errors={replacementErrors}
+          theme={theme}
+          onChangeItem={handleReplacementItemChange}
+          onClose={closeReplacementModal}
+          onSave={handleSaveReceiveReplacement}
+          isSaving={receiveReplacementMutation.isPending}
+        />
+      )}
+
       {itemModalOpen && (
         <PurchaseItemModal
-          mode={itemEditIndex === null ? "add" : "edit"}
+          mode={modalMode === "receive_goods" ? "receive" : itemEditIndex === null ? "add" : "edit"}
           form={itemForm}
           errors={itemErrors}
-          variantUnits={initialVariantUnits}
+          variantUnits={variantUnits}
+          variantUnitSearch={variantUnitSearch}
+          setVariantUnitSearch={setVariantUnitSearch}
+          exchangeRateUsed={Number(purchaseForm.exchangeRateUsed || activeExchangeRate || 0)}
           paymentMode={purchaseForm.paymentMode}
           theme={theme}
           onChange={handleItemFormChange}
@@ -1416,754 +2108,3 @@ export default function Purchases() {
   );
 }
 
-function PurchaseTable({
-  purchases,
-  theme,
-  getExpirySummary,
-  getPurchaseProblemLabel,
-  getClaimRequiredCount,
-  getDamagedCount,
-  getNextActionLabel,
-  getStatusClass,
-  getStatusIcon,
-  openViewModal,
-  openEditModal,
-  openReceiveGoodsModal,
-  openPurchaseReturnModal,
-  handleConfirmStockIn,
-  handleCancelPurchase,
-}) {
-  return (
-    <table className="w-full min-w-[1420px]">
-      <thead className="bg-red-600 text-white">
-        <tr>
-          <th className="px-5 py-3 text-left text-sm font-semibold">Purchase</th>
-          <th className="px-5 py-3 text-left text-sm font-semibold">Supplier</th>
-          <th className="px-5 py-3 text-left text-sm font-semibold">Payment</th>
-          <th className="px-5 py-3 text-left text-sm font-semibold">Items / Expiry</th>
-          <th className="px-5 py-3 text-left text-sm font-semibold">Damage / Claim</th>
-          <th className="px-5 py-3 text-left text-sm font-semibold">Next Action</th>
-          <th className="px-5 py-3 text-left text-sm font-semibold">Total</th>
-          <th className="px-5 py-3 text-center text-sm font-semibold">Status</th>
-          <th className="px-5 py-3 text-center text-sm font-semibold">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {purchases.map((purchase) => {
-          const expiry = getExpirySummary(purchase);
-          return (
-            <tr key={purchase.id} className={`border-t transition ${theme.row}`}>
-              <td className="px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
-                    <FiShoppingCart size={21} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold leading-5">{purchase.purchaseNo}</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${theme.badge}`}>{purchase.purchaseDate}</span>
-                      <span className={`text-xs ${theme.muted}`}>By {purchase.createdBy}</span>
-                    </div>
-                  </div>
-                </div>
-              </td>
-              <td className="px-5 py-4">
-                <p className="text-sm font-semibold">{purchase.supplierName}</p>
-                <p className={`mt-1 text-xs ${theme.muted}`}>Supplier purchase invoice</p>
-              </td>
-              <td className="px-5 py-4">
-                <p className="text-sm font-semibold">{formatPaymentMode(purchase.paymentMode)}</p>
-                <p className={`mt-1 text-xs capitalize ${theme.muted}`}>{purchase.paymentStatus} · Paid {formatMoney(purchase.paidAmount)}</p>
-              </td>
-              <td className="px-5 py-4">
-                <p className="text-sm font-semibold">
-                  {purchase.items.length} item{purchase.items.length > 1 ? "s" : ""}
-                </p>
-                <p className={`mt-1 max-w-[260px] truncate text-xs ${theme.muted}`}>{purchase.items.map((item) => item.variantName).join(", ")}</p>
-                <div className="mt-2 max-w-[280px]">
-                  <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${expiry.pill}`}>{expiry.label}</span>
-                  <p className={`mt-1 truncate text-[11px] ${theme.muted}`}>{expiry.detail}</p>
-                </div>
-              </td>
-              <td className="px-5 py-4">
-                <p className={`text-sm font-semibold ${getClaimRequiredCount(purchase) > 0 ? "text-red-500" : getDamagedCount(purchase) > 0 ? "text-amber-500" : "text-emerald-500"}`}>
-                  {getPurchaseProblemLabel(purchase)}
-                </p>
-                <p className={`mt-1 text-xs ${theme.muted}`}>Balance {formatMoney(purchase.balanceAmount)}</p>
-              </td>
-              <td className="px-5 py-4">
-                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}>{getNextActionLabel(purchase)}</span>
-              </td>
-              <td className="px-5 py-4">
-                <p className="text-sm font-bold">{formatMoney(purchase.grandTotal)}</p>
-                <p className={`mt-1 text-xs ${theme.muted}`}>Subtotal {formatMoney(purchase.subtotal)}</p>
-              </td>
-              <td className="px-5 py-4 text-center">
-                <StatusBadge status={purchase.status} getStatusClass={getStatusClass} getStatusIcon={getStatusIcon} />
-              </td>
-              <td className="px-5 py-4">
-                <ActionButtons
-                  purchase={purchase}
-                  openViewModal={openViewModal}
-                  openEditModal={openEditModal}
-                  openReceiveGoodsModal={openReceiveGoodsModal}
-                  openPurchaseReturnModal={openPurchaseReturnModal}
-                  handleConfirmStockIn={handleConfirmStockIn}
-                  handleCancelPurchase={handleCancelPurchase}
-                  compact
-                />
-              </td>
-            </tr>
-          );
-        })}
-        {purchases.length === 0 && (
-          <tr className={`border-t ${theme.row}`}>
-            <td colSpan="9" className="px-4 py-14 text-center">
-              <EmptyState theme={theme} icon={<FiSearch />} title="No purchases found" description="Try changing your search keyword or filters." />
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  );
-}
-
-function PurchaseMobileCard({
-  purchase,
-  theme,
-  expiry,
-  problemLabel,
-  nextActionLabel,
-  getStatusClass,
-  getStatusIcon,
-  openViewModal,
-  openEditModal,
-  openReceiveGoodsModal,
-  openPurchaseReturnModal,
-  handleConfirmStockIn,
-  handleCancelPurchase,
-}) {
-  return (
-    <div className={`rounded-2xl border p-4 shadow-sm ${theme.softCard}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-base font-bold">{purchase.purchaseNo}</p>
-          <p className={`mt-1 text-xs ${theme.muted}`}>{purchase.supplierName} · {purchase.purchaseDate}</p>
-        </div>
-        <StatusBadge status={purchase.status} getStatusClass={getStatusClass} getStatusIcon={getStatusIcon} />
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <SummaryMiniBox theme={theme} label="Payment" value={formatPaymentMode(purchase.paymentMode)} />
-        <SummaryMiniBox theme={theme} label="Total" value={formatMoney(purchase.grandTotal)} strong />
-        <SummaryMiniBox theme={theme} label="Issue" value={problemLabel} />
-        <SummaryMiniBox theme={theme} label="Next" value={nextActionLabel} />
-      </div>
-
-      <div className="mt-4 rounded-xl bg-zinc-500/10 p-3">
-        <p className="text-xs font-semibold">Items</p>
-        <p className={`mt-1 text-xs ${theme.muted}`}>{purchase.items.map((item) => item.variantName).join(", ")}</p>
-        <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${expiry.pill}`}>{expiry.label}</span>
-      </div>
-
-      <div className="mt-4">
-        <ActionButtons
-          purchase={purchase}
-          openViewModal={openViewModal}
-          openEditModal={openEditModal}
-          openReceiveGoodsModal={openReceiveGoodsModal}
-          openPurchaseReturnModal={openPurchaseReturnModal}
-          handleConfirmStockIn={handleConfirmStockIn}
-          handleCancelPurchase={handleCancelPurchase}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ActionButtons({
-  purchase,
-  openViewModal,
-  openEditModal,
-  openReceiveGoodsModal,
-  openPurchaseReturnModal,
-  handleConfirmStockIn,
-  handleCancelPurchase,
-  compact = false,
-}) {
-  const buttonBase = compact
-    ? "inline-flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40"
-    : "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40";
-
-  return (
-    <div className={`flex flex-wrap items-center ${compact ? "justify-center gap-2" : "gap-2"}`}>
-      <button type="button" title="View purchase" onClick={() => openViewModal(purchase)} className={`${buttonBase} bg-amber-500 hover:bg-amber-600`}>
-        <FiEye size={16} /> {!compact && "View"}
-      </button>
-      <button type="button" title={purchase.status === STATUS.RECEIVED ? "Received purchase cannot be edited" : "Edit purchase"} onClick={() => openEditModal(purchase)} disabled={purchase.status === STATUS.RECEIVED} className={`${buttonBase} bg-blue-600 hover:bg-blue-700`}>
-        <FiEdit2 size={16} /> {!compact && "Edit"}
-      </button>
-      <button type="button" title="Receive goods" onClick={() => openReceiveGoodsModal(purchase)} disabled={purchase.status !== STATUS.PENDING_RECEIVE} className={`${buttonBase} bg-indigo-600 hover:bg-indigo-700`}>
-        <FiTruck size={16} /> {!compact && "Receive"}
-      </button>
-      <button type="button" title="Create Supplier Claim / Purchase Return" onClick={() => openPurchaseReturnModal(purchase)} disabled={purchase.status === STATUS.CANCELLED || purchase.status === STATUS.PENDING_RECEIVE} className={`${buttonBase} bg-purple-600 hover:bg-purple-700`}>
-        <FiRotateCcw size={16} /> {!compact && "Claim"}
-      </button>
-      <button type="button" title="Open this purchase in Inventory to confirm stock in" onClick={() => handleConfirmStockIn(purchase)} disabled={purchase.status !== STATUS.PENDING_STOCK_IN} className={`${buttonBase} bg-emerald-500 hover:bg-emerald-600`}>
-        <FiCheckCircle size={16} /> {!compact && "Inventory"}
-      </button>
-      <button type="button" title={purchase.status === STATUS.RECEIVED ? "Received purchase cannot be cancelled" : "Cancel purchase"} onClick={() => handleCancelPurchase(purchase)} disabled={purchase.status === STATUS.RECEIVED} className={`${buttonBase} bg-red-500 hover:bg-red-600`}>
-        <FiTrash size={16} /> {!compact && "Cancel"}
-      </button>
-    </div>
-  );
-}
-
-function FilterSelect({ value, setValue, theme, icon, options }) {
-  return (
-    <div className="relative">
-      <span className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}>{icon}</span>
-      <select value={value} onChange={(event) => setValue(event.target.value)} className={`h-12 w-full appearance-none rounded-2xl border pl-11 pr-11 text-sm outline-none transition focus:ring-4 ${theme.select}`}>
-        {options.map((option) => <option key={String(option.value)} value={option.value}>{option.label}</option>)}
-      </select>
-      <FiChevronDown className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`} />
-    </div>
-  );
-}
-
-function AlertMiniCard({ icon, title, value, description, colorClass, onClick }) {
-  return (
-    <button type="button" onClick={onClick} className="flex items-start gap-4 rounded-2xl border border-zinc-200 bg-white/60 p-4 text-left transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]">
-      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-current/10 ${colorClass}`}>
-        <span className="text-2xl">{icon}</span>
-      </div>
-      <div>
-        <p className="text-sm font-bold">{title}</p>
-        <p className="mt-1 text-2xl font-bold leading-none">{value}</p>
-        <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{description}</p>
-      </div>
-    </button>
-  );
-}
-
-function SummaryCard({ theme, title, value, icon, iconBg }) {
-  return (
-    <div className={`rounded-2xl border px-5 py-5 shadow-sm ${theme.card}`}>
-      <div className="flex items-center gap-4">
-        <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${iconBg}`}>{icon}</div>
-        <div>
-          <p className={`text-sm font-medium ${theme.muted}`}>{title}</p>
-          <h3 className="mt-1 text-3xl font-bold leading-none">{value}</h3>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ModalShell({ title, subtitle, theme, onClose, children, footer, width = "max-w-6xl" }) {
-  return (
-    <div onMouseDown={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
-      <div onMouseDown={(event) => event.stopPropagation()} className={`flex h-auto max-h-[90dvh] w-full ${width} flex-col overflow-hidden rounded-3xl border shadow-2xl ${theme.modal}`}>
-        <div className={`shrink-0 border-b px-6 py-5 ${theme.modalHeader}`}>
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h2 className="text-xl font-bold tracking-tight">{title}</h2>
-              {subtitle && <p className={`mt-1.5 text-sm leading-6 ${theme.muted}`}>{subtitle}</p>}
-            </div>
-            <button type="button" onClick={onClose} aria-label="Close modal" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white">
-              <FiX className="text-lg" />
-            </button>
-          </div>
-        </div>
-        <div className={`custom-modal-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 ${theme.modalBody}`}>{children}</div>
-        {footer && <div className={`shrink-0 border-t px-6 py-4 ${theme.modalHeader}`}><div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">{footer}</div></div>}
-      </div>
-    </div>
-  );
-}
-
-function FormSection({ title, subtitle, icon, theme, children }) {
-  return (
-    <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
-      <div className="mb-4 flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">{icon}</div>
-        <div>
-          <h3 className="text-sm font-bold">{title}</h3>
-          {subtitle && <p className={`mt-0.5 text-xs leading-5 ${theme.muted}`}>{subtitle}</p>}
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function StatusBadge({ status, getStatusClass, getStatusIcon }) {
-  return <span className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(status)}`}>{getStatusIcon(status)}{status}</span>;
-}
-
-function FormInput({ label, required = false, value, onChange, theme, error = "", type = "text", placeholder = "", icon, disabled = false }) {
-  return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}{required && <span className="ml-1 text-red-400">*</span>}</span>
-      <div className="relative">
-        {icon && <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>{icon}</span>}
-        <input type={type} value={value} disabled={disabled} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 text-sm outline-none transition focus:ring-4 disabled:cursor-not-allowed disabled:opacity-70 ${theme.input} ${error ? "border-red-500 focus:border-red-500" : ""}`} />
-      </div>
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
-    </label>
-  );
-}
-
-function FormTextarea({ label, value, onChange, theme, placeholder = "", icon }) {
-  return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
-      <div className="relative">
-        {icon && <span className={`pointer-events-none absolute left-3.5 top-3.5 text-base ${theme.muted}`}>{icon}</span>}
-        <textarea value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} rows={3} className={`w-full resize-none rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 py-3 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
-      </div>
-    </label>
-  );
-}
-
-function FormSelect({ label, required = false, value, onChange, options, theme, error = "", icon, disabled = false }) {
-  return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}{required && <span className="ml-1 text-red-400">*</span>}</span>
-      <div className="relative">
-        {icon && <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>{icon}</span>}
-        <select value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className={`h-11 w-full appearance-none rounded-xl border ${icon ? "pl-10" : "pl-3"} pr-10 text-sm outline-none transition focus:ring-4 disabled:cursor-not-allowed disabled:opacity-70 ${theme.select} ${error ? "border-red-500 focus:border-red-500" : ""}`}>
-          {options.map((option) => <option key={String(option.value)} value={option.value}>{option.label}</option>)}
-        </select>
-        <FiChevronDown className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`} />
-      </div>
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
-    </label>
-  );
-}
-
-function SummaryMiniBox({ theme, label, value, strong = false }) {
-  return (
-    <div className={`rounded-xl border p-4 ${theme.softCard}`}>
-      <p className={`text-xs font-semibold ${theme.muted}`}>{label}</p>
-      <p className={`mt-2 ${strong ? "text-xl font-bold" : "text-sm font-semibold"}`}>{value}</p>
-    </div>
-  );
-}
-
-function InfoLine({ label, value }) {
-  return (
-    <div>
-      <p className="text-xs font-semibold text-zinc-500">{label}</p>
-      <p className="mt-1 capitalize">{value || "-"}</p>
-    </div>
-  );
-}
-
-function PurchaseFormModal({
-  mode,
-  form,
-  errors,
-  items,
-  suppliers,
-  theme,
-  onChange,
-  onAddItem,
-  onEditItem,
-  onRemoveItem,
-  onClose,
-  onSaveDraft,
-  onSavePrimary,
-  primarySaveLabel,
-  calculateSubtotal,
-  calculateGrandTotal,
-}) {
-  const isReceiveMode = mode === "receive_goods";
-  const title = mode === "add" ? "Add Purchase" : isReceiveMode ? "Receive Goods" : "Edit Purchase";
-  const subtotal = calculateSubtotal(items);
-  const grandTotal = calculateGrandTotal(items, form);
-  const paidAmount = form.paymentStatus === "paid" ? grandTotal : Number(form.paidAmount || 0);
-  const balanceAmount = Math.max(0, grandTotal - paidAmount);
-
-  return (
-    <ModalShell
-      title={title}
-      subtitle={isReceiveMode ? "Update received, damaged, accepted quantity and expiry date." : "Support Pay After Check, Prepaid, damaged goods, and supplier claims."}
-      theme={theme}
-      onClose={onClose}
-      width="max-w-7xl"
-      footer={
-        <>
-          <button type="button" onClick={onClose} className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">Cancel</button>
-          {!isReceiveMode && <button type="button" onClick={onSaveDraft} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-amber-600"><FiSave />Save Draft</button>}
-          <button type="button" onClick={onSavePrimary} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600"><FiCheckCircle />{primarySaveLabel}</button>
-        </>
-      }
-    >
-      <div className="space-y-6">
-        <FlowHelper mode={form.paymentMode} theme={theme} />
-
-        {!isReceiveMode && (
-          <FormSection title="1. Purchase Information" subtitle="Choose supplier and payment workflow." icon={<FiShoppingCart />} theme={theme}>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <FormInput label="Purchase No" required value={form.purchaseNo} error={errors.purchaseNo} onChange={(value) => onChange("purchaseNo", value)} theme={theme} placeholder="PUR-001" icon={<FiHash />} />
-              <FormSelect label="Supplier" required value={form.supplierId} error={errors.supplierId} onChange={(value) => onChange("supplierId", value)} theme={theme} icon={<FiUser />} options={[{ value: "", label: "Select supplier" }, ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))]} />
-              <FormInput label="Purchase Date" required type="date" value={form.purchaseDate} error={errors.purchaseDate} onChange={(value) => onChange("purchaseDate", value)} theme={theme} icon={<FiCalendar />} />
-              <FormSelect label="Payment Mode" required value={form.paymentMode} error={errors.paymentMode} onChange={(value) => onChange("paymentMode", value)} theme={theme} icon={<FiCreditCard />} options={paymentModeOptions} />
-              <FormSelect label="Payment Status" required value={form.paymentStatus} error={errors.paymentStatus} onChange={(value) => onChange("paymentStatus", value)} theme={theme} icon={<FiDollarSign />} options={paymentStatusOptions} />
-              <FormSelect label="Status" value={form.status} onChange={(value) => onChange("status", value)} theme={theme} icon={<FiClock />} options={[STATUS.DRAFT, STATUS.PENDING_RECEIVE, STATUS.PENDING_STOCK_IN, STATUS.PENDING_CLAIM, STATUS.CANCELLED].map((status) => ({ value: status, label: status }))} />
-            </div>
-            <PaymentModeHint mode={form.paymentMode} />
-            <div className="mt-4">
-              <FormTextarea label="Note" value={form.note} onChange={(value) => onChange("note", value)} theme={theme} placeholder="Purchase note..." icon={<FiFileText />} />
-            </div>
-          </FormSection>
-        )}
-
-        <FormSection title={isReceiveMode ? "Receiving Items" : "2. Items & Receiving"} subtitle={isReceiveMode ? "Click edit on each item and enter received, damaged, accepted quantity." : "Add items, received qty, damaged qty, accepted qty, paid qty, and claim qty."} icon={<FiPackage />} theme={theme}>
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold">Items</p>
-              <p className={`mt-1 text-xs ${theme.muted}`}>Only accepted quantity enters inventory after Inventory confirmation.</p>
-            </div>
-            {!isReceiveMode && <button type="button" onClick={onAddItem} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600"><FiPlus />Add Item</button>}
-          </div>
-
-          {errors.items && <div className="mb-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{errors.items}</div>}
-
-          {items.length === 0 ? (
-            <EmptyState theme={theme} icon={<FiPackage />} title="No purchase items" description="Example: Coca-Cola Case, received 200, damaged 10, accepted 190." />
-          ) : (
-            <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-white/10">
-              <table className="w-full min-w-[1160px] text-sm">
-                <thead className="bg-red-600 text-white">
-                  <tr>
-                    <th className="px-3 py-3 text-left">Product Variant</th>
-                    <th className="px-3 py-3 text-left">Invoiced</th>
-                    <th className="px-3 py-3 text-left">Paid</th>
-                    <th className="px-3 py-3 text-left">Received</th>
-                    <th className="px-3 py-3 text-left">Accepted</th>
-                    <th className="px-3 py-3 text-left">Damaged</th>
-                    <th className="px-3 py-3 text-left">Claim</th>
-                    <th className="px-3 py-3 text-left">Expiry</th>
-                    <th className="px-3 py-3 text-left">Total</th>
-                    <th className="px-3 py-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, index) => (
-                    <tr key={item.id} className="border-t border-zinc-200 dark:border-white/10">
-                      <td className="px-3 py-3"><p className="font-semibold">{item.variantName}</p><p className={`mt-1 text-xs ${theme.muted}`}>{item.variantCode} · {item.unitName} = {item.conversionQty} {item.baseUnit}</p></td>
-                      <td className="px-3 py-3">{item.invoicedQty} {item.unitName}</td>
-                      <td className="px-3 py-3">{item.paidQty} {item.unitName}</td>
-                      <td className="px-3 py-3">{item.receivedQty} {item.unitName}</td>
-                      <td className="px-3 py-3 text-emerald-500">{item.acceptedQty} {item.unitName}</td>
-                      <td className="px-3 py-3"><span className={Number(item.damagedQty || 0) > 0 ? "font-semibold text-amber-500" : ""}>{item.damagedQty} {item.unitName}</span></td>
-                      <td className="px-3 py-3"><span className={Number(item.claimQty || 0) > 0 ? "font-semibold text-red-500" : ""}>{item.claimQty} {item.unitName}</span></td>
-                      <td className="px-3 py-3">{item.expiredDate || "-"}</td>
-                      <td className="px-3 py-3 font-semibold">{formatMoney(item.lineTotal)}</td>
-                      <td className="px-3 py-3"><div className="flex items-center justify-center gap-2"><button type="button" onClick={() => onEditItem(item, index)} className="flex h-8 items-center justify-center gap-1 rounded-lg bg-blue-600 px-2 text-xs font-semibold text-white hover:bg-blue-700"><FiEdit2 size={14} />Edit</button>{!isReceiveMode && <button type="button" onClick={() => onRemoveItem(index)} className="flex h-8 items-center justify-center gap-1 rounded-lg bg-red-500 px-2 text-xs font-semibold text-white hover:bg-red-600"><FiTrash size={14} />Remove</button>}</div></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </FormSection>
-
-        {!isReceiveMode && (
-          <FormSection title="3. Payment, Delivery & Summary" subtitle="Delivery information, discount, paid amount, balance, and total amount." icon={<FiTruck />} theme={theme}>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <FormSelect label="Delivery Option" value={form.deliveryOption} onChange={(value) => onChange("deliveryOption", value)} theme={theme} icon={<FiTruck />} options={deliveryOptions} />
-              <FormSelect label="Delivery Paid By" value={form.deliveryPaidBy} onChange={(value) => onChange("deliveryPaidBy", value)} theme={theme} icon={<FiUser />} options={deliveryPaidByOptions} />
-              <FormInput label="Delivery Fee" type="number" value={form.deliveryFee} error={errors.deliveryFee} onChange={(value) => onChange("deliveryFee", value)} theme={theme} icon={<FiDollarSign />} />
-              <FormInput label="Discount Total" type="number" value={form.discountTotal} error={errors.discountTotal} onChange={(value) => onChange("discountTotal", value)} theme={theme} icon={<FiCreditCard />} />
-              <FormInput label="Paid Amount" type="number" value={form.paymentStatus === "paid" ? grandTotal : form.paidAmount} onChange={(value) => onChange("paidAmount", value)} theme={theme} icon={<FiDollarSign />} />
-            </div>
-
-            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-5">
-              <SummaryMiniBox theme={theme} label="Subtotal" value={formatMoney(subtotal)} />
-              <SummaryMiniBox theme={theme} label="Discount" value={formatMoney(form.discountTotal)} />
-              <SummaryMiniBox theme={theme} label="Delivery Fee" value={formatMoney(form.deliveryFee)} />
-              <SummaryMiniBox theme={theme} label="Paid Amount" value={formatMoney(paidAmount)} />
-              <SummaryMiniBox theme={theme} label="Balance" value={formatMoney(balanceAmount)} strong />
-            </div>
-            <div className="mt-4"><SummaryMiniBox theme={theme} label="Grand Total" value={formatMoney(grandTotal)} strong /></div>
-          </FormSection>
-        )}
-      </div>
-    </ModalShell>
-  );
-}
-
-function FlowHelper({ mode, theme }) {
-  const text = {
-    pay_after_check: "Pay After Check flow: Receive goods → exclude damaged quantity → pay accepted quantity → send to Inventory for one-time stock confirmation.",
-    prepaid: "Prepaid flow: Pay first → receive goods → damaged quantity becomes supplier claim → accepted quantity waits for Inventory confirmation.",
-    partial_prepaid: "Partial Prepaid flow: Enter paid quantity carefully. If paid quantity is greater than accepted quantity, claim may be required before Inventory confirmation.",
-  };
-
-  return (
-    <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500"><FiInfo /></div>
-        <div>
-          <p className="text-sm font-bold">Purchase Workflow Guide</p>
-          <p className={`mt-1 text-sm leading-6 ${theme.muted}`}>{text[mode]}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PaymentModeHint({ mode }) {
-  if (mode === "pay_after_check") {
-    return <div className="mt-4 rounded-xl bg-emerald-500/10 p-4 text-sm leading-6 text-emerald-700 dark:text-emerald-400">Pay After Check: damaged goods are excluded from payment and stock. Payable qty = accepted qty. Claim qty = 0.</div>;
-  }
-  if (mode === "prepaid") {
-    return <div className="mt-4 rounded-xl bg-red-500/10 p-4 text-sm leading-6 text-red-600 dark:text-red-400">Prepaid: goods are paid before arrival. If goods arrive damaged, claim qty is created for replacement, credit note, or refund.</div>;
-  }
-  return <div className="mt-4 rounded-xl bg-amber-500/10 p-4 text-sm leading-6 text-amber-700 dark:text-amber-400">Partial Prepaid: enter paid qty manually. If paid qty is more than accepted qty, claim qty may be required.</div>;
-}
-
-function PurchaseItemModal({ mode, form, errors, variantUnits, paymentMode, theme, onChange, onClose, onSave }) {
-  const selectedUnit = variantUnits.find((unit) => String(unit.id) === String(form.variantUnitId));
-  const invoicedQty = Number(form.invoicedQty || 0);
-  const paidQty = paymentMode === "pay_after_check" ? Number(form.acceptedQty || 0) : paymentMode === "prepaid" ? invoicedQty : Number(form.paidQty || 0);
-  const acceptedQty = Number(form.acceptedQty || 0);
-  const damagedQty = Number(form.damagedQty || 0);
-  const claimQty = paymentMode === "prepaid" ? damagedQty : paymentMode === "pay_after_check" ? 0 : Math.max(0, paidQty - acceptedQty);
-  const unitCost = Number(form.unitCost || 0);
-  const lineTotal = paymentMode === "pay_after_check" ? acceptedQty * unitCost : paidQty * unitCost;
-
-  return (
-    <ModalShell
-      title={mode === "add" ? "Add Purchase Item" : "Edit Purchase Item"}
-      subtitle="Set item quantities based on payment mode."
-      theme={theme}
-      onClose={onClose}
-      width="max-w-4xl"
-      footer={
-        <>
-          <button type="button" onClick={onClose} className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">Cancel</button>
-          <button type="button" onClick={onSave} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600"><FiSave />Save Item</button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <PaymentModeHint mode={paymentMode} />
-        <FormSection title="Purchase Item Information" subtitle="Use received, damaged, and accepted qty to calculate stock and claim." icon={<FiPackage />} theme={theme}>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FormSelect label="Product Variant / Unit" required value={form.variantUnitId} error={errors.variantUnitId} onChange={(value) => onChange("variantUnitId", value)} theme={theme} icon={<FiPackage />} options={[{ value: "", label: "Select product variant" }, ...variantUnits.map((unit) => ({ value: unit.id, label: `${unit.variantName} · ${unit.unitName}` }))]} />
-            <FormInput label="Unit Cost" required type="number" value={form.unitCost} error={errors.unitCost} onChange={(value) => onChange("unitCost", value)} theme={theme} placeholder="0.00" icon={<FiDollarSign />} />
-            <FormInput label="Invoiced Qty" required type="number" value={form.invoicedQty} error={errors.invoicedQty} onChange={(value) => onChange("invoicedQty", value)} theme={theme} icon={<FiHash />} />
-            {paymentMode === "partial_prepaid" && <FormInput label="Paid Qty" required type="number" value={form.paidQty} error={errors.paidQty} onChange={(value) => onChange("paidQty", value)} theme={theme} icon={<FiCreditCard />} />}
-            <FormInput label="Received Qty" required type="number" value={form.receivedQty} error={errors.receivedQty} onChange={(value) => onChange("receivedQty", value)} theme={theme} icon={<FiTruck />} />
-            <FormInput label="Damaged Qty" type="number" value={form.damagedQty} error={errors.damagedQty} onChange={(value) => onChange("damagedQty", value)} theme={theme} icon={<FiAlertTriangle />} />
-            <FormInput label="Accepted Qty" required type="number" value={form.acceptedQty} error={errors.acceptedQty} onChange={(value) => onChange("acceptedQty", value)} theme={theme} icon={<FiCheckCircle />} />
-            <FormInput label="Expiry Date" type="date" value={form.expiredDate} error={errors.expiredDate} onChange={(value) => onChange("expiredDate", value)} theme={theme} icon={<FiCalendar />} />
-          </div>
-        </FormSection>
-
-        {selectedUnit && (
-          <FormSection title="Calculation Preview" subtitle={`${selectedUnit.unitName} = ${selectedUnit.conversionQty} ${selectedUnit.baseUnit}`} icon={<FiInfo />} theme={theme}>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <SummaryMiniBox theme={theme} label="Paid Qty" value={`${paidQty} ${selectedUnit.unitName}`} />
-              <SummaryMiniBox theme={theme} label="Stock In Qty" value={`${acceptedQty * Number(selectedUnit.conversionQty || 1)} ${selectedUnit.baseUnit}`} />
-              <SummaryMiniBox theme={theme} label="Claim Qty" value={`${claimQty} ${selectedUnit.unitName}`} />
-              <SummaryMiniBox theme={theme} label="Line Total" value={formatMoney(lineTotal)} strong />
-            </div>
-          </FormSection>
-        )}
-      </div>
-    </ModalShell>
-  );
-}
-
-function ViewPurchaseModal({ purchase, purchaseReturns, stockMovements, theme, getStatusClass, getStatusIcon, getPurchaseReturnStatusClass, getPurchaseReturnStatusIcon, onClose, onReturn, onConfirmStockIn }) {
-  const relatedReturns = purchaseReturns.filter((item) => item.purchaseId === purchase.id);
-  const relatedMovements = stockMovements.filter((item) => item.purchaseId === purchase.id);
-
-  return (
-    <ModalShell
-      title={`Purchase Detail: ${purchase.purchaseNo}`}
-      subtitle="View purchase information, items, supplier claims, expiry date, and stock movements."
-      theme={theme}
-      onClose={onClose}
-      width="max-w-7xl"
-      footer={
-        <>
-          <button type="button" onClick={onClose} className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">Close</button>
-          <button type="button" onClick={onReturn} disabled={purchase.status === STATUS.PENDING_RECEIVE || purchase.status === STATUS.CANCELLED} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"><FiRotateCcw />Supplier Claim / Return</button>
-          <button type="button" onClick={onConfirmStockIn} disabled={purchase.status !== STATUS.PENDING_STOCK_IN} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"><FiCheckCircle />Open in Inventory</button>
-        </>
-      }
-    >
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <FormSection title="Purchase Overview" subtitle="Supplier, invoice date, status and payment mode." icon={<FiShoppingCart />} theme={theme}>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <InfoLine label="Purchase No" value={purchase.purchaseNo} />
-              <div><p className="text-xs font-semibold text-zinc-500">Status</p><div className="mt-1"><StatusBadge status={purchase.status} getStatusClass={getStatusClass} getStatusIcon={getStatusIcon} /></div></div>
-              <InfoLine label="Supplier" value={purchase.supplierName} />
-              <InfoLine label="Purchase Date" value={purchase.purchaseDate} />
-              <InfoLine label="Payment Mode" value={formatPaymentMode(purchase.paymentMode)} />
-              <InfoLine label="Payment Status" value={purchase.paymentStatus} />
-            </div>
-          </FormSection>
-
-          <FormSection title="Payment Summary" subtitle="Invoice total and balance." icon={<FiDollarSign />} theme={theme}>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <SummaryMiniBox theme={theme} label="Subtotal" value={formatMoney(purchase.subtotal)} />
-              <SummaryMiniBox theme={theme} label="Discount" value={formatMoney(purchase.discountTotal)} />
-              <SummaryMiniBox theme={theme} label="Delivery Fee" value={formatMoney(purchase.deliveryFee)} />
-              <SummaryMiniBox theme={theme} label="Paid" value={formatMoney(purchase.paidAmount)} />
-              <SummaryMiniBox theme={theme} label="Balance" value={formatMoney(purchase.balanceAmount)} strong />
-              <SummaryMiniBox theme={theme} label="Grand Total" value={formatMoney(purchase.grandTotal)} strong />
-            </div>
-          </FormSection>
-
-          <FormSection title="Flow Status" subtitle="Recommended user action." icon={<FiInfo />} theme={theme}>
-            <FlowTimeline status={purchase.status} theme={theme} />
-            <div className="mt-4 rounded-xl bg-red-500/10 p-4 text-sm leading-6 text-red-600 dark:text-red-400">
-              {purchase.status === STATUS.PENDING_RECEIVE && "Next: receive goods and enter damaged / accepted quantity."}
-              {purchase.status === STATUS.PENDING_CLAIM && "Next: create supplier claim for damaged prepaid goods."}
-              {purchase.status === STATUS.PENDING_STOCK_IN && "Next: open this purchase in Inventory and confirm stock in one time. Only accepted quantity enters inventory."}
-              {purchase.status === STATUS.RECEIVED && "Completed: this purchase already entered stock."}
-              {purchase.status === STATUS.DRAFT && "Next: continue editing and save purchase."}
-              {purchase.status === STATUS.CANCELLED && "This purchase was cancelled."}
-            </div>
-          </FormSection>
-        </div>
-
-        <FormSection title="Purchase Items" subtitle="Invoiced, paid, received, damaged, accepted, claim and expiry quantity." icon={<FiPackage />} theme={theme}>
-          <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-white/10">
-            <table className="w-full min-w-[1180px] text-sm">
-              <thead className="bg-red-600 text-white"><tr><th className="px-3 py-3 text-left">Product</th><th className="px-3 py-3 text-left">Invoiced</th><th className="px-3 py-3 text-left">Paid</th><th className="px-3 py-3 text-left">Received</th><th className="px-3 py-3 text-left">Accepted</th><th className="px-3 py-3 text-left">Damaged</th><th className="px-3 py-3 text-left">Claim</th><th className="px-3 py-3 text-left">Base Stock In</th><th className="px-3 py-3 text-left">Expiry</th><th className="px-3 py-3 text-left">Total</th></tr></thead>
-              <tbody>
-                {purchase.items.map((item) => (
-                  <tr key={item.id} className="border-t border-zinc-200 dark:border-white/10">
-                    <td className="px-3 py-3"><p className="font-semibold">{item.variantName}</p><p className={`mt-1 text-xs ${theme.muted}`}>{item.variantCode} · {item.unitName} = {item.conversionQty} {item.baseUnit}</p></td>
-                    <td className="px-3 py-3">{item.invoicedQty} {item.unitName}</td>
-                    <td className="px-3 py-3">{item.paidQty} {item.unitName}</td>
-                    <td className="px-3 py-3">{item.receivedQty} {item.unitName}</td>
-                    <td className="px-3 py-3 text-emerald-500">{item.acceptedQty} {item.unitName}</td>
-                    <td className="px-3 py-3 text-amber-500">{item.damagedQty} {item.unitName}</td>
-                    <td className="px-3 py-3 text-red-500">{item.claimQty} {item.unitName}</td>
-                    <td className="px-3 py-3">{Number(item.acceptedQty || 0) * Number(item.conversionQty || 1)} {item.baseUnit}</td>
-                    <td className="px-3 py-3">{item.expiredDate || "-"}</td>
-                    <td className="px-3 py-3 font-semibold">{formatMoney(item.lineTotal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </FormSection>
-
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <FormSection title="Supplier Claims / Purchase Returns" subtitle="Claims created from this purchase." icon={<FiRotateCcw />} theme={theme}>
-            {relatedReturns.length === 0 ? <EmptyState theme={theme} icon={<FiRotateCcw />} title="No supplier claim" description="No purchase return or supplier claim has been created for this purchase." /> : (
-              <div className="space-y-3">{relatedReturns.map((item) => <div key={item.id} className={`rounded-2xl border p-4 ${theme.softCard}`}><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-bold">{item.purchaseReturnNo}</p><p className={`mt-1 text-xs ${theme.muted}`}>{formatSnake(item.returnReason)} · {formatSnake(item.resolutionType)}</p></div><StatusBadge status={item.status} getStatusClass={getPurchaseReturnStatusClass} getStatusIcon={getPurchaseReturnStatusIcon} /></div><p className="mt-3 text-sm">{formatMoney(item.subtotal)}</p><p className={`mt-2 text-xs leading-5 ${theme.muted}`}>{item.note || "-"}</p></div>)}</div>
-            )}
-          </FormSection>
-
-          <FormSection title="Stock Movements" subtitle="Generated after Inventory confirmation." icon={<FiPackage />} theme={theme}>
-            {relatedMovements.length === 0 ? <EmptyState theme={theme} icon={<FiPackage />} title="No stock movement" description="Stock movement will appear after Inventory confirmation." /> : (
-              <div className="space-y-3">{relatedMovements.map((item) => <div key={item.id} className={`rounded-2xl border p-4 ${theme.softCard}`}><p className="text-sm font-bold">{item.variantName}</p><p className="mt-1 text-sm text-emerald-500">+{item.qtyBase} {item.baseUnit}</p><p className={`mt-1 text-xs ${theme.muted}`}>{item.note}</p></div>)}</div>
-            )}
-          </FormSection>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
-function FlowTimeline({ status, theme }) {
-  const steps = [STATUS.DRAFT, STATUS.PENDING_RECEIVE, STATUS.PENDING_CLAIM, STATUS.PENDING_STOCK_IN, STATUS.RECEIVED];
-  const currentIndex = steps.indexOf(status);
-  return (
-    <div className="space-y-3">
-      {steps.map((step, index) => {
-        const active = step === status;
-        const done = currentIndex > index;
-        return <div key={step} className="flex items-center gap-3"><div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm ${active ? "bg-red-500 text-white" : done ? "bg-emerald-500 text-white" : "bg-zinc-200 text-zinc-600 dark:bg-white/10 dark:text-zinc-400"}`}>{done ? <FiCheckCircle /> : index + 1}</div><p className={`text-sm ${active ? "font-bold text-red-500" : theme.muted}`}>{step}</p></div>;
-      })}
-    </div>
-  );
-}
-
-function EmptyState({ theme, icon, title, description }) {
-  return (
-    <div className={`flex flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center ${theme.softCard}`}>
-      <div className="text-4xl text-red-500">{icon}</div>
-      <p className="mt-3 text-sm font-semibold">{title}</p>
-      <p className={`mt-1 text-xs leading-5 ${theme.muted}`}>{description}</p>
-    </div>
-  );
-}
-
-function PurchaseReturnModal({ purchase, form, items, itemForm, errors, itemErrors, theme, onChange, onItemChange, onAddItem, onRemoveItem, getAvailableReturnQty, onClose, onSave }) {
-  const subtotal = items.reduce((total, item) => total + Number(item.lineTotal || 0), 0);
-
-  return (
-    <ModalShell
-      title="Supplier Claim / Purchase Return"
-      subtitle={`Create claim or return from ${purchase.purchaseNo}.`}
-      theme={theme}
-      onClose={onClose}
-      width="max-w-7xl"
-      footer={
-        <>
-          <button type="button" onClick={onClose} className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">Cancel</button>
-          <button type="button" onClick={onSave} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700"><FiSave />Save Supplier Claim</button>
-        </>
-      }
-    >
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <FormSection title="Claim Information" subtitle="Select reason and resolution type." icon={<FiRotateCcw />} theme={theme}>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <FormInput label="Claim No" required value={form.purchaseReturnNo} error={errors.purchaseReturnNo} onChange={(value) => onChange("purchaseReturnNo", value)} theme={theme} icon={<FiHash />} />
-              <FormInput label="Return Date" required type="date" value={form.returnDate} error={errors.returnDate} onChange={(value) => onChange("returnDate", value)} theme={theme} icon={<FiCalendar />} />
-              <FormSelect label="Return Reason" value={form.returnReason} onChange={(value) => onChange("returnReason", value)} theme={theme} icon={<FiAlertTriangle />} options={[{ value: "damaged", label: "Damaged" }, { value: "wrong_item", label: "Wrong Item" }, { value: "over_supplied", label: "Over Supplied" }, { value: "expired", label: "Expired" }, { value: "other", label: "Other" }]} />
-              <FormSelect label="Resolution Type" required value={form.resolutionType} error={errors.resolutionType} onChange={(value) => onChange("resolutionType", value)} theme={theme} icon={<FiCheckCircle />} options={[{ value: "replacement", label: "Replacement" }, { value: "credit_note", label: "Credit Note" }, { value: "refund", label: "Refund" }]} />
-              <FormSelect label="Resolution Status" value={form.resolutionStatus} onChange={(value) => onChange("resolutionStatus", value)} theme={theme} icon={<FiClock />} options={[{ value: "draft", label: "Draft" }, { value: "submitted", label: "Submitted" }, { value: "approved", label: "Approved" }, { value: "waiting_replacement", label: "Waiting Replacement" }, { value: "completed", label: "Completed" }, { value: "cancelled", label: "Cancelled" }]} />
-            </div>
-            <div className="mt-4"><FormTextarea label="Note" value={form.note} onChange={(value) => onChange("note", value)} theme={theme} placeholder="Describe the supplier claim..." icon={<FiFileText />} /></div>
-          </FormSection>
-
-          <FormSection title="Source Purchase" subtitle="Claim is linked to this purchase invoice." icon={<FiShoppingCart />} theme={theme}>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <SummaryMiniBox theme={theme} label="Purchase No" value={purchase.purchaseNo} />
-              <SummaryMiniBox theme={theme} label="Supplier" value={purchase.supplierName} />
-              <SummaryMiniBox theme={theme} label="Payment Mode" value={formatPaymentMode(purchase.paymentMode)} />
-              <SummaryMiniBox theme={theme} label="Claim Total" value={formatMoney(subtotal)} strong />
-            </div>
-          </FormSection>
-        </div>
-
-        <FormSection title="Add Claim Item" subtitle="Choose problem item and quantity to claim / return." icon={<FiPackage />} theme={theme}>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr_1fr_1.4fr_auto]">
-            <FormSelect label="Purchase Item" required value={itemForm.purchaseItemId} error={itemErrors.purchaseItemId} onChange={(value) => onItemChange("purchaseItemId", value)} theme={theme} icon={<FiPackage />} options={[{ value: "", label: "Select item" }, ...purchase.items.map((item) => ({ value: item.id, label: `${item.variantName} · available ${getAvailableReturnQty(item)} ${item.unitName}` }))]} />
-            <FormInput label="Claim Qty" required type="number" value={itemForm.qtyReturned} error={itemErrors.qtyReturned} onChange={(value) => onItemChange("qtyReturned", value)} theme={theme} icon={<FiHash />} />
-            <FormSelect label="Condition" required value={itemForm.condition} error={itemErrors.condition} onChange={(value) => onItemChange("condition", value)} theme={theme} icon={<FiAlertTriangle />} options={[{ value: "damaged", label: "Damaged" }, { value: "wrong_item", label: "Wrong Item" }, { value: "over_supplied", label: "Over Supplied" }, { value: "expired", label: "Expired" }, { value: "other", label: "Other" }]} />
-            <FormInput label="Reason" required value={itemForm.reason} error={itemErrors.reason} onChange={(value) => onItemChange("reason", value)} theme={theme} icon={<FiFileText />} />
-            <div className="flex items-end"><button type="button" onClick={onAddItem} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600"><FiPlus />Add</button></div>
-          </div>
-          {errors.items && <div className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{errors.items}</div>}
-        </FormSection>
-
-        <FormSection title="Claim Items" subtitle="Items that will be submitted to supplier." icon={<FiFileText />} theme={theme}>
-          {items.length === 0 ? <EmptyState theme={theme} icon={<FiPackage />} title="No claim items" description="Add at least one problem item before saving supplier claim." /> : (
-            <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-white/10">
-              <table className="w-full min-w-[980px] text-sm">
-                <thead className="bg-red-600 text-white"><tr><th className="px-3 py-3 text-left">Product</th><th className="px-3 py-3 text-left">Qty</th><th className="px-3 py-3 text-left">Base Qty</th><th className="px-3 py-3 text-left">Condition</th><th className="px-3 py-3 text-left">Stock Action</th><th className="px-3 py-3 text-left">Line Total</th><th className="px-3 py-3 text-center">Action</th></tr></thead>
-                <tbody>{items.map((item, index) => <tr key={item.id} className="border-t border-zinc-200 dark:border-white/10"><td className="px-3 py-3"><p className="font-semibold">{item.variantName}</p><p className={`mt-1 text-xs ${theme.muted}`}>{item.reason}</p></td><td className="px-3 py-3">{item.qtyReturned} {item.unitName}</td><td className="px-3 py-3">{item.baseQtyReturned} {item.baseUnit}</td><td className="px-3 py-3 capitalize">{formatSnake(item.condition)}</td><td className="px-3 py-3 capitalize">{formatSnake(item.stockAction)}</td><td className="px-3 py-3 font-semibold">{formatMoney(item.lineTotal)}</td><td className="px-3 py-3 text-center"><button type="button" onClick={() => onRemoveItem(index)} className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-red-500 px-2 text-xs font-semibold text-white hover:bg-red-600"><FiTrash size={15} />Remove</button></td></tr>)}</tbody>
-              </table>
-            </div>
-          )}
-        </FormSection>
-      </div>
-    </ModalShell>
-  );
-}

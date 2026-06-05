@@ -67,7 +67,7 @@ function roundKhr(value, mode = "ceil") {
 
 function convertPrice(inputPrice, inputCurrency, exchangeRate, khrMode = "ceil") {
   const price = Number(inputPrice || 0);
-  const rate = Number(exchangeRate || 4000);
+  const rate = Number(exchangeRate || 0);
   if (!price || !rate) return { unit_price_usd: 0, unit_price_khr: 0 };
   if (inputCurrency === "KHR") {
     return {
@@ -89,7 +89,7 @@ export default function ProductSetupFormModal({
   isCreatingUnit = false,
   isUpdatingUnit = false,
   isDeletingUnit = false,
-  activeExchangeRate = 4000,
+  activeExchangeRate = 0,
   activeKhrRounding = "ceil",
   onCreateUnit,
   onUpdateUnit,
@@ -205,6 +205,12 @@ export default function ProductSetupFormModal({
         {formErrorMessage && (
           <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
             {formErrorMessage}
+          </div>
+        )}
+
+        {Number(activeExchangeRate || 0) <= 0 && (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm font-semibold text-amber-500">
+            No active exchange rate found. Please create and activate an exchange rate before saving product prices.
           </div>
         )}
 
@@ -640,7 +646,9 @@ function VariantSetupCard({
 
                           <div className="mt-3 flex items-center justify-between">
                             <p className={`text-[11px] ${theme.muted}`}>
-                              Rate: 1 USD = {Number(activeExchangeRate || 4000).toLocaleString()}៛ · {activeKhrRounding}
+                              {Number(activeExchangeRate || 0) > 0
+                                ? `Rate: 1 USD = ${Number(activeExchangeRate).toLocaleString()}៛ · ${activeKhrRounding}`
+                                : "No active exchange rate"}
                             </p>
                             <button type="button" onClick={() => removePriceRule(idx)}
                               className="inline-flex h-7 items-center gap-1 rounded-lg bg-red-500 px-2.5 text-[11px] font-semibold text-white hover:bg-red-600">

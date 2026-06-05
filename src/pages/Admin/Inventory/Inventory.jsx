@@ -1,5 +1,6 @@
   import React, { useEffect, useMemo, useState } from "react";
-  import { useOutletContext } from "react-router-dom";
+  import { useOutletContext, useSearchParams } from "react-router-dom";
+  import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
   import {
     FiBox,
     FiSearch,
@@ -27,6 +28,25 @@
     FiFileText,
     FiTag,
   } from "react-icons/fi";
+  import {
+    confirmPurchaseStockInApi,
+    getPurchaseByIdApi,
+    getPurchasesApi,
+  } from "../../../services/purchase.service";
+  import { getProductVariantUnitsApi } from "../../../services/productVariantUnit.service";
+  import {
+    getInventoryBatchesApi,
+    getStockBalancesApi,
+    getStockMovementsApi,
+  } from "../../../services/inventory.service";
+  import { useNotification } from "../../../components/AppNotification";
+  import {
+    extractApiData,
+    extractApiObject,
+    formatDateOnly,
+    normalizePurchase,
+    normalizeVariantUnit,
+  } from "../Purcheases/utils/purchaseUtils";
 
   const getToday = () => new Date().toISOString().slice(0, 10);
   const getNow = () => new Date().toISOString().slice(0, 19).replace("T", " ");
@@ -253,6 +273,10 @@
   export default function Inventory() {
     const outlet = useOutletContext();
     const isDark = outlet?.isDark ?? false;
+    const [searchParams, setSearchParams] = useSearchParams();
+    const queryClient = useQueryClient();
+    const notify = useNotification();
+    const stockInPurchaseId = searchParams.get("stockInPurchaseId");
 
     const [inventory, setInventory] = useState(initialInventory);
     const [pendingPurchases, setPendingPurchases] = useState(
@@ -271,6 +295,55 @@
     const [errors, setErrors] = useState({});
 
     useLockBodyScroll(Boolean(modalMode));
+
+    const stockBalancesQuery = useQuery({
+      queryKey: ["stock-balances", "inventory-page"],
+      queryFn: () => getStockBalancesApi({ per_page: 1000 }),
+      staleTime: 1000 * 30,
+    });
+
+    const inventoryBatchesQuery = useQuery({
+      queryKey: ["inventory-batches", "inventory-page"],
+      queryFn: () => getInventoryBatchesApi({ per_page: 1000 }),
+      staleTime: 1000 * 30,
+    });
+
+    const stockMovementsQuery = useQuery({
+      queryKey: ["stock-movements", "inventory-page"],
+      queryFn: () => getStockMovementsApi({ per_page: 1000 }),
+      staleTime: 1000 * 30,
+    });
+
+    const variantUnitsQuery = useQuery({
+      queryKey: ["product-variant-units", "inventory-page"],
+      queryFn: () => getProductVariantUnitsApi({ per_page: 1000, status: "active" }),
+      staleTime: 1000 * 60,
+    });
+
+    const pendingPurchasesQuery = useQuery({
+      queryKey: ["purchases", "pending-stock-in", "inventory-page"],
+      queryFn: async () => {
+        const response = await getPurchasesApi({
+          status: "pending_stock_in",
+          per_page: 100,
+        });
+        const purchases = extractApiData(response).map(normalizePurchase);
+
+        const detailed = await Promise.all(
+          purchases.map(async (purchase) => {
+            try {
+              const detailResponse = await getPurchaseByIdApi(purchase.id);
+              return normalizePurchase(extractApiObject(detailResponse));
+            } catch {
+              return purchase;
+            }
+          })
+        );
+
+        return detailed;
+      },
+      staleTime: 1000 * 15,
+    });
 
     const theme = {
       pageTitle: isDark ? "text-white" : "text-zinc-900",
@@ -342,6 +415,307 @@
       return movementMap[reason] || "adjustment_out";
     };
 
+    const getVariantUnitId = (item = {}) =>
+      item.product_variant_unit_id ||
+      item.productVariantUnitId ||
+      item.variant_unit_id ||
+      item.variantUnitId ||
+      item.product_variant_unit?.id ||
+      item.productVariantUnit?.id;
+
+    const getVariantId = (item = {}) =>
+      item.product_variant_id ||
+      item.productVariantId ||
+      item.variant_id ||
+      item.variantId ||
+      item.product_variant?.id ||
+      item.productVariant?.id ||
+      item.product_variant_unit?.product_variant_id ||
+      item.productVariantUnit?.productVariantId ||
+      item.product_variant_unit?.product_variant?.id ||
+      item.productVariantUnit?.productVariant?.id;
+
+    const normalizeInventoryBatch = (item = {}) => ({
+      id: item.id,
+      batchNo: item.batch_no || item.batchNo || `BATCH-${item.id || ""}`,
+      lotNo: item.lot_no || item.lotNo || "-",
+      expiredDate: formatDateOnly(
+        item.expired_date ||
+          item.expiry_date ||
+          item.expiration_date ||
+          item.expire_date ||
+          item.expires_at ||
+          item.expiredDate ||
+          item.expiryDate ||
+          item.expirationDate ||
+          item.expireDate ||
+          item.expiresAt
+      ),
+      qtyReceivedBase: Number(item.qty_received_base ?? item.qtyReceivedBase ?? item.base_qty ?? item.baseQty ?? item.qty ?? 0),
+      qtyRemainingBase: Number(item.qty_remaining_base ?? item.qtyRemainingBase ?? item.remaining_qty ?? item.remainingQty ?? item.qty ?? 0),
+      unitCostBase: Number(item.unit_cost_base ?? item.unitCostBase ?? item.unit_cost_usd ?? item.unitCostUsd ?? 0),
+      receivedAt: formatDateOnly(item.received_at || item.receivedAt || item.created_at || item.createdAt),
+      status: item.status || "active",
+      productVariantUnitId: getVariantUnitId(item),
+      productVariantId: getVariantId(item),
+    });
+
+    const normalizeStockMovement = (item = {}) => ({
+      id: item.id,
+      type: item.movement_type || item.type || item.stock_movement_type || item.stockMovementType || "stock",
+      qtyBase: Number(item.qty_base ?? item.qtyBase ?? item.base_qty ?? item.baseQty ?? item.qty ?? 0),
+      refType: item.reference_type || item.ref_type || item.refType || item.source_type || item.sourceType || "-",
+      refId: item.reference_id || item.ref_id || item.refId || item.source_id || item.sourceId || "",
+      note: item.note || item.description || "-",
+      createdAt: formatDateOnly(item.created_at || item.createdAt || item.movement_date || item.movementDate),
+      productVariantUnitId: getVariantUnitId(item),
+      productVariantId: getVariantId(item),
+    });
+
+    const getStockBalanceVariantUnitId = (item = {}) =>
+      item.product_variant_unit_id ||
+      item.productVariantUnitId ||
+      item.variant_unit_id ||
+      item.variantUnitId ||
+      item.product_variant_unit?.id ||
+      item.productVariantUnit?.id ||
+      item.product_variant_unit?.product_variant_unit_id ||
+      item.productVariantUnit?.productVariantUnitId;
+
+    const normalizeStockBalance = (item = {}, batches = [], movements = [], variantUnitMeta = {}) => {
+      const variantUnit = item.product_variant_unit || item.productVariantUnit || item.variant_unit || {};
+      const variant = variantUnit.product_variant || variantUnit.productVariant || item.product_variant || item.productVariant || {};
+      const product = variant.product || item.product || {};
+      const unit = variantUnit.unit || item.unit || {};
+      const productVariantId = getVariantId(item) || variant.id;
+      const variantUnitId = getStockBalanceVariantUnitId(item) || getVariantUnitId(item) || item.id;
+      const meta =
+        variantUnitMeta[String(variantUnitId)] ||
+        Object.values(variantUnitMeta).find((entry) => String(entry.productVariantId || "") === String(productVariantId || "")) ||
+        {};
+      const stockBaseQty = Number(
+        item.stock_base_qty ??
+          item.stockBaseQty ??
+          item.current_stock_base ??
+          item.currentStockBase ??
+          item.stock_qty_base ??
+          item.stockQtyBase ??
+          item.quantity_base ??
+          item.quantityBase ??
+          item.available_base_qty ??
+          item.availableBaseQty ??
+          item.on_hand_base_qty ??
+          item.onHandBaseQty ??
+          item.qty_on_hand_base ??
+          item.qtyOnHandBase ??
+          item.balance_base_qty ??
+          item.balanceBaseQty ??
+          item.qty_base ??
+          item.qtyBase ??
+          item.current_stock ??
+          item.currentStock ??
+          item.current_qty ??
+          item.currentQty ??
+          item.qty_on_hand ??
+          item.qtyOnHand ??
+          item.on_hand_qty ??
+          item.onHandQty ??
+          item.available_qty ??
+          item.availableQty ??
+          item.balance_qty ??
+          item.balanceQty ??
+          item.quantity ??
+          item.stock_qty ??
+          item.stockQty ??
+          0
+      );
+      const lowStockThreshold = Number(
+        item.low_stock_threshold ??
+          item.lowStockThreshold ??
+          variant.low_stock_threshold ??
+          variant.lowStockThreshold ??
+          0
+      );
+      const baseUnit =
+        item.base_unit ||
+        item.baseUnit ||
+        item.unit_name ||
+        item.unitName ||
+        meta.baseUnit ||
+        unit.unit_code ||
+        unit.unitCode ||
+        unit.unit_name ||
+        unit.unitName ||
+        variant.package_type ||
+        variant.packageType ||
+        "unit";
+
+      return {
+        id: item.id || variantUnitId,
+        productVariantUnitId: variantUnitId,
+        productVariantId: productVariantId || meta.productVariantId || "",
+        productName: product.name || item.product_name || item.productName || item.name || meta.productName || "-",
+        variantName:
+          variant.variant_name ||
+          variant.variantName ||
+          item.variant_name ||
+          item.variantName ||
+          item.product_variant_name ||
+          item.productVariantName ||
+          meta.variantName ||
+          product.name ||
+          item.product_name ||
+          item.productName ||
+          "-",
+        variantCode: variant.variant_code || variant.variantCode || item.variant_code || item.variantCode || meta.variantCode || "",
+        category:
+          product.category?.name ||
+          product.category_name ||
+          product.categoryName ||
+          variant.category?.name ||
+          variant.category_name ||
+          variant.categoryName ||
+          item.category_name ||
+          item.categoryName ||
+          (typeof item.category === "string" ? item.category : item.category?.name) ||
+          meta.category ||
+          "-",
+        imagePath: variant.images || variant.image_path || variant.imagePath || item.image_path || item.imagePath || meta.imagePath || "",
+        baseUnit,
+        stockBaseQty,
+        lowStockThreshold,
+        unitCostBase: Number(item.unit_cost_base ?? item.unitCostBase ?? item.average_cost_usd ?? item.averageCostUsd ?? item.unit_cost_usd ?? 0),
+        status: getStockStatus(stockBaseQty, lowStockThreshold),
+        units: [
+          {
+            id: unit.id || variantUnitId,
+            unitName: unit.unit_name || unit.unitName || meta.unitName || baseUnit,
+            conversionQty: Number(variantUnit.conversion_qty || variantUnit.conversionQty || meta.conversionQty || 1),
+            isBaseUnit: true,
+          },
+        ],
+        batches: batches.filter(
+          (batch) =>
+            (batch.productVariantUnitId && String(batch.productVariantUnitId) === String(variantUnitId)) ||
+            (batch.productVariantId && String(batch.productVariantId) === String(productVariantId || meta.productVariantId || ""))
+        ),
+        movements: movements.filter(
+          (movement) =>
+            (movement.productVariantUnitId && String(movement.productVariantUnitId) === String(variantUnitId)) ||
+            (movement.productVariantId && String(movement.productVariantId) === String(productVariantId || meta.productVariantId || ""))
+        ),
+      };
+    };
+
+    const normalizePendingPurchaseForStockIn = (purchase) => ({
+      id: purchase.id,
+      purchaseNo: purchase.purchaseNo,
+      supplierName: purchase.supplierName,
+      purchaseDate: formatDateOnly(purchase.purchaseDate),
+      status: purchase.status,
+      totalItems: purchase.items.filter((item) => Number(item.acceptedQty || 0) > Number(item.stockedInQty || 0)).length,
+      note: purchase.note || "Accepted purchase items are waiting for Inventory confirmation.",
+      items: purchase.items
+        .filter((item) => Number(item.acceptedQty || 0) > Number(item.stockedInQty || 0))
+        .map((item) => {
+          const qty = Number(item.acceptedQty || 0) - Number(item.stockedInQty || 0);
+          const conversionQty = Number(item.conversionQty || 1);
+          const unitCostBase =
+            Number(item.unitCostBase || 0) ||
+            (conversionQty > 0 ? Number(item.unitCostUsd || item.unitCost || 0) / conversionQty : Number(item.unitCostUsd || item.unitCost || 0));
+
+          return {
+            purchaseItemId: item.id,
+            inventoryId: item.variantUnitId,
+            productVariantUnitId: item.variantUnitId,
+            productVariantId: item.productVariantId,
+            productName: item.productName,
+            category: item.category,
+            variantName: item.variantName,
+            variantCode: item.variantCode,
+            qty,
+            unitName: item.unitName,
+            conversionQty,
+            baseUnit: item.baseUnit,
+            baseQty: qty * conversionQty,
+            unitCostBase,
+            expiredDate: formatDateOnly(item.expiredDate),
+          };
+        }),
+    });
+
+    const serverBatches = useMemo(
+      () => extractApiData(inventoryBatchesQuery.data).map(normalizeInventoryBatch),
+      [inventoryBatchesQuery.data]
+    );
+
+    const serverMovements = useMemo(
+      () => extractApiData(stockMovementsQuery.data).map(normalizeStockMovement),
+      [stockMovementsQuery.data]
+    );
+
+    const variantUnitMeta = useMemo(() => {
+      const meta = {};
+
+      extractApiData(variantUnitsQuery.data).map(normalizeVariantUnit).forEach((item) => {
+        meta[String(item.id)] = item;
+        if (item.productVariantId) meta[`variant:${item.productVariantId}`] = item;
+      });
+
+      const pending = Array.isArray(pendingPurchasesQuery.data) ? pendingPurchasesQuery.data : [];
+      pending.forEach((purchase) => {
+        (purchase.items || []).forEach((item) => {
+          if (!item.variantUnitId) return;
+          meta[String(item.variantUnitId)] = {
+            ...(meta[String(item.variantUnitId)] || {}),
+            id: item.variantUnitId,
+            productVariantId: item.productVariantId,
+            productName: item.productName,
+            category: item.category,
+            variantName: item.variantName,
+            variantCode: item.variantCode,
+            unitName: item.unitName,
+            baseUnit: item.baseUnit,
+            conversionQty: item.conversionQty,
+          };
+        });
+      });
+
+      return meta;
+    }, [variantUnitsQuery.data, pendingPurchasesQuery.data]);
+
+    const serverInventory = useMemo(() => {
+      const balances = extractApiData(stockBalancesQuery.data);
+      return balances.map((item) => normalizeStockBalance(item, serverBatches, serverMovements, variantUnitMeta));
+    }, [stockBalancesQuery.data, serverBatches, serverMovements, variantUnitMeta]);
+
+    const serverPendingPurchases = useMemo(() => {
+      const purchases = Array.isArray(pendingPurchasesQuery.data) ? pendingPurchasesQuery.data : [];
+      return purchases.map(normalizePendingPurchaseForStockIn).filter((purchase) => purchase.items.length > 0);
+    }, [pendingPurchasesQuery.data]);
+
+    const sortedPendingPurchases = useMemo(() => {
+      if (!stockInPurchaseId) return pendingPurchases;
+      return [...pendingPurchases].sort((a, b) => {
+        if (String(a.id) === String(stockInPurchaseId)) return -1;
+        if (String(b.id) === String(stockInPurchaseId)) return 1;
+        return 0;
+      });
+    }, [pendingPurchases, stockInPurchaseId]);
+
+    useEffect(() => {
+      if (serverInventory.length > 0) setInventory(serverInventory);
+    }, [serverInventory]);
+
+    useEffect(() => {
+      if (pendingPurchasesQuery.isSuccess) setPendingPurchases(serverPendingPurchases);
+    }, [pendingPurchasesQuery.isSuccess, serverPendingPurchases]);
+
+    useEffect(() => {
+      if (!stockInPurchaseId || modalMode) return;
+      setModalMode("confirm_stock_in");
+    }, [stockInPurchaseId, modalMode]);
+
     const filteredInventory = useMemo(() => {
       const search = searchTerm.toLowerCase();
 
@@ -411,6 +785,44 @@
       return { baseText, convertedTexts };
     };
 
+    const getPendingStockInForInventoryItem = (inventoryItem) => {
+      const variantUnitId = String(inventoryItem.productVariantUnitId || inventoryItem.id || "");
+      const inventoryVariantCode = String(inventoryItem.variantCode || "").toLowerCase();
+      const inventoryVariantName = String(inventoryItem.variantName || "").toLowerCase();
+      const inventoryBaseUnit = String(inventoryItem.baseUnit || "").toLowerCase();
+      const relatedItems = pendingPurchases.flatMap((purchase) =>
+        (purchase.items || []).filter((item) => {
+          const itemVariantUnitId = String(item.productVariantUnitId || item.inventoryId || "");
+          const itemVariantCode = String(item.variantCode || "").toLowerCase();
+          const itemVariantName = String(item.variantName || item.productName || "").toLowerCase();
+          const itemBaseUnit = String(item.baseUnit || "").toLowerCase();
+
+          if (itemVariantUnitId && variantUnitId && itemVariantUnitId === variantUnitId) return true;
+          if (itemVariantCode && inventoryVariantCode && itemVariantCode === inventoryVariantCode) return true;
+          return Boolean(
+            itemVariantName &&
+              inventoryVariantName &&
+              itemVariantName === inventoryVariantName &&
+              itemBaseUnit &&
+              inventoryBaseUnit &&
+              itemBaseUnit === inventoryBaseUnit
+          );
+        })
+      );
+
+      const baseQty = relatedItems.reduce((total, item) => total + Number(item.baseQty || 0), 0);
+      const qty = relatedItems.reduce((total, item) => total + Number(item.qty || 0), 0);
+      const unitName = relatedItems[0]?.unitName || inventoryItem.baseUnit;
+      const baseUnit = relatedItems[0]?.baseUnit || inventoryItem.baseUnit;
+
+      return {
+        baseQty,
+        qty,
+        unitName,
+        baseUnit,
+      };
+    };
+
     const openConfirmStockInModal = () => {
       setErrors({});
       setModalMode("confirm_stock_in");
@@ -448,6 +860,29 @@
       setErrors({});
     };
 
+    const invalidateInventoryQueries = () => {
+      queryClient.invalidateQueries({ queryKey: ["stock-balances"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-batches"] });
+      queryClient.invalidateQueries({ queryKey: ["stock-movements"] });
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+    };
+
+    const confirmStockInMutation = useMutation({
+      mutationFn: (purchase) => confirmPurchaseStockInApi(purchase.id),
+      onSuccess: () => {
+        invalidateInventoryQueries();
+        notify.success("Stock in confirmed", "Accepted purchase quantities have been added to inventory.");
+        closeModal();
+        if (stockInPurchaseId) {
+          setSearchParams({}, { replace: true });
+        }
+      },
+      onError: (error) => {
+        const message = error?.response?.data?.message || error?.message || "Stock in confirmation failed.";
+        notify.error("Stock in failed", message);
+      },
+    });
+
     const handleAdjustmentFormChange = (field, value) => {
       setAdjustmentForm((previous) => ({
         ...previous,
@@ -461,6 +896,11 @@
     };
 
     const handleConfirmStockIn = (purchase) => {
+      if (pendingPurchasesQuery.isSuccess && !String(purchase.id).startsWith("local-")) {
+        confirmStockInMutation.mutate(purchase);
+        return;
+      }
+
       const nowDate = getToday();
 
       setInventory((previous) =>
@@ -812,38 +1252,37 @@
           />
         </div>
 
-        {pendingPurchases.length > 0 && (
-          <div
-            className={`flex flex-col gap-4 rounded-2xl border p-5 shadow-sm md:flex-row md:items-center md:justify-between ${theme.card}`}
-          >
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
-                <FiClipboard className="text-4xl text-emerald-500" />
-              </div>
-
-              <div>
-                <h3 className="text-base font-bold">
-                  Pending Purchase Stock In
-                </h3>
-
-                <p className={`mt-1 text-sm ${theme.muted}`}>
-                  {pendingPurchases.length} purchase
-                  {pendingPurchases.length > 1 ? "s" : ""} waiting for stock
-                  confirmation.
-                </p>
-              </div>
+        <div
+          className={`flex flex-col gap-4 rounded-2xl border p-5 shadow-sm md:flex-row md:items-center md:justify-between ${theme.card}`}
+        >
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
+              <FiClipboard className="text-4xl text-emerald-500" />
             </div>
 
-            <button
-              type="button"
-              onClick={openConfirmStockInModal}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white hover:bg-emerald-600"
-            >
-              <FiCheckCircle />
-              Review & Confirm
-            </button>
+            <div>
+              <h3 className="text-base font-bold">
+                Pending Purchase Stock In
+              </h3>
+
+              <p className={`mt-1 text-sm ${theme.muted}`}>
+                {pendingPurchases.length > 0
+                  ? `${pendingPurchases.length} purchase${pendingPurchases.length > 1 ? "s" : ""} waiting for stock confirmation.`
+                  : "No purchase is waiting for stock confirmation right now."}
+              </p>
+            </div>
           </div>
-        )}
+
+          <button
+            type="button"
+            disabled={pendingPurchases.length === 0}
+            onClick={openConfirmStockInModal}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FiCheckCircle />
+            Review & Confirm
+          </button>
+        </div>
 
         {lowStockList.length > 0 && (
           <div
@@ -880,6 +1319,7 @@
           inventory={inventory}
           filteredInventory={filteredInventory}
           getVariantStockBreakdown={getVariantStockBreakdown}
+          getPendingStockInForInventoryItem={getPendingStockInForInventoryItem}
           getStatusClass={getStatusClass}
           openViewModal={openViewModal}
           openAdjustmentModal={openAdjustmentModal}
@@ -887,15 +1327,16 @@
 
         {modalMode === "confirm_stock_in" && (
           <ConfirmStockInModal
-            pendingPurchases={pendingPurchases}
+            pendingPurchases={sortedPendingPurchases}
             theme={theme}
             onClose={closeModal}
             onConfirm={handleConfirmStockIn}
+            isConfirming={confirmStockInMutation.isPending}
           />
         )}
 
         {modalMode === "view" && selectedItem && (
-          <ViewInventoryModal
+          <InventoryDetailModal
             item={selectedItem}
             theme={theme}
             getStatusClass={getStatusClass}
@@ -926,6 +1367,7 @@
     inventory,
     filteredInventory,
     getVariantStockBreakdown,
+    getPendingStockInForInventoryItem,
     getStatusClass,
     openViewModal,
     openAdjustmentModal,
@@ -947,14 +1389,11 @@
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px]">
+          <table className="w-full min-w-[1080px]">
             <thead className="bg-red-600 text-white">
               <tr>
                 <th className="px-5 py-3 text-left text-sm font-semibold">
                   Product / Variant
-                </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Category
                 </th>
                 <th className="px-5 py-3 text-left text-sm font-semibold">
                   Current Stock
@@ -977,6 +1416,8 @@
             <tbody>
               {filteredInventory.map((item) => {
                 const stockBreakdown = getVariantStockBreakdown(item);
+                const pendingStockIn = getPendingStockInForInventoryItem?.(item) || { baseQty: 0, qty: 0 };
+                const productMeta = item.category && item.category !== "-" ? item.category : item.productName;
 
                 return (
                   <tr key={item.id} className={`border-t transition ${theme.row}`}>
@@ -996,24 +1437,30 @@
                               {item.variantCode}
                             </span>
 
-                            <span className={`text-xs ${theme.muted}`}>
-                              {item.productName}
-                            </span>
+                            {productMeta && productMeta !== "-" && (
+                              <span className={`text-xs ${theme.muted}`}>
+                                {productMeta}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
                     </td>
 
                     <td className="px-5 py-4">
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
-                      >
-                        {item.category}
-                      </span>
-                    </td>
+                      <p className={`text-[11px] font-semibold uppercase ${theme.muted}`}>
+                        Confirmed
+                      </p>
 
-                    <td className="px-5 py-4">
-                      <p className="text-sm font-bold">{stockBreakdown.baseText}</p>
+                      <p className="mt-1 text-sm font-bold">{stockBreakdown.baseText}</p>
+
+                      {Number(pendingStockIn.baseQty || 0) > 0 && (
+                        <div className="mt-2 inline-flex rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-500">
+                          Pending Stock In +{Number(pendingStockIn.qty || 0).toLocaleString()} {pendingStockIn.unitName}
+                          {pendingStockIn.baseQty !== pendingStockIn.qty &&
+                            ` / ${Number(pendingStockIn.baseQty || 0).toLocaleString()} ${pendingStockIn.baseUnit}`}
+                        </div>
+                      )}
 
                       {stockBreakdown.convertedTexts.length > 0 && (
                         <div className="mt-1 flex flex-wrap gap-1.5">
@@ -1271,6 +1718,7 @@
     theme,
     onClose,
     onConfirm,
+    isConfirming = false,
   }) {
     return (
       <ModalShell
@@ -1334,6 +1782,7 @@
 
                   <button
                     type="button"
+                    disabled={isConfirming}
                     onClick={() => {
                       const ok = window.confirm(
                         `Confirm stock in for ${purchase.purchaseNo}?`
@@ -1341,18 +1790,20 @@
 
                       if (ok) onConfirm(purchase);
                     }}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <FiCheckCircle />
-                    Confirm Stock In
+                    {isConfirming ? "Confirming..." : "Confirm Stock In"}
                   </button>
                 </div>
 
                 <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
-                  <table className="w-full min-w-[780px] text-sm">
+                  <table className="w-full min-w-[960px] text-sm">
                     <thead className="bg-red-600 text-white">
                       <tr>
                         <th className="px-3 py-3 text-left">Product Variant</th>
+                        <th className="px-3 py-3 text-left">Variant Type</th>
+                        <th className="px-3 py-3 text-left">Purchase Unit</th>
                         <th className="px-3 py-3 text-left">Accepted Qty</th>
                         <th className="px-3 py-3 text-left">Base Qty</th>
                         <th className="px-3 py-3 text-left">Unit Cost</th>
@@ -1361,32 +1812,69 @@
                     </thead>
 
                     <tbody>
-                      {purchase.items.map((item) => (
-                        <tr
-                          key={`${purchase.id}-${item.variantName}`}
-                          className="border-t border-zinc-200 dark:border-white/10"
-                        >
-                          <td className="px-3 py-3 font-semibold">
-                            {item.variantName}
-                          </td>
+                      {purchase.items.map((item) => {
+                        const conversionQty = Number(item.conversionQty || 1);
+                        const baseDisplayUnit = item.baseUnit || "";
+                        const rawVariantName = item.variantName || item.productName || "-";
+                        const variantDisplayName =
+                          baseDisplayUnit &&
+                          rawVariantName !== "-" &&
+                          !rawVariantName.toLowerCase().includes(baseDisplayUnit.toLowerCase())
+                            ? `${rawVariantName} ${baseDisplayUnit.charAt(0).toUpperCase()}${baseDisplayUnit.slice(1)}`
+                            : rawVariantName;
+                        const conversionText =
+                          item.unitName && item.baseUnit
+                            ? `${item.unitName} = ${conversionQty.toLocaleString()} ${item.baseUnit}`
+                            : "Unit conversion unavailable";
+                        const unitBadge = baseDisplayUnit
+                          ? `${baseDisplayUnit.charAt(0).toUpperCase()}${baseDisplayUnit.slice(1)}`
+                          : "Unit";
 
-                          <td className="px-3 py-3">
-                            {Number(item.qty).toLocaleString()} {item.unitName}
-                          </td>
+                        return (
+                          <tr
+                            key={`${purchase.id}-${item.purchaseItemId || item.variantCode || item.variantName}`}
+                            className="border-t border-zinc-200 dark:border-white/10"
+                          >
+                            <td className="px-3 py-3">
+                              <p className="font-semibold">{variantDisplayName}</p>
 
-                          <td className="px-3 py-3">
-                            {Number(item.baseQty).toLocaleString()} base units
-                          </td>
+                              {item.variantCode && (
+                                <span className="mt-1 inline-flex max-w-full rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-semibold text-zinc-600 dark:border-white/10 dark:text-zinc-300">
+                                  <span className="truncate">{item.variantCode}</span>
+                                </span>
+                              )}
+                            </td>
 
-                          <td className="px-3 py-3">
-                            ${Number(item.unitCostBase).toFixed(3)}
-                          </td>
+                            <td className="px-3 py-3">
+                              <span className="inline-flex rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-500">
+                                {unitBadge}
+                              </span>
+                            </td>
 
-                          <td className="px-3 py-3">
-                            {item.expiredDate || "-"}
-                          </td>
-                        </tr>
-                      ))}
+                            <td className="px-3 py-3">
+                              <span className={`text-xs font-semibold ${theme.muted}`}>
+                                {conversionText}
+                              </span>
+                            </td>
+
+                            <td className="px-3 py-3">
+                              {Number(item.qty).toLocaleString()} {item.unitName}
+                            </td>
+
+                            <td className="px-3 py-3">
+                              {Number(item.baseQty).toLocaleString()} {item.baseUnit || "base units"}
+                            </td>
+
+                            <td className="px-3 py-3">
+                              ${Number(item.unitCostBase).toFixed(3)}
+                            </td>
+
+                            <td className="px-3 py-3">
+                              {item.expiredDate || "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1600,6 +2088,242 @@
                   <p className={`text-sm ${theme.muted}`}>
                     No stock movement yet.
                   </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </ModalShell>
+    );
+  }
+
+  function InventoryDetailModal({
+    item,
+    theme,
+    getStatusClass,
+    getVariantStockBreakdown,
+    onClose,
+  }) {
+    const stockBreakdown = getVariantStockBreakdown(item);
+    const variantType =
+      item.baseUnit && !String(item.variantName || "").toLowerCase().includes(String(item.baseUnit).toLowerCase())
+        ? `${item.baseUnit.charAt(0).toUpperCase()}${item.baseUnit.slice(1)}`
+        : item.baseUnit || "Unit";
+    const displayName =
+      item.baseUnit && !String(item.variantName || "").toLowerCase().includes(String(item.baseUnit).toLowerCase())
+        ? `${item.variantName} ${variantType}`
+        : item.variantName;
+    const batches = Array.isArray(item.batches) ? item.batches : [];
+    const movements = Array.isArray(item.movements) ? item.movements : [];
+    const latestBatch = batches.find((batch) => batch.expiredDate) || batches[0];
+    const totalRemaining = batches.reduce(
+      (total, batch) => total + Number(batch.qtyRemainingBase || 0),
+      0
+    );
+
+    return (
+      <ModalShell
+        title={displayName}
+        subtitle={`${item.variantCode || "No variant code"} - ${item.productName || "No product"}${item.category && item.category !== "-" ? ` - ${item.category}` : ""}`}
+        theme={theme}
+        onClose={onClose}
+        footer={
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+          >
+            Close
+          </button>
+        }
+      >
+        <div className="space-y-5">
+          <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex min-w-0 items-center gap-4">
+                <InventoryThumb item={item} />
+
+                <div className="min-w-0">
+                  <p className="text-lg font-bold">{displayName}</p>
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}>
+                      {item.variantCode || "No code"}
+                    </span>
+
+                    <span className="rounded-full bg-red-500/10 px-3 py-1 text-xs font-bold text-red-500">
+                      {variantType}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4 xl:min-w-[560px]">
+                <InfoLine label="Product" value={item.productName} />
+                <InfoLine label="Category" value={item.category || "-"} />
+                <InfoLine label="Base Unit" value={item.baseUnit} />
+                <InfoLine label="Low Stock Alert" value={`${item.lowStockThreshold} ${item.baseUnit}`} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
+                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>Current Stock</p>
+                <p className="mt-2 text-2xl font-bold">{stockBreakdown.baseText}</p>
+
+                <div className="mt-3">
+                  <StockStatusBadge status={item.status} getStatusClass={getStatusClass} />
+                </div>
+              </div>
+
+              <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
+                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>Batch Remaining</p>
+                <p className="mt-2 text-2xl font-bold">
+                  {Number(totalRemaining).toLocaleString()} {item.baseUnit}
+                </p>
+
+                <p className={`mt-2 text-xs ${theme.muted}`}>
+                  {batches.length} active batch{batches.length === 1 ? "" : "es"}
+                </p>
+              </div>
+
+              <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
+                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>Latest Expiry</p>
+                <p className="mt-2 text-2xl font-bold">{latestBatch?.expiredDate || "-"}</p>
+
+                <p className={`mt-2 text-xs ${theme.muted}`}>
+                  Unit cost ${Number(item.unitCostBase || latestBatch?.unitCostBase || 0).toFixed(3)}
+                </p>
+              </div>
+          </div>
+
+          <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+            <SectionTitle
+              icon={<FiLayers />}
+              title="Units"
+              subtitle="Purchase and base unit conversion for this variant."
+              theme={theme}
+            />
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+              {item.units.map((unit) => (
+                <div
+                  key={unit.unitName}
+                  className={`rounded-xl border p-3 text-sm ${theme.softCard}`}
+                >
+                  <p className={`text-xs font-semibold uppercase ${theme.muted}`}>
+                    {unit.isBaseUnit ? "Base Unit" : "Converted Unit"}
+                  </p>
+
+                  <p className="mt-2 font-bold">
+                    {unit.unitName} = {unit.conversionQty} {item.baseUnit}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+            <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+              <SectionTitle
+                icon={<FiPackage />}
+                title="Inventory Batches"
+                subtitle="Stock batch and expiry tracking."
+                theme={theme}
+              />
+
+              <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">
+                <table className="w-full text-sm">
+                  <thead className="bg-red-600 text-white">
+                    <tr>
+                      <th className="px-3 py-3 text-left">Batch</th>
+                      <th className="px-3 py-3 text-left">Expiry</th>
+                      <th className="px-3 py-3 text-left">Remaining</th>
+                      <th className="px-3 py-3 text-left">Cost</th>
+                      <th className="px-3 py-3 text-left">Status</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {batches.length > 0 ? (
+                      batches.map((batch) => (
+                        <tr
+                          key={batch.id || batch.batchNo}
+                          className="border-t border-zinc-200 dark:border-white/10"
+                        >
+                          <td className="px-3 py-3">
+                            <p className="max-w-[220px] truncate font-semibold">{batch.batchNo}</p>
+                            <p className={`mt-1 text-xs ${theme.muted}`}>Lot {batch.lotNo || "-"}</p>
+                          </td>
+                          <td className="px-3 py-3">{batch.expiredDate || "-"}</td>
+                          <td className="px-3 py-3">
+                            {Number(batch.qtyRemainingBase).toLocaleString()} {item.baseUnit}
+                          </td>
+                          <td className="px-3 py-3">
+                            ${Number(batch.unitCostBase).toFixed(3)}
+                          </td>
+                          <td className="px-3 py-3 capitalize">{batch.status}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="5" className="px-3 py-8 text-center text-zinc-500">
+                          No active batch.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+              <SectionTitle
+                icon={<FiClock />}
+                title="Recent Stock Movements"
+                subtitle="Latest stock in, stock out, and adjustments."
+                theme={theme}
+              />
+
+              <div className="mt-4 space-y-3">
+                {movements.length > 0 ? (
+                  movements.slice(0, 6).map((movement, index) => (
+                    <div
+                      key={`${movement.type}-${index}`}
+                      className={`flex items-start justify-between gap-4 rounded-xl border p-3 ${theme.softCard}`}
+                    >
+                      <div className="flex min-w-0 gap-3">
+                        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+                          <FiClock />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold capitalize">
+                            {movement.type.replaceAll("_", " ")}
+                          </p>
+
+                          <p className={`mt-1 line-clamp-2 text-xs ${theme.muted}`}>
+                            {movement.note || "-"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-bold">
+                          {Number(movement.qtyBase).toLocaleString()} {item.baseUnit}
+                        </p>
+
+                        <p className={`mt-1 text-xs ${theme.muted}`}>
+                          {movement.createdAt || "-"}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className={`rounded-xl border border-dashed p-6 text-center text-sm ${theme.softCard}`}>
+                    <p className={theme.muted}>No stock movement yet.</p>
+                  </div>
                 )}
               </div>
             </div>

@@ -22,6 +22,8 @@ import {
   updateExchangeRateApi,
   deleteExchangeRateApi,
 } from "../../../services/exchangeRate.service";
+import TableLoading from "../../../components/TableLoading";
+import { useNotification } from "../../../components/AppNotification";
 
 function extractApiData(response) {
   if (Array.isArray(response)) return response;
@@ -40,6 +42,17 @@ function extractActiveRate(response) {
 
 // API return status ច្បាស់លាស់ ("active" / "inactive")
 // ដូច្នេះមិនត្រូវ fallback ទៅ "active" ពេលគ្មាន value ទេ
+function getErrorMessage(error) {
+  const response = error?.response?.data;
+
+  if (response?.message && response?.errors) {
+    const firstError = Object.values(response.errors)?.[0]?.[0];
+    return firstError || response.message;
+  }
+
+  return response?.message || error?.message || "Something went wrong.";
+}
+
 function normalizeStatus(value) {
   if (value === true || value === 1 || value === "1") return "active";
   if (value === false || value === 0 || value === "0") return "inactive";
@@ -75,6 +88,14 @@ function formatRate(value) {
   return number.toLocaleString();
 }
 
+function formatRateInput(value) {
+  const text = String(value ?? "");
+
+  if (!text) return "";
+
+  return text.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+}
+
 function todayDate() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -107,6 +128,7 @@ export default function ExchangeRate() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
   const queryClient = useQueryClient();
+  const notify = useNotification();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -119,6 +141,7 @@ export default function ExchangeRate() {
 
   const theme = {
     pageTitle: isDark ? "text-white" : "text-zinc-900",
+    title: isDark ? "text-white" : "text-zinc-900",
     muted: isDark ? "text-zinc-400" : "text-zinc-500",
 
     card: isDark
@@ -242,7 +265,14 @@ export default function ExchangeRate() {
     mutationFn: createExchangeRateApi,
     onSuccess: () => {
       invalidateExchangeRateQueries();
+      notify.success(
+        "Exchange rate created",
+        "The new exchange rate has been saved."
+      );
       closeForm();
+    },
+    onError: (error) => {
+      notify.error("Create failed", getErrorMessage(error));
     },
   });
 
@@ -250,7 +280,14 @@ export default function ExchangeRate() {
     mutationFn: updateExchangeRateApi,
     onSuccess: () => {
       invalidateExchangeRateQueries();
+      notify.success(
+        "Exchange rate updated",
+        "The exchange rate has been updated."
+      );
       closeForm();
+    },
+    onError: (error) => {
+      notify.error("Update failed", getErrorMessage(error));
     },
   });
 
@@ -258,6 +295,13 @@ export default function ExchangeRate() {
     mutationFn: deleteExchangeRateApi,
     onSuccess: () => {
       invalidateExchangeRateQueries();
+      notify.success(
+        "Exchange rate deleted",
+        "The exchange rate record has been deleted."
+      );
+    },
+    onError: (error) => {
+      notify.error("Delete failed", getErrorMessage(error));
     },
   });
 
@@ -499,14 +543,11 @@ function ExchangeRateTable({
 
           <tbody>
             {isLoading ? (
-              <tr>
-                <td
-                  colSpan={5}
-                  className={`px-5 py-10 text-center ${theme.muted}`}
-                >
-                  Loading exchange rates...
-                </td>
-              </tr>
+              <TableLoading
+                theme={theme}
+                colSpan={5}
+                text="Loading exchange rates..."
+              />
             ) : rates.length === 0 ? (
               <tr>
                 <td
@@ -616,7 +657,7 @@ function ExchangeRateFormModal({
     if (isEdit && selectedRate) {
       return {
         rate_date: formatDate(selectedRate.rateDate),
-        usd_to_khr_rate: String(selectedRate.usdToKhrRate || ""),
+        usd_to_khr_rate: formatRateInput(selectedRate.usdToKhrRate),
         khr_rounding:
           selectedRate.khrRounding ||
           selectedRate.khr_rounding ||
@@ -714,7 +755,8 @@ function ExchangeRateFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-200 dark:hover:bg-white/20"
+            aria-label="Close modal"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
           >
             <FiX className="text-xl" />
           </button>
@@ -746,7 +788,7 @@ function ExchangeRateFormModal({
                 label="USD to KHR Rate"
                 required
                 theme={theme}
-                icon={<FiDollarSign />}
+                icon={<span className="text-base font-bold">៛</span>}
                 value={form.usd_to_khr_rate}
                 onKeyDown={(event) => preventInvalidNumberKey(event, true)}
                 onPaste={(event) => {

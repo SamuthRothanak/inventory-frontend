@@ -49,8 +49,10 @@ export default function ProductFormModal({
         name: product.name || "",
         category_id: String(product.categoryId || ""),
         description: product.description || "",
-        expiry_date: product.expiryDate || "",
-        status: product.status === "Active" ? "active" : "inactive",
+        status:
+          String(product.status || "").toLowerCase() === "active"
+            ? "active"
+            : "inactive",
         imageFile: null,
       });
       return;
@@ -101,7 +103,7 @@ export default function ProductFormModal({
             <div>
               <h3 className="text-sm font-bold">Product Information</h3>
               <p className={`mt-0.5 text-xs leading-5 ${theme.muted}`}>
-                Main product details, category, status, expiry date, and image.
+                Main product details, category, status, and image.
               </p>
             </div>
           </div>
@@ -131,15 +133,6 @@ export default function ProductFormModal({
                   label: category.name,
                 })),
               ]}
-            />
-
-            <FormInput
-              label="Expiry Date"
-              type="date"
-              error={errors.expiry_date?.message}
-              theme={theme}
-              icon={<FiFileText />}
-              inputProps={register("expiry_date")}
             />
 
             <FormSelect

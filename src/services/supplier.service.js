@@ -11,6 +11,22 @@ export const getSuppliersApi = async (params = {}) => {
   return response.data;
 };
 
+export const getActiveSuppliersApi = async (params = {}) => {
+  try {
+    const response = await api.get("/suppliers/active", { params });
+    return response.data;
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      const response = await api.get("/suppliers", {
+        params: { ...params, status: "active" },
+      });
+      return response.data;
+    }
+
+    throw error;
+  }
+};
+
 export const createSupplierApi = async (payload) => {
   const response = await api.post("/suppliers", {
     name: payload.name,

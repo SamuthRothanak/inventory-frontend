@@ -22,6 +22,7 @@ import CategorySummaryCard from "./components/CategorySummaryCard";
 import CategoryTable from "./components/CategoryTable";
 import CategoryFormModal from "./components/CategoryFormModal";
 import CategoryViewModal from "./components/CategoryViewModal";
+import { useNotification } from "../../../components/AppNotification";
 
 import { extractCategories, normalizeCategory } from "./utils/categoryUtils";
 
@@ -88,6 +89,17 @@ function getMeta(response) {
   return data?.meta || response?.meta || null;
 }
 
+function getErrorMessage(error, fallback = "Something went wrong.") {
+  const response = error?.response?.data;
+
+  if (response?.message && response?.errors) {
+    const firstError = Object.values(response.errors)?.[0]?.[0];
+    return firstError || response.message;
+  }
+
+  return response?.message || error?.message || fallback;
+}
+
 async function getAllCategoriesForStats() {
   const firstResponse = await getCategoriesApi({
     page: 1,
@@ -133,6 +145,7 @@ export default function Category() {
   const isDark = outlet?.isDark ?? false;
 
   const queryClient = useQueryClient();
+  const notify = useNotification();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -262,12 +275,13 @@ export default function Category() {
     mutationFn: createCategoryApi,
     onSuccess: () => {
       invalidateCategories();
+      notify.success("Category created", "The category has been saved.");
       closeModal();
     },
     onError: (error) => {
-      setServerMessage(
-        error?.response?.data?.message || "Create category failed."
-      );
+      const message = getErrorMessage(error, "Create category failed.");
+      setServerMessage(message);
+      notify.error("Create failed", message);
     },
   });
 
@@ -275,12 +289,13 @@ export default function Category() {
     mutationFn: updateCategoryApi,
     onSuccess: () => {
       invalidateCategories();
+      notify.success("Category updated", "The category has been updated.");
       closeModal();
     },
     onError: (error) => {
-      setServerMessage(
-        error?.response?.data?.message || "Update category failed."
-      );
+      const message = getErrorMessage(error, "Update category failed.");
+      setServerMessage(message);
+      notify.error("Update failed", message);
     },
   });
 
@@ -288,9 +303,13 @@ export default function Category() {
     mutationFn: deleteCategoryApi,
     onSuccess: () => {
       invalidateCategories();
+      notify.success("Category deleted", "The category has been deleted.");
     },
     onError: (error) => {
-      alert(error?.response?.data?.message || "Failed to delete category.");
+      notify.error(
+        "Delete failed",
+        getErrorMessage(error, "Failed to delete category.")
+      );
     },
   });
 

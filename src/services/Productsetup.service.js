@@ -1,7 +1,13 @@
-import { createProductApi } from "./product.service";
-import { createProductVariantApi } from "./productVariant.service";
-import { createProductVariantUnitApi } from "./productVariantUnit.service";
-import { createPriceRuleApi } from "./priceRule.service";
+import { createProductApi, deleteProductApi } from "./product.service";
+import {
+  createProductVariantApi,
+  deleteProductVariantApi,
+} from "./productVariant.service";
+import {
+  createProductVariantUnitApi,
+  deleteProductVariantUnitApi,
+} from "./productVariantUnit.service";
+import { createPriceRuleApi, deletePriceRuleApi } from "./priceRule.service";
 
 const getCreatedData = (response) => {
   if (response?.data?.id) return response.data;
@@ -23,50 +29,64 @@ const getErrorMessage = (error) => {
   return error?.message || "Something went wrong.";
 };
 
-// គណនា USD <-> KHR ពី active exchange rate + rounding mode
-const roundKhr = (amount, mode = "ceil") => {
-  const value = Number(amount || 0);
-  if (value <= 0) return 0;
-  switch (mode) {
-    case "round":
-      return Math.round(value / 100) * 100;
-    case "floor":
-      return Math.floor(value / 100) * 100;
-    case "none":
-      return Number(value.toFixed(2));
-    default:
-      return Math.ceil(value / 100) * 100;
+const makeSetupVariantCode = (code, productId, variantIndex) => {
+  const baseCode = String(code || `PV-${productId}-${variantIndex + 1}`)
+    .trim()
+    .replace(/-P\d+$/i, "");
+
+  return `${baseCode}-P${productId}`;
+};
+
+const cleanupCreatedSetup = async ({ priceRuleIds, variantUnitIds, variantIds, productId }) => {
+  for (const id of [...priceRuleIds].reverse()) {
+    try {
+      await deletePriceRuleApi(id);
+    } catch (error) {
+      console.warn("Cleanup price rule failed:", id, error);
+    }
+  }
+
+  for (const id of [...variantUnitIds].reverse()) {
+    try {
+      await deleteProductVariantUnitApi(id);
+    } catch (error) {
+      console.warn("Cleanup variant unit failed:", id, error);
+    }
+  }
+
+  for (const id of [...variantIds].reverse()) {
+    try {
+      await deleteProductVariantApi(id);
+    } catch (error) {
+      console.warn("Cleanup variant failed:", id, error);
+    }
+  }
+
+  if (productId) {
+    try {
+      await deleteProductApi(productId);
+    } catch (error) {
+      console.warn("Cleanup product failed:", productId, error);
+    }
   }
 };
 
-const computePrices = (inputCurrency, inputPrice, rate, mode = "ceil") => {
-  const currency = String(inputCurrency || "USD").toUpperCase();
-  const price = Number(inputPrice || 0);
-  const r = Number(rate || 0);
-
-  if (!r) {
-    return { unit_price_usd: 0, unit_price_khr: 0 };
-  }
-
-  if (currency === "USD") {
-    return {
-      unit_price_usd: Number(price.toFixed(2)),
-      unit_price_khr: roundKhr(price * r, mode),
-    };
-  }
-
-  // KHR
-  return {
-    unit_price_khr: roundKhr(price, mode),
-    unit_price_usd: Number((price / r).toFixed(2)),
-  };
-};
-
-// payload.exchangeRate = active rate (usd_to_khr_rate) ដែលត្រូវ pass មកពី component
 export const createProductSetupApi = async (payload) => {
+  const createdIds = {
+    productId: null,
+    variantIds: [],
+    variantUnitIds: [],
+    priceRuleIds: [],
+  };
+
   try {
-    const activeRate = Number(payload.exchangeRate || 0);
-    const khrRounding = payload.khrRounding || "ceil";
+    const exchangeRateUsed = Number(payload.exchangeRate || 0);
+
+    if (!exchangeRateUsed) {
+      throw new Error(
+        "No active exchange rate found. Please create and activate an exchange rate before saving product prices."
+      );
+    }
 
     const createdProductResponse = await createProductApi(payload.product);
     const createdProduct = getCreatedData(createdProductResponse);
@@ -76,12 +96,17 @@ export const createProductSetupApi = async (payload) => {
     }
 
     const productId = createdProduct.id;
+    createdIds.productId = productId;
     const createdVariants = [];
 
-    for (const variant of payload.variants) {
+    for (const [variantIndex, variant] of payload.variants.entries()) {
       const createdVariantResponse = await createProductVariantApi({
         product_id: productId,
-        variant_code: variant.variant_code,
+        variant_code: makeSetupVariantCode(
+          variant.variant_code,
+          productId,
+          variantIndex
+        ),
         variant_name: variant.variant_name,
         package_type: variant.package_type,
         color: variant.color || "",
@@ -101,6 +126,7 @@ export const createProductSetupApi = async (payload) => {
       }
 
       const variantId = createdVariant.id;
+      createdIds.variantIds.push(variantId);
       const createdVariantUnits = [];
 
       for (const unit of variant.units) {
@@ -123,7 +149,7 @@ export const createProductSetupApi = async (payload) => {
         }
 
         const productVariantUnitId = createdVariantUnit.id;
-
+        createdIds.variantUnitIds.push(productVariantUnitId);
         const rulesForThisUnit = variant.priceRules.filter(
           (rule) => rule.local_unit_key === unit.local_key
         );
@@ -131,16 +157,22 @@ export const createProductSetupApi = async (payload) => {
         const createdRules = [];
 
         for (const rule of rulesForThisUnit) {
-          // ផ្ញើតែ input — backend គណនា unit_price_usd/khr + exchange_rate_used + rounding
-          // (ដូច Edit path; កុំឱ្យ frontend calc ខុសពី backend)
           const createdRuleResponse = await createPriceRuleApi({
             product_variant_unit_id: productVariantUnitId,
             applies_to: rule.applies_to,
             min_qty: rule.min_qty,
             input_currency: rule.input_currency,
             input_price: rule.input_price,
+            unit_price_usd: rule.unit_price_usd,
+            unit_price_khr: rule.unit_price_khr,
+            exchange_rate_used: exchangeRateUsed,
             status: rule.status,
           });
+
+          const createdRule = getCreatedData(createdRuleResponse);
+          if (createdRule?.id) {
+            createdIds.priceRuleIds.push(createdRule.id);
+          }
 
           createdRules.push(createdRuleResponse);
         }
@@ -162,6 +194,7 @@ export const createProductSetupApi = async (payload) => {
       variants: createdVariants,
     };
   } catch (error) {
+    await cleanupCreatedSetup(createdIds);
     throw new Error(getErrorMessage(error));
   }
 };
