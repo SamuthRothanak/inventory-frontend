@@ -3,8 +3,8 @@ import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FiCheckCircle,
-  FiChevronDown,
   FiFilter,
+  FiHash,
   FiPlusCircle,
   FiSearch,
   FiTruck,
@@ -12,6 +12,7 @@ import {
 } from "react-icons/fi";
 
 import {
+  bulkDeleteSuppliersApi,
   createSupplierApi,
   deleteSupplierApi,
   getSuppliersApi,
@@ -22,6 +23,8 @@ import SummaryCard from "./components/SummaryCard";
 import SupplierTable from "./components/SupplierTable";
 import SupplierFormModal from "./components/SupplierFormModal";
 import ViewSupplierModal from "./components/ViewSupplierModal";
+import SupplierDropdown from "./components/SupplierDropdown";
+import { useNotification } from "../../../components/AppNotification";
 
 import { extractSuppliers, toSupplierPayload } from "./utils/supplierUtils";
 
@@ -84,18 +87,33 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
+function getErrorMessage(error, fallback = "Something went wrong.") {
+  const response = error?.response?.data;
+
+  if (response?.message && response?.errors) {
+    const firstError = Object.values(response.errors)?.[0]?.[0];
+    return firstError || response.message;
+  }
+
+  return response?.message || error?.message || fallback;
+}
+
 export default function Supplier() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
   const queryClient = useQueryClient();
+  const notify = useNotification();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState([]);
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [serverMessage, setServerMessage] = useState("");
 
   useLockBodyScroll(Boolean(modalMode));
 
@@ -147,37 +165,81 @@ export default function Supplier() {
     };
   }, [statsQuery.data]);
 
+  const allSuppliers = useMemo(() => {
+    return extractSuppliers(statsQuery.data);
+  }, [statsQuery.data]);
+
+  useEffect(() => {
+    const visibleIds = new Set(suppliers.map((item) => Number(item.id)));
+    setSelectedSupplierIds((previous) =>
+      previous.filter((id) => visibleIds.has(Number(id)))
+    );
+  }, [suppliers]);
+
+  const invalidateSuppliers = () => {
+    queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+  };
+
   const createMutation = useMutation({
     mutationFn: createSupplierApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      invalidateSuppliers();
+      notify.success("Supplier created", "The supplier has been saved.");
       closeModal();
     },
     onError: (error) => {
-      alert(error?.response?.data?.message || "Failed to create supplier.");
+      const message = getErrorMessage(error, "Failed to create supplier.");
+      setServerMessage(message);
+      notify.error("Create failed", message);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: updateSupplierApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      invalidateSuppliers();
+      notify.success("Supplier updated", "The supplier has been updated.");
       closeModal();
     },
     onError: (error) => {
-      alert(error?.response?.data?.message || "Failed to update supplier.");
+      const message = getErrorMessage(error, "Failed to update supplier.");
+      setServerMessage(message);
+      notify.error("Update failed", message);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteSupplierApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      invalidateSuppliers();
+      notify.success("Supplier deleted", "The supplier has been deleted.");
     },
     onError: (error) => {
-      alert(
-        error?.response?.data?.message ||
+      notify.error(
+        "Delete failed",
+        getErrorMessage(
+          error,
           "Failed to delete supplier. This supplier may already be used in purchases."
+        )
+      );
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: bulkDeleteSuppliersApi,
+    onSuccess: () => {
+      setSelectedSupplierIds([]);
+      setBulkSelectMode(false);
+      invalidateSuppliers();
+      notify.success(
+        "Suppliers deleted",
+        "Selected suppliers have been deleted."
+      );
+    },
+    onError: (error) => {
+      notify.error(
+        "Bulk delete failed",
+        getErrorMessage(error, "Failed to delete selected suppliers.")
       );
     },
   });
@@ -235,27 +297,47 @@ export default function Supplier() {
   };
 
   const openAddModal = () => {
+    setServerMessage("");
     setSelectedSupplier(null);
     setModalMode("add");
   };
 
   const openViewModal = (supplier) => {
+    setServerMessage("");
     setSelectedSupplier(supplier);
     setModalMode("view");
   };
 
   const openEditModal = (supplier) => {
+    setServerMessage("");
     setSelectedSupplier(supplier);
     setModalMode("edit");
   };
 
   const closeModal = () => {
+    setServerMessage("");
     setModalMode(null);
     setSelectedSupplier(null);
   };
 
   const handleSaveSupplier = (form) => {
+    setServerMessage("");
     const payload = toSupplierPayload(form);
+    const normalizedName = payload.name.trim().toLowerCase();
+    const duplicateSupplier = allSuppliers.find((supplier) => {
+      const isSameSupplier =
+        modalMode === "edit" &&
+        Number(supplier.id) === Number(selectedSupplier?.id);
+
+      return !isSameSupplier && supplier.name.trim().toLowerCase() === normalizedName;
+    });
+
+    if (duplicateSupplier) {
+      const message = "This supplier name already exists.";
+      setServerMessage(message);
+      notify.error("Duplicate supplier", message);
+      return;
+    }
 
     if (modalMode === "add") {
       createMutation.mutate(payload);
@@ -280,7 +362,59 @@ export default function Supplier() {
     deleteMutation.mutate(supplier.id);
   };
 
+  const handleToggleSupplier = (supplierId) => {
+    if (!bulkSelectMode) return;
+
+    setSelectedSupplierIds((previous) => {
+      const id = Number(supplierId);
+      if (previous.some((item) => Number(item) === id)) {
+        return previous.filter((item) => Number(item) !== id);
+      }
+
+      return [...previous, id];
+    });
+  };
+
+  const handleToggleAllSuppliers = () => {
+    if (!bulkSelectMode) return;
+
+    const pageIds = suppliers.map((supplier) => Number(supplier.id));
+    const allSelected = pageIds.every((id) =>
+      selectedSupplierIds.some((selectedId) => Number(selectedId) === id)
+    );
+
+    setSelectedSupplierIds((previous) => {
+      if (allSelected) {
+        return previous.filter((id) => !pageIds.includes(Number(id)));
+      }
+
+      return [...new Set([...previous.map(Number), ...pageIds])];
+    });
+  };
+
+  const handleBulkDeleteSuppliers = () => {
+    if (selectedSupplierIds.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedSupplierIds.length} selected supplier${selectedSupplierIds.length > 1 ? "s" : ""}?`
+    );
+
+    if (!confirmed) return;
+
+    bulkDeleteMutation.mutate(selectedSupplierIds);
+  };
+
+  const openBulkSelectMode = () => {
+    setBulkSelectMode(true);
+  };
+
+  const closeBulkSelectMode = () => {
+    setBulkSelectMode(false);
+    setSelectedSupplierIds([]);
+  };
+
   const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isDeleting = deleteMutation.isPending || bulkDeleteMutation.isPending;
 
   const actionError =
     createMutation.error || updateMutation.error || deleteMutation.error;
@@ -288,7 +422,7 @@ export default function Supplier() {
   const actionErrorMessage =
     actionError?.response?.data?.message ||
     actionError?.message ||
-    "Something went wrong.";
+          "Something went wrong.";
 
   return (
     <section className="space-y-6">
@@ -334,47 +468,34 @@ export default function Supplier() {
             />
           </div>
 
-          <div className="relative">
-            <FiFilter
-              className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
+          <SupplierDropdown
+            icon={<FiFilter />}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            theme={theme}
+            options={[
+              { value: "All", label: "All Status" },
+              { value: "Active", label: "Active" },
+              { value: "Inactive", label: "Inactive" },
+            ]}
+          />
 
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className={`h-12 w-full appearance-none rounded-2xl border pl-11 pr-11 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-            >
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
-
-          <div className="relative">
-            <select
-              value={perPage}
-              onChange={(event) => setPerPage(Number(event.target.value))}
-              className={`h-12 w-full appearance-none rounded-2xl border px-4 pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-            >
-              <option value={10}>10 / page</option>
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
+          <SupplierDropdown
+            icon={<FiHash />}
+            value={perPage}
+            onChange={(value) => setPerPage(Number(value))}
+            theme={theme}
+            options={[10, 25, 50].map((value) => ({
+              value,
+              label: `${value} / page`,
+            }))}
+          />
         </div>
 
         <button
           type="button"
           onClick={openAddModal}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+          className="inline-flex h-12 items-center justify-center gap-4 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
         >
           <FiPlusCircle className="text-lg" />
           Add Supplier
@@ -404,10 +525,18 @@ export default function Supplier() {
         isFetching={suppliersQuery.isFetching}
         isLoading={suppliersQuery.isLoading}
         isError={suppliersQuery.isError}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={isDeleting}
+        bulkDeleteIsPending={bulkDeleteMutation.isPending}
+        bulkSelectMode={bulkSelectMode}
+        selectedSupplierIds={selectedSupplierIds}
         onView={openViewModal}
         onEdit={openEditModal}
         onDelete={handleDeleteSupplier}
+        onOpenBulkSelect={openBulkSelectMode}
+        onCancelBulkSelect={closeBulkSelectMode}
+        onToggleSelect={handleToggleSupplier}
+        onToggleSelectAll={handleToggleAllSuppliers}
+        onBulkDelete={handleBulkDeleteSuppliers}
       />
 
       {modalMode === "view" && selectedSupplier && (
@@ -427,6 +556,7 @@ export default function Supplier() {
           onClose={closeModal}
           onSubmit={handleSaveSupplier}
           isSaving={isSaving}
+          serverMessage={serverMessage}
         />
       )}
     </section>

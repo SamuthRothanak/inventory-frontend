@@ -3,7 +3,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   FiCheckCircle,
-  FiChevronDown,
   FiFileText,
   FiHash,
   FiMapPin,
@@ -19,6 +18,13 @@ import {
   customerSchema,
   defaultCustomerValues,
 } from "../schemas/customerSchema";
+import CustomerDropdown from "./CustomerDropdown";
+
+const sanitizeInputValue = (value, mode) => {
+  if (mode === "number") return String(value || "").replace(/[^0-9]/g, "");
+  if (mode === "text") return String(value || "").replace(/[^\p{L}\s]/gu, "");
+  return value;
+};
 
 export function ModalShell({ title, subtitle, theme, onClose, children, footer }) {
   return (
@@ -78,6 +84,7 @@ export default function CustomerFormModal({
   onClose,
   onSubmit,
   isSaving,
+  serverMessage = "",
 }) {
   const title = mode === "add" ? "Add Customer" : "Edit Customer";
 
@@ -86,6 +93,7 @@ export default function CustomerFormModal({
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(customerSchema),
@@ -152,6 +160,12 @@ export default function CustomerFormModal({
         />
 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+          {serverMessage && (
+            <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-500">
+              {serverMessage}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {mode === "edit" && (
               <FormInput
@@ -173,6 +187,7 @@ export default function CustomerFormModal({
               theme={theme}
               placeholder="Dara Mini Mart"
               icon={<FiShoppingBag />}
+              sanitize="text"
             />
 
             <FormInput
@@ -182,6 +197,7 @@ export default function CustomerFormModal({
               theme={theme}
               placeholder="Dara"
               icon={<FiUser />}
+              sanitize="text"
             />
 
             <FormInput
@@ -191,10 +207,13 @@ export default function CustomerFormModal({
               theme={theme}
               placeholder="012345678"
               icon={<FiPhone />}
+              sanitize="number"
             />
 
             <FormSelect
               label="Status"
+              value={status}
+              onChange={(value) => setValue("status", value, { shouldValidate: true })}
               register={register("status")}
               options={["Active", "Inactive"]}
               theme={theme}
@@ -258,7 +277,16 @@ function FormInput({
   type = "text",
   placeholder = "",
   icon,
+  sanitize = "",
 }) {
+  const inputProps = {
+    ...register,
+    onChange: (event) => {
+      event.target.value = sanitizeInputValue(event.target.value, sanitize);
+      register?.onChange?.(event);
+    },
+  };
+
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
@@ -278,7 +306,8 @@ function FormInput({
         <input
           type={type}
           placeholder={placeholder}
-          {...register}
+          {...inputProps}
+          inputMode={sanitize === "number" ? "numeric" : undefined}
           className={`h-11 w-full rounded-xl border ${
             icon ? "pl-10" : "px-3"
           } pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${
@@ -323,39 +352,35 @@ function FormTextarea({ label, register, theme, placeholder = "", icon }) {
   );
 }
 
-function FormSelect({ label, register, options, theme, icon }) {
+function FormSelect({ label, register, options, theme, icon, value, onChange }) {
+  const mappedOptions = options.map((option) =>
+    typeof option === "string" ? { value: option, label: option } : option
+  );
+  const handleChange = (nextValue) => {
+    if (onChange) {
+      onChange(nextValue);
+      return;
+    }
+
+    register?.onChange?.({
+      target: {
+        name: register.name,
+        value: nextValue,
+      },
+    });
+  };
+
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <select
-          {...register}
-          className={`h-11 w-full appearance-none rounded-xl border ${
-            icon ? "pl-10" : "pl-3"
-          } pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-        >
-          {options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-
-        <FiChevronDown
-          className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-        />
-      </div>
-    </label>
+    <CustomerDropdown
+      label={label}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={handleChange}
+      options={mappedOptions}
+      searchable={mappedOptions.length > 6}
+      heightClass="h-11"
+      roundedClass="rounded-xl"
+    />
   );
 }

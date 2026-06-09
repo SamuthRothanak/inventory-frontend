@@ -51,6 +51,8 @@ import Products from "./pages/Admin/Products/Products";
 import Inventory from "./pages/Admin/Inventory/Inventory";
 import Purchases from "./pages/Admin/Purcheases/Purchases";
 import ExchangeRate from "./pages/Admin/ExchangeRate/ExchangeRate";
+import Report from "./pages/Admin/Reports/Report";
+import Setting from "./pages/Admin/Settings/Setting";
 
 export default function App() {
   return (
@@ -78,6 +80,8 @@ export default function App() {
         <Route path="inventory" element={<Inventory/>}/>
         <Route path="purchases" element={<Purchases/>}/>
         <Route path="exchange-rate" element={<ExchangeRate/>} />
+        <Route path="reports" element={<Report/>}/>
+        <Route path="settings" element={<Setting/>}/>
       </Route>
 
       <Route

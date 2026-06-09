@@ -78,7 +78,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+          <div className={`grid grid-cols-1 gap-3 p-4 ${category.hasBeenUpdated ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
             <MiniInfoCard
               theme={theme}
               label="Name"
@@ -93,12 +93,14 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
               icon={<FiFileText />}
             />
 
-            <MiniInfoCard
-              theme={theme}
-              label="Updated"
-              value={category.updatedAt}
-              icon={<FiFileText />}
-            />
+            {category.hasBeenUpdated && (
+              <MiniInfoCard
+                theme={theme}
+                label="Last Updated"
+                value={category.updatedAt}
+                icon={<FiFileText />}
+              />
+            )}
           </div>
         </div>
 

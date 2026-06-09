@@ -28,7 +28,8 @@ export const categorySchema = z.object({
     .string()
     .trim()
     .min(1, "Category name is required.")
-    .max(100, "Category name must be less than 100 characters."),
+    .max(100, "Category name must be less than 100 characters.")
+    .regex(/^[\p{L}\s]+$/u, "Category name can contain letters and spaces only."),
 
   description: z
     .string()

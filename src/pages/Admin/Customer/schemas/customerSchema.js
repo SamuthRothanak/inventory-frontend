@@ -3,9 +3,18 @@ import { z } from "zod";
 export const customerSchema = z.object({
   customerCode: z.string().optional(),
 
-  shopName: z.string().min(1, "Shop name is required."),
+  shopName: z
+    .string()
+    .min(1, "Shop name is required.")
+    .regex(/^[\p{L}\s]+$/u, "Shop name can contain letters and spaces only."),
 
-  contactName: z.string().optional(),
+  contactName: z
+    .string()
+    .optional()
+    .refine(
+      (value) => !value || /^[\p{L}\s]+$/u.test(value),
+      "Contact name can contain letters and spaces only."
+    ),
 
   phone: z
     .string()

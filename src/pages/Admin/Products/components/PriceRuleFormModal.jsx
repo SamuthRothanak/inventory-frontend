@@ -10,6 +10,7 @@ import {
 } from "react-icons/fi";
 
 import ModalShell from "./ModalShell";
+import SearchableDropdown from "./SearchableDropdown";
 
 const DEFAULT_EXCHANGE_RATE = 0;
 
@@ -312,6 +313,7 @@ export default function PriceRuleFormModal({
               icon={<FiTag />}
               theme={theme}
               error={errors.applies_to?.message}
+              value={watch("applies_to")}
               inputProps={register("applies_to", {
                 required: "Applies to is required.",
               })}
@@ -342,6 +344,7 @@ export default function PriceRuleFormModal({
               icon={<FiDollarSign />}
               theme={theme}
               error={errors.input_currency?.message}
+              value={watch("input_currency")}
               inputProps={register("input_currency", {
                 required: "Currency is required.",
               })}
@@ -465,42 +468,30 @@ function FormSelect({
   icon,
   theme,
   inputProps,
+  value,
   options,
   error = "",
 }) {
+  const handleChange = (nextValue) => {
+    inputProps?.onChange?.({
+      target: {
+        name: inputProps.name,
+        value: nextValue,
+      },
+    });
+  };
+
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-        {required && <span className="ml-1 text-red-400">*</span>}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <select
-          {...inputProps}
-          className={`h-12 w-full rounded-xl border ${
-            icon ? "pl-10" : "pl-3"
-          } pr-3 text-sm outline-none transition focus:ring-4 ${theme.select} ${
-            error ? "border-red-500 focus:border-red-500" : ""
-          }`}
-        >
-          {options.map((option) => (
-            <option key={String(option.value)} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
-    </label>
+    <SearchableDropdown
+      label={label}
+      required={required}
+      error={error}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={handleChange}
+      options={options}
+      searchable={options.length > 6}
+    />
   );
 }

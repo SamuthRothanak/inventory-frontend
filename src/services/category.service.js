@@ -95,3 +95,8 @@ export const deleteCategoryApi = async (id) => {
   const response = await api.delete(`/categories/${id}`);
   return response.data;
 };
+
+export const bulkDeleteCategoriesApi = async (ids = []) => {
+  const response = await api.post("/categories/bulk-delete", { ids });
+  return response.data;
+};

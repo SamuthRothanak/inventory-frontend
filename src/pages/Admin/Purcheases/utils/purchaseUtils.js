@@ -141,6 +141,31 @@ export function formatDateOnly(value) {
   return text.slice(0, 10);
 }
 
+export function formatDateTimeLocal(value, timeZone = "Asia/Phnom_Penh") {
+  if (!value) return "-";
+
+  const text = String(value).trim();
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text);
+  const isoText = text.includes("T") ? text : text.replace(" ", "T");
+  const date = new Date(hasTimezone ? isoText : `${isoText}Z`);
+
+  if (Number.isNaN(date.getTime())) return text;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const getPart = (type) => parts.find((part) => part.type === type)?.value || "";
+
+  return `${getPart("year")}-${getPart("month")}-${getPart("day")} ${getPart("hour")}:${getPart("minute")}:${getPart("second")}`;
+}
+
 
 
 export function normalizeCurrency(value = "USD") {
@@ -525,6 +550,14 @@ export function normalizeVariantUnit(item) {
 
     baseUnit: variantPackageUnit || item.base_unit || item.baseUnit || unit.base_unit || unit.baseUnit || unit.unit_code || unit.unitCode || "-",
 
+    lowStockThreshold: Number(
+      variant.low_stock_threshold ??
+        variant.lowStockThreshold ??
+        item.low_stock_threshold ??
+        item.lowStockThreshold ??
+        0
+    ),
+
     conversionQty: Number(item.conversion_qty || item.conversionQty || 1),
 
     defaultCost: Number(item.default_cost || item.defaultCost || item.unit_cost_usd || 0),
@@ -683,6 +716,12 @@ export function normalizePurchaseItem(item) {
     acceptedQty: Number(item.accepted_qty ?? item.acceptedQty ?? 0),
 
     stockedInQty: Number(item.stocked_in_qty ?? item.stockedInQty ?? 0),
+
+    remainingStockInQty: Number(item.remaining_stock_in_qty ?? item.remainingStockInQty ?? 0),
+
+    acceptedBaseQty: Number(item.accepted_base_qty ?? item.acceptedBaseQty ?? 0),
+
+    stockedInBaseQty: Number(item.stocked_in_base_qty ?? item.stockedInBaseQty ?? 0),
 
     damagedQty: Number(item.damaged_qty ?? item.damagedQty ?? 0),
 

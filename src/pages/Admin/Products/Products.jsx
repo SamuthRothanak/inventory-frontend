@@ -5,10 +5,10 @@ import {
   FiAlertTriangle,
   FiBox,
   FiCheckCircle,
-  FiChevronDown,
   FiDollarSign,
   FiFilter,
   FiGrid,
+  FiHash,
   FiLayers,
   FiPlusCircle,
   FiSearch,
@@ -51,7 +51,7 @@ import {
   updateUnitApi,
 } from "../../../services/unit.service";
 
-import { getExchangeRatesApi } from "../../../services/exchangeRate.service";
+import { getActiveExchangeRateApi } from "../../../services/exchangeRate.service";
 import { useNotification } from "../../../components/AppNotification";
 
 import ProductTable from "./components/ProductTable";
@@ -139,6 +139,8 @@ export default function Products() {
   }, [debouncedSearchTerm, categoryFilter, statusFilter, perPage]);
 
   const theme = {
+    isDark,
+
     pageTitle: isDark ? "text-white" : "text-zinc-900",
 
     card: isDark
@@ -241,8 +243,8 @@ export default function Products() {
   });
 
   const activeRateQuery = useQuery({
-    queryKey: ["exchange-rates", "list-for-active"],
-    queryFn: () => getExchangeRatesApi({ per_page: 100 }),
+    queryKey: ["exchange-rates", "active"],
+    queryFn: getActiveExchangeRateApi,
     retry: false,
     staleTime: 1000 * 60 * 2,
   });
@@ -359,7 +361,7 @@ export default function Products() {
     queryClient.invalidateQueries({ queryKey: ["categories"] });
     queryClient.invalidateQueries({ queryKey: ["units"] });
     queryClient.invalidateQueries({
-      queryKey: ["exchange-rates", "list-for-active"],
+      queryKey: ["exchange-rates", "active"],
     });
   };
 
@@ -503,6 +505,9 @@ export default function Products() {
       invalidateProductQueries();
       closeVariantUnitForm();
     },
+    onError: (error) => {
+      notify.error("Save variant unit failed", getApiErrorMessage(error));
+    },
   });
 
   const updateVariantUnitMutation = useMutation({
@@ -510,6 +515,9 @@ export default function Products() {
     onSuccess: () => {
       invalidateProductQueries();
       closeVariantUnitForm();
+    },
+    onError: (error) => {
+      notify.error("Update variant unit failed", getApiErrorMessage(error));
     },
   });
 
@@ -1058,33 +1066,19 @@ export default function Products() {
             ]}
           />
 
-          <div className="relative">
-            <select
-              value={perPage}
-              onChange={(event) => setPerPage(Number(event.target.value))}
-              className={`h-12 w-full appearance-none rounded-2xl border px-4 pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-            >
-              <option value={10}>10 / page</option>
-              <option value={20}>20 / page</option>
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
+          <FilterSelect
+            icon={<FiHash />}
+            value={perPage}
+            onChange={(value) => setPerPage(Number(value))}
+            theme={theme}
+            options={[10, 20, 25, 50].map((value) => ({
+              value,
+              label: `${value} / page`,
+            }))}
+          />
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row xl:shrink-0">
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600 xl:min-w-[150px]"
-          >
-            Refresh
-          </button>
-
           <button
             type="button"
             onClick={openAddProductForm}
@@ -1151,6 +1145,22 @@ export default function Products() {
           onAddPriceRule={openAddPriceRuleForm}
           onEditPriceRule={openEditPriceRuleForm}
           onDeletePriceRule={handleDeletePriceRule}
+          units={units}
+          isCreatingUnit={createUnitMutation.isPending}
+          isUpdatingUnit={updateUnitMutation.isPending}
+          isDeletingUnit={deleteUnitMutation.isPending}
+          onCreateUnit={async (payload) => {
+            await createUnitMutation.mutateAsync(payload);
+            await unitsQuery.refetch();
+          }}
+          onUpdateUnit={async ({ id, payload }) => {
+            await updateUnitMutation.mutateAsync({ id, payload });
+            await unitsQuery.refetch();
+          }}
+          onDeleteUnit={async (id) => {
+            await deleteUnitMutation.mutateAsync(id);
+            await unitsQuery.refetch();
+          }}
         />
       )}
 

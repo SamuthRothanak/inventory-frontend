@@ -11,7 +11,6 @@ import {
   FiInfo,
   FiPackage,
   FiSave,
-  FiSearch,
   FiTruck,
 } from "react-icons/fi";
 import { convertCost, formatCurrencyPair } from "../utils/purchaseUtils";
@@ -62,8 +61,6 @@ export function PurchaseItemModal({
   form,
   errors,
   variantUnits,
-  variantUnitSearch,
-  setVariantUnitSearch,
   exchangeRateUsed,
   paymentMode,
   theme,
@@ -153,17 +150,6 @@ export function PurchaseItemModal({
           icon={<FiPackage />}
           theme={theme}
         >
-          {!isReceiveMode && <div className="mb-4">
-            <FormInput
-              label="Search Product Variant"
-              value={variantUnitSearch}
-              onChange={setVariantUnitSearch}
-              theme={theme}
-              placeholder="Search variant, SKU, product..."
-              icon={<FiSearch />}
-            />
-          </div>}
-
           {isReceiveMode && selectedUnit && (
             <div className={`mb-4 rounded-2xl border p-4 ${theme.softCard}`}>
               <p className="text-sm font-bold">{selectedUnit.variantName}</p>
@@ -199,6 +185,7 @@ export function PurchaseItemModal({
                       label: `${unit.variantName} - ${unit.unitName}${unit.conversionQty > 1 ? ` (${unit.conversionQty} ${unit.baseUnit})` : ""}`,
                     })),
                   ]}
+                  searchable
                 />
               )}
             />}

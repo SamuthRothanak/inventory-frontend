@@ -16,6 +16,7 @@ import {
 } from "react-icons/fi";
 
 import ModalShell from "./ModalShell";
+import SearchableDropdown from "./SearchableDropdown";
 
 const DEFAULT_EXCHANGE_RATE = 0;
 const makeLocalKey = (prefix) => `${prefix}_${Date.now()}_${Math.random()}`;
@@ -86,10 +87,10 @@ function makeUnit(isFirst = false) {
   return {
     local_key: makeLocalKey("unit"),
     unit_id: "",
-    conversion_qty: 1,
+    conversion_qty: isFirst ? 1 : "",
     is_base_unit: isFirst,
     is_default_sale_unit: isFirst,
-    is_default_purchase_unit: false,
+    is_default_purchase_unit: !isFirst,
     status: true,
   };
 }
@@ -155,7 +156,23 @@ export default function VariantSetupFormModal({
 
   const updateUnit = (unitIndex, field, value) => {
     setUnitRows((prev) =>
-      prev.map((u, i) => (i === unitIndex ? { ...u, [field]: value } : u)),
+      prev.map((u, i) => {
+        if (i !== unitIndex) return u;
+        const updated = { ...u, [field]: value };
+        if (field === "conversion_qty") {
+          const qty = Number(value || 1);
+          if (qty === 1) {
+            updated.is_base_unit = true;
+            updated.is_default_sale_unit = true;
+            updated.is_default_purchase_unit = false;
+          } else {
+            updated.is_base_unit = false;
+            updated.is_default_sale_unit = false;
+            updated.is_default_purchase_unit = true;
+          }
+        }
+        return updated;
+      }),
     );
   };
 
@@ -311,8 +328,11 @@ export default function VariantSetupFormModal({
               value={variantForm.size_value} onChange={(v) => updateVariant("size_value", v)} placeholder="330" />
             <FormInput label="Size Unit" sanitize="text" theme={theme} icon={<FiTag />}
               value={variantForm.size_unit} onChange={(v) => updateVariant("size_unit", v)} placeholder="ml" />
-            <FormInput label="Low Stock Threshold" sanitize="number" allowDecimal={false} theme={theme} icon={<FiHash />}
+            <FormInput label="Low Stock Threshold (Base Unit)" sanitize="number" allowDecimal={false} theme={theme} icon={<FiHash />}
               value={variantForm.low_stock_threshold} onChange={(v) => updateVariant("low_stock_threshold", v)} />
+            <p className={`-mt-2 text-xs leading-5 ${theme.muted}`}>
+              Count this in the base unit, e.g. Can or Bottle. Case is only a converted unit.
+            </p>
             <FormSelect label="Status" theme={theme}
               icon={variantForm.status ? <FiCheckCircle /> : <FiXCircle />}
               value={variantForm.status ? "1" : "0"}
@@ -529,18 +549,16 @@ function FormInput({
 
 function FormSelect({ label, required = false, theme, icon, value, onChange, options }) {
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}{required && <span className="ml-1 text-red-400">*</span>}
-      </span>
-      <div className="relative">
-        {icon && <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>{icon}</span>}
-        <select value={value} onChange={(e) => onChange(e.target.value)}
-          className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "pl-3"} pr-3 text-sm outline-none transition focus:ring-4 ${theme.select}`}>
-          {options.map((o) => <option key={String(o.value)} value={o.value}>{o.label}</option>)}
-        </select>
-      </div>
-    </label>
+    <SearchableDropdown
+      label={label}
+      required={required}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={onChange}
+      options={options}
+      searchable={options.length > 6}
+    />
   );
 }
 
@@ -556,7 +574,7 @@ function ImageInput({ label, theme, previewFile, onChange }) {
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
-      <div className="rounded-2xl border border-dashed border-red-400/40 bg-red-500/[0.03] p-4">
+      <div className="rounded-2xl border border-dashed border-zinc-300 bg-white/0 p-4 transition hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/5">
             {previewUrl ? <img src={previewUrl} alt="Selected variant" className="h-full w-full object-cover" /> : <FiImage className="text-3xl text-red-500" />}

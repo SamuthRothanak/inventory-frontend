@@ -3,9 +3,9 @@ import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FiCheckCircle,
-  FiChevronDown,
   FiFilter,
   FiGrid,
+  FiHash,
   FiPlusCircle,
   FiSearch,
   FiXCircle,
@@ -16,12 +16,14 @@ import {
   createCategoryApi,
   updateCategoryApi,
   deleteCategoryApi,
+  bulkDeleteCategoriesApi,
 } from "../../../services/category.service";
 
 import CategorySummaryCard from "./components/CategorySummaryCard";
 import CategoryTable from "./components/CategoryTable";
 import CategoryFormModal from "./components/CategoryFormModal";
 import CategoryViewModal from "./components/CategoryViewModal";
+import CategoryDropdown from "./components/CategoryDropdown";
 import { useNotification } from "../../../components/AppNotification";
 
 import { extractCategories, normalizeCategory } from "./utils/categoryUtils";
@@ -151,6 +153,8 @@ export default function Category() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
 
   const [modalState, setModalState] = useState({
     open: false,
@@ -201,11 +205,13 @@ export default function Category() {
     return getPaginationMeta(categoriesQuery.data, categories.length);
   }, [categoriesQuery.data, categories.length]);
 
-  const summary = useMemo(() => {
-    const allCategories = extractCategories(statsQuery.data).map((item) =>
+  const allCategories = useMemo(() => {
+    return extractCategories(statsQuery.data).map((item) =>
       normalizeCategory(item)
     );
+  }, [statsQuery.data]);
 
+  const summary = useMemo(() => {
     const total = allCategories.length;
     const active = allCategories.filter(
       (item) => item.status === "Active"
@@ -216,7 +222,14 @@ export default function Category() {
       active,
       inactive: total - active,
     };
-  }, [statsQuery.data]);
+  }, [allCategories]);
+
+  useEffect(() => {
+    const visibleIds = new Set(categories.map((item) => Number(item.id)));
+    setSelectedCategoryIds((previous) =>
+      previous.filter((id) => visibleIds.has(Number(id)))
+    );
+  }, [categories]);
 
   const theme = {
     title: isDark ? "text-white" : "text-zinc-900",
@@ -313,6 +326,25 @@ export default function Category() {
     },
   });
 
+  const bulkDeleteCategoryMutation = useMutation({
+    mutationFn: bulkDeleteCategoriesApi,
+    onSuccess: () => {
+      setSelectedCategoryIds([]);
+      setBulkSelectMode(false);
+      invalidateCategories();
+      notify.success(
+        "Categories deleted",
+        "Selected categories have been deleted."
+      );
+    },
+    onError: (error) => {
+      notify.error(
+        "Bulk delete failed",
+        getErrorMessage(error, "Failed to delete selected categories.")
+      );
+    },
+  });
+
   const openAddModal = () => {
     setServerMessage("");
     setModalState({
@@ -351,6 +383,21 @@ export default function Category() {
 
   const handleSaveCategory = (values) => {
     setServerMessage("");
+    const normalizedName = values.name.trim().toLowerCase();
+    const duplicateCategory = allCategories.find((category) => {
+      const isSameCategory =
+        modalState.mode === "edit" &&
+        Number(category.id) === Number(modalState.selectedCategory?.id);
+
+      return !isSameCategory && category.name.trim().toLowerCase() === normalizedName;
+    });
+
+    if (duplicateCategory) {
+      const message = "This category name already exists.";
+      setServerMessage(message);
+      notify.error("Duplicate category", message);
+      return;
+    }
 
     if (modalState.mode === "edit" && modalState.selectedCategory) {
       updateCategoryMutation.mutate({
@@ -373,8 +420,61 @@ export default function Category() {
     deleteCategoryMutation.mutate(categoryId);
   };
 
+  const handleToggleCategory = (categoryId) => {
+    if (!bulkSelectMode) return;
+
+    setSelectedCategoryIds((previous) => {
+      const id = Number(categoryId);
+      if (previous.some((item) => Number(item) === id)) {
+        return previous.filter((item) => Number(item) !== id);
+      }
+
+      return [...previous, id];
+    });
+  };
+
+  const handleToggleAllCategories = () => {
+    if (!bulkSelectMode) return;
+
+    const pageIds = categories.map((category) => Number(category.id));
+    const allSelected = pageIds.every((id) =>
+      selectedCategoryIds.some((selectedId) => Number(selectedId) === id)
+    );
+
+    setSelectedCategoryIds((previous) => {
+      if (allSelected) {
+        return previous.filter((id) => !pageIds.includes(Number(id)));
+      }
+
+      return [...new Set([...previous.map(Number), ...pageIds])];
+    });
+  };
+
+  const handleBulkDeleteCategories = () => {
+    if (selectedCategoryIds.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedCategoryIds.length} selected categor${selectedCategoryIds.length > 1 ? "ies" : "y"}?`
+    );
+
+    if (!confirmed) return;
+
+    bulkDeleteCategoryMutation.mutate(selectedCategoryIds);
+  };
+
+  const openBulkSelectMode = () => {
+    setBulkSelectMode(true);
+  };
+
+  const closeBulkSelectMode = () => {
+    setBulkSelectMode(false);
+    setSelectedCategoryIds([]);
+  };
+
   const isSaving =
     createCategoryMutation.isPending || updateCategoryMutation.isPending;
+  const isDeleting =
+    deleteCategoryMutation.isPending || bulkDeleteCategoryMutation.isPending;
 
   return (
     <section className="space-y-6">
@@ -427,47 +527,34 @@ export default function Category() {
             />
           </div>
 
-          <div className="relative">
-            <FiFilter
-              className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
+          <CategoryDropdown
+            icon={<FiFilter />}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            theme={theme}
+            options={[
+              { value: "All", label: "All Status" },
+              { value: "Active", label: "Active" },
+              { value: "Inactive", label: "Inactive" },
+            ]}
+          />
 
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className={`h-12 w-full appearance-none rounded-2xl border pl-11 pr-11 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-            >
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
-
-          <div className="relative">
-            <select
-              value={perPage}
-              onChange={(event) => setPerPage(Number(event.target.value))}
-              className={`h-12 w-full appearance-none rounded-2xl border px-4 pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-            >
-              <option value={10}>10 / page</option>
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
+          <CategoryDropdown
+            icon={<FiHash />}
+            value={perPage}
+            onChange={(value) => setPerPage(Number(value))}
+            theme={theme}
+            options={[10, 25, 50].map((value) => ({
+              value,
+              label: `${value} / page`,
+            }))}
+          />
         </div>
 
         <button
           type="button"
           onClick={openAddModal}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
         >
           <FiPlusCircle className="text-lg" />
           Add Category
@@ -485,11 +572,19 @@ export default function Category() {
         isLoading={categoriesQuery.isLoading}
         isError={categoriesQuery.isError}
         error={categoriesQuery.error}
-        deleteIsPending={deleteCategoryMutation.isPending}
+        deleteIsPending={isDeleting}
+        bulkDeleteIsPending={bulkDeleteCategoryMutation.isPending}
+        bulkSelectMode={bulkSelectMode}
+        selectedCategoryIds={selectedCategoryIds}
         theme={theme}
         onView={openViewModal}
         onEdit={openEditModal}
         onDelete={handleDeleteCategory}
+        onOpenBulkSelect={openBulkSelectMode}
+        onCancelBulkSelect={closeBulkSelectMode}
+        onToggleSelect={handleToggleCategory}
+        onToggleSelectAll={handleToggleAllCategories}
+        onBulkDelete={handleBulkDeleteCategories}
       />
 
       {modalState.open &&

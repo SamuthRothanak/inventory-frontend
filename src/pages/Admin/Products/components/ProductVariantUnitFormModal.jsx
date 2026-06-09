@@ -1,9 +1,10 @@
-import React, { useEffect } from "react";
+import React, { useMemo, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FiHash, FiInfo, FiLayers, FiSave } from "react-icons/fi";
 
 import ModalShell from "./ModalShell";
+import SearchableDropdown from "./SearchableDropdown";
 import {
   productVariantUnitDefaultValues,
   productVariantUnitSchema,
@@ -27,6 +28,10 @@ function preventInvalidNumberKey(event, allowDecimal = true) {
   if (invalidKeys.includes(event.key)) event.preventDefault();
 }
 
+function getVariantUnitUnitId(item = {}) {
+  return String(item.unitId || item.unit_id || item.unit?.id || "");
+}
+
 export default function ProductVariantUnitFormModal({
   mode,
   variant,
@@ -43,6 +48,7 @@ export default function ProductVariantUnitFormModal({
     register,
     handleSubmit,
     reset,
+    setError,
     setValue,
     watch,
     formState: { errors },
@@ -51,7 +57,32 @@ export default function ProductVariantUnitFormModal({
     defaultValues: productVariantUnitDefaultValues,
   });
 
+  const existingUnitIds = useMemo(() => {
+    const currentUnitId = isEdit ? getVariantUnitUnitId(variantUnit) : "";
+    return new Set(
+      (variant?.units || [])
+        .map(getVariantUnitUnitId)
+        .filter((unitId) => unitId && unitId !== currentUnitId)
+    );
+  }, [isEdit, variant, variantUnit]);
+
+  const unitOptions = useMemo(() => {
+    return units.map((unit) => {
+      const unitId = String(unit.id);
+      const alreadyAdded = existingUnitIds.has(unitId);
+
+      return {
+        value: unitId,
+        label: `${unit.unit_name || unit.unitName || unit.unit_code || unit.id}${alreadyAdded ? " (already added)" : ""}`,
+        disabled: alreadyAdded,
+      };
+    });
+  }, [existingUnitIds, units]);
+
+  const isInitialMount = useRef(true);
+
   useEffect(() => {
+    isInitialMount.current = true;
     if (isEdit && variantUnit) {
       reset({
         product_variant_id: String(variantUnit.productVariantId || variant?.id || ""),
@@ -64,13 +95,46 @@ export default function ProductVariantUnitFormModal({
       });
       return;
     }
+    const hasExistingUnits = (variant?.units || []).length > 0;
     reset({
       ...productVariantUnitDefaultValues,
       product_variant_id: String(variant?.id || ""),
+      is_base_unit: !hasExistingUnits,
+      is_default_sale_unit: !hasExistingUnits,
     });
   }, [isEdit, variant, variantUnit, reset]);
 
+  const conversionQty = watch("conversion_qty");
+
+  useEffect(() => {
+    if (isEdit) return;
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    const qty = Number(conversionQty || 1);
+    if (qty === 1) {
+      // smallest unit → base + sale
+      setValue("is_base_unit", true);
+      setValue("is_default_sale_unit", true);
+      setValue("is_default_purchase_unit", false);
+    } else {
+      // larger unit → purchase unit
+      setValue("is_base_unit", false);
+      setValue("is_default_sale_unit", false);
+      setValue("is_default_purchase_unit", true);
+    }
+  }, [conversionQty, isEdit, setValue]);
+
   const submitForm = (values) => {
+    if (existingUnitIds.has(String(values.unit_id))) {
+      setError("unit_id", {
+        type: "manual",
+        message: "This unit already exists for this variant.",
+      });
+      return;
+    }
+
     onSave({ ...values, conversion_qty: Number(values.conversion_qty || 1) });
   };
 
@@ -101,13 +165,11 @@ export default function ProductVariantUnitFormModal({
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <FormSelect label="Unit" required error={errors.unit_id?.message} theme={theme} icon={<FiLayers />}
-            inputProps={register("unit_id")}
+            value={watch("unit_id")}
+            onChange={(value) => setValue("unit_id", value, { shouldValidate: true })}
             options={[
               { value: "", label: "Select unit" },
-              ...units.map((u) => ({
-                value: String(u.id),
-                label: `${u.unit_name || u.unitName || u.unit_code || u.id}`,
-              })),
+              ...unitOptions,
             ]} />
           <FormInput label="Conversion Qty" required sanitize="number" allowDecimal={true}
             error={errors.conversion_qty?.message} theme={theme} icon={<FiHash />}
@@ -208,27 +270,18 @@ function FormInput({
   );
 }
 
-function FormSelect({ label, required = false, error = "", theme, icon, inputProps, options }) {
+function FormSelect({ label, required = false, error = "", theme, icon, value, onChange, options }) {
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-        {required && <span className="ml-1 text-red-400">*</span>}
-      </span>
-      <div className="relative">
-        {icon && (
-          <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>
-            {icon}
-          </span>
-        )}
-        <select {...inputProps}
-          className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "pl-3"} pr-3 text-sm outline-none transition focus:ring-4 ${theme.select} ${error ? "border-red-500 focus:border-red-500" : ""}`}>
-          {options.map((o) => (
-            <option key={String(o.value)} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </div>
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
-    </label>
+    <SearchableDropdown
+      label={label}
+      required={required}
+      error={error}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={onChange}
+      options={options.filter((option) => !option.disabled)}
+      searchable={options.length > 6}
+    />
   );
 }

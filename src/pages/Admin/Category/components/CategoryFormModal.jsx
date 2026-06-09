@@ -3,7 +3,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   FiCheckCircle,
-  FiChevronDown,
   FiFileText,
   FiImage,
   FiSave,
@@ -15,10 +14,17 @@ import {
 
 import ModalShell from "./ModalShell";
 import CategoryImage from "./CategoryImage";
+import CategoryDropdown from "./CategoryDropdown";
 import {
   categoryDefaultValues,
   categorySchema,
 } from "../schemas/categorySchema";
+
+const sanitizeInputValue = (value, mode) => {
+  if (mode === "number") return String(value || "").replace(/[^0-9]/g, "");
+  if (mode === "text") return String(value || "").replace(/[^\p{L}\s]/gu, "");
+  return value;
+};
 
 export default function CategoryFormModal({
   mode,
@@ -133,12 +139,15 @@ export default function CategoryFormModal({
               placeholder="Beverage"
               icon={<FiTag />}
               inputProps={register("name")}
+              sanitize="text"
             />
 
             <FormSelect
               label="Status"
               theme={theme}
               icon={status === "Active" ? <FiCheckCircle /> : <FiXCircle />}
+              value={status}
+              onChange={(value) => setValue("status", value, { shouldValidate: true })}
               inputProps={register("status")}
               options={[
                 { value: "Active", label: "Active" },
@@ -258,7 +267,16 @@ function FormInput({
   inputProps,
   type = "text",
   placeholder = "",
+  sanitize = "",
 }) {
+  const sanitizedInputProps = {
+    ...inputProps,
+    onChange: (event) => {
+      event.target.value = sanitizeInputValue(event.target.value, sanitize);
+      inputProps?.onChange?.(event);
+    },
+  };
+
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
@@ -278,7 +296,8 @@ function FormInput({
         <input
           type={type}
           placeholder={placeholder}
-          {...inputProps}
+          {...sanitizedInputProps}
+          inputMode={sanitize === "number" ? "numeric" : undefined}
           className={`h-11 w-full rounded-xl border ${
             icon ? "pl-10" : "px-3"
           } pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${
@@ -332,40 +351,33 @@ function FormTextarea({
   );
 }
 
-function FormSelect({ label, theme, icon, inputProps, options }) {
+function FormSelect({ label, theme, icon, inputProps, value, onChange, options }) {
+  const handleChange = (nextValue) => {
+    if (onChange) {
+      onChange(nextValue);
+      return;
+    }
+
+    inputProps?.onChange?.({
+      target: {
+        name: inputProps.name,
+        value: nextValue,
+      },
+    });
+  };
+
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <select
-          {...inputProps}
-          className={`h-11 w-full appearance-none rounded-xl border ${
-            icon ? "pl-10" : "pl-3"
-          } pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-        >
-          {options.map((option) => (
-            <option key={String(option.value)} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        <FiChevronDown
-          className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-        />
-      </div>
-    </label>
+    <CategoryDropdown
+      label={label}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={handleChange}
+      options={options}
+      searchable={options.length > 6}
+      heightClass="h-11"
+      roundedClass="rounded-xl"
+    />
   );
 }
 
@@ -390,7 +402,7 @@ function FormImageInput({
         className={`rounded-2xl border border-dashed p-4 transition ${
           error
             ? "border-red-500 bg-red-500/5"
-            : "border-zinc-300 bg-white/0 hover:border-red-400 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500"
+            : "border-zinc-300 bg-white/0 hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500"
         }`}
       >
         <div className="flex flex-col gap-4 md:flex-row md:items-center">

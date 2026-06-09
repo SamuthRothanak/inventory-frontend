@@ -28,7 +28,7 @@ const variantUnitSchema = z.object({
 const variantSchema = z.object({
   variant_code: z.string().min(1, "Variant code is required."),
   variant_name: z.string().min(1, "Variant name is required."),
-  package_type: z.string().min(1, "Package type is required."),
+  package_type: z.string().optional(),
   color: z.string().optional(),
   size_value: z.string().optional(),
   size_unit: z.string().optional(),

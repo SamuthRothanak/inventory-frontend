@@ -1,130 +1,302 @@
 import React from "react";
-import { ShoppingCart, Trash2, Minus, Plus, Receipt, Printer, ArrowRightLeft, Wallet } from "./posIcons";
-import { Badge, SectionCard } from "./ui";
-import { usd } from "./posData";
+import {
+  ShoppingCart, Trash2, Minus, Plus, Receipt, Printer,
+  Wallet, Percent, Truck, Tag, Phone, Globe,
+} from "./posIcons";
+import { EmptyState } from "./ui";
+import { usd, khr, EXCHANGE_RATE, SALE_CHANNELS, DELIVERY_OPTIONS, cn } from "./posData";
 
 export default function CurrentSalePanel({
-  saleMode,
-  selectedCustomer,
-  totalItems,
-  cart,
-  subtotal,
-  total,
-  onUpdateQty,
-  onRemove,
-  onClear,
-  onOpenPayment,
+  saleMode, selectedCustomer, totalItems, cart, subtotal,
+  discountType, setDiscountType, discountValue, setDiscountValue, discountAmount,
+  deliveryRequired, setDeliveryRequired, deliveryOption, setDeliveryOption,
+  deliveryFee, setDeliveryFee, deliveryFeeCurrency, setDeliveryFeeCurrency,
+  saleChannel, setSaleChannel,
+  deliveryFeeUsd, total,
+  onUpdateQty, onRemove, onClear, onHold, onOpenPayment,
 }) {
+  const channelIcon = {
+    pos:         <Tag className="h-3 w-3" />,
+    phone_order: <Phone className="h-3 w-3" />,
+    online:      <Globe className="h-3 w-3" />,
+  };
+
   return (
-    <SectionCard className="flex flex-col overflow-hidden">
-      <div className="border-b border-slate-200 p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xl font-semibold text-slate-900">
-              <ShoppingCart className="h-5 w-5 text-red-500" /> Current Sale
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+      {/* ── Header ── */}
+      <div className="shrink-0 border-b border-slate-100 bg-linear-to-r from-slate-50 to-white px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-500 text-white shadow-sm shadow-red-200">
+              <ShoppingCart className="h-3.5 w-3.5" />
             </div>
-            <div className="mt-1 text-sm text-slate-500">
-              {saleMode === "wholesale" && selectedCustomer
-                ? `${selectedCustomer.shopName} • ${selectedCustomer.phone}`
-                : "Walk-in customer"}
-            </div>
+            <span className="font-bold text-slate-900 text-sm">Current Sale</span>
+            {totalItems > 0 && (
+              <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm shadow-red-200">
+                {totalItems}
+              </span>
+            )}
           </div>
-          <Badge>{totalItems} items</Badge>
+          {/* Sale channel tabs */}
+          <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-100 p-0.5">
+            {SALE_CHANNELS.map((ch) => (
+              <button
+                key={ch.value}
+                type="button"
+                onClick={() => setSaleChannel(ch.value)}
+                title={ch.label}
+                className={cn(
+                  "flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold transition",
+                  saleChannel === ch.value
+                    ? "bg-white text-red-500 shadow-sm"
+                    : "text-slate-400 hover:text-slate-700"
+                )}
+              >
+                {channelIcon[ch.value]}
+                <span className="hidden sm:inline">{ch.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
+        <p className="mt-1 truncate text-[10px] text-slate-400 pl-9">
+          {saleMode === "wholesale" && selectedCustomer
+            ? `${selectedCustomer.shopName} · ${selectedCustomer.phone}`
+            : "Walk-in customer"}
+        </p>
       </div>
 
-      <div className="max-h-[640px] flex-1 space-y-3 overflow-y-auto px-5 py-4">
+      {/* ── Cart items — compact single-row ── */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2 space-y-1.5">
         {cart.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-            Search fast, click product, choose unit and quantity, then add to cart.
-          </div>
+          <EmptyState
+            icon={<ShoppingCart className="h-5 w-5" />}
+            title="Cart is empty"
+            description="Tap a product to add it."
+          />
         ) : (
-          cart.map((item) => (
-            <div key={item.id} className="rounded-3xl border border-slate-200 bg-white p-3">
-              <div className="flex items-start gap-3">
-                <div className="h-14 w-14 overflow-hidden rounded-2xl bg-slate-100">
-                  <img src={item.image} alt={item.variantName} className="h-full w-full object-cover" />
+          cart.map((item, index) => (
+            <div
+              key={item.id}
+              className="group flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-2.5 py-2 transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+            >
+              {/* Index number */}
+              <span className="hidden shrink-0 text-[10px] font-bold text-slate-300 xl:block w-3 text-center">
+                {index + 1}
+              </span>
+
+              {/* Thumbnail */}
+              <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <img src={item.image} alt={item.productName} className="h-full w-full object-cover" />
+              </div>
+
+              {/* Name + meta */}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[11px] font-bold leading-tight text-slate-900">{item.productName}</p>
+                <div className="mt-0.5 flex items-center gap-1">
+                  <span className="rounded bg-slate-200 px-1 py-0.5 text-[9px] font-semibold text-slate-600 leading-none">
+                    {item.unitName}
+                  </span>
+                  <span className="truncate text-[9px] text-slate-400">{usd(item.unitPrice)}/ea</span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="line-clamp-1 font-medium text-slate-900">{item.productName}</div>
-                  <div className="line-clamp-1 text-sm text-slate-500">{item.variantName}</div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <Badge>{item.unitName}</Badge>
-                    <span className="text-xs text-slate-500">{item.appliedRuleLabel}</span>
-                  </div>
-                </div>
-                <button type="button" onClick={() => onRemove(item.id)} className="rounded-xl p-2 text-red-500 hover:bg-red-50">
-                  <Trash2 className="h-4 w-4" />
+              </div>
+
+              {/* Qty controls */}
+              <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-0.5 py-0.5 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => onUpdateQty(item.id, -1)}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-red-500"
+                >
+                  <Minus className="h-2.5 w-2.5" />
+                </button>
+                <span className="min-w-5 text-center text-xs font-extrabold text-slate-900">{item.qty}</span>
+                <button
+                  type="button"
+                  onClick={() => onUpdateQty(item.id, 1)}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-emerald-600"
+                >
+                  <Plus className="h-2.5 w-2.5" />
                 </button>
               </div>
 
-              <div className="mt-3 flex items-center justify-between">
-                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 px-2 py-1">
-                  <button type="button" onClick={() => onUpdateQty(item.id, -1)} className="rounded-xl p-2 hover:bg-slate-100">
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  <span className="min-w-[28px] text-center font-semibold text-slate-900">{item.qty}</span>
-                  <button type="button" onClick={() => onUpdateQty(item.id, 1)} className="rounded-xl p-2 hover:bg-slate-100">
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-sm text-slate-500">{usd(item.unitPrice)} / {item.unitName}</div>
-                  <div className="font-semibold text-slate-900">{usd(item.lineTotal)}</div>
-                </div>
+              {/* Line total */}
+              <div className="shrink-0 text-right">
+                <p className="text-sm font-extrabold text-slate-900">{usd(item.lineTotal)}</p>
               </div>
+
+              {/* Remove — visible on hover */}
+              <button
+                type="button"
+                onClick={() => onRemove(item.id)}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-200 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
             </div>
           ))
         )}
       </div>
 
-      <div className="border-t border-slate-200 p-5">
-        <div className="rounded-3xl bg-slate-50 p-4">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-500">Subtotal</span>
-            <span className="font-medium text-slate-900">{usd(subtotal)}</span>
+      {/* ── Bottom fixed section ── */}
+      <div className="shrink-0 border-t border-slate-100">
+
+        {/* Discount */}
+        <div className="px-3 pt-3 pb-2">
+          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            <Percent className="h-3 w-3" /> Discount
           </div>
-          <div className="mt-2 flex items-center justify-between text-sm">
-            <span className="text-slate-500">Discount</span>
-            <span className="font-medium text-slate-900">$0.00</span>
+          <div className="flex gap-1.5">
+            <select
+              value={discountType}
+              onChange={(e) => { setDiscountType(e.target.value); setDiscountValue(""); }}
+              className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100"
+            >
+              <option value="none">No Discount</option>
+              <option value="percent">% Off</option>
+              <option value="amount">$ Amount</option>
+            </select>
+            {discountType !== "none" && (
+              <input
+                type="number"
+                min="0"
+                value={discountValue}
+                onChange={(e) => setDiscountValue(e.target.value)}
+                placeholder={discountType === "percent" ? "5" : "1.00"}
+                className="h-9 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100"
+              />
+            )}
+            {discountType !== "none" && discountAmount > 0 && (
+              <span className="flex h-9 items-center rounded-xl bg-emerald-50 px-2.5 text-xs font-bold text-emerald-600">
+                −{usd(discountAmount)}
+              </span>
+            )}
           </div>
-          <div className="mt-2 border-t border-slate-200 pt-2">
-            <div className="flex items-center justify-between text-base font-semibold">
-              <span>Total</span>
-              <span>{usd(total)}</span>
+        </div>
+
+        <div className="mx-3 h-px bg-slate-100" />
+
+        {/* Delivery */}
+        <div className="px-3 py-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              <Truck className="h-3 w-3" /> Delivery
+            </div>
+            <button
+              type="button"
+              onClick={() => setDeliveryRequired((v) => !v)}
+              className={cn(
+                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
+                deliveryRequired ? "bg-red-500" : "bg-slate-200"
+              )}
+            >
+              <span className={cn(
+                "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
+                deliveryRequired ? "translate-x-4" : "translate-x-0"
+              )} />
+            </button>
+          </div>
+          {deliveryRequired && (
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <select
+                value={deliveryOption}
+                onChange={(e) => setDeliveryOption(e.target.value)}
+                className="col-span-2 h-8 rounded-xl border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-red-300"
+              >
+                {DELIVERY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <select
+                value={deliveryFeeCurrency}
+                onChange={(e) => setDeliveryFeeCurrency(e.target.value)}
+                className="h-8 rounded-xl border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-red-300"
+              >
+                <option value="USD">USD ($)</option>
+                <option value="KHR">KHR (៛)</option>
+              </select>
+              <input
+                type="number"
+                min="0"
+                value={deliveryFee}
+                onChange={(e) => setDeliveryFee(e.target.value)}
+                placeholder="2.00"
+                className="h-8 rounded-xl border border-slate-200 bg-white px-2.5 text-sm outline-none focus:border-red-300"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="mx-3 h-px bg-slate-100" />
+
+        {/* Totals */}
+        <div className="px-3 py-2.5">
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between text-slate-500">
+              <span>Subtotal</span>
+              <span className="font-semibold text-slate-800">{usd(subtotal)}</span>
+            </div>
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-emerald-600">
+                <span>Discount</span>
+                <span className="font-semibold">−{usd(discountAmount)}</span>
+              </div>
+            )}
+            {deliveryRequired && deliveryFeeUsd > 0 && (
+              <div className="flex justify-between text-slate-500">
+                <span>Delivery</span>
+                <span className="font-semibold text-slate-800">+{usd(deliveryFeeUsd)}</span>
+              </div>
+            )}
+          </div>
+          {/* Grand Total */}
+          <div className="mt-2.5 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5">
+            <span className="text-sm font-bold text-slate-700">Grand Total</span>
+            <div className="text-right">
+              <p className="text-xl font-extrabold text-slate-900">{usd(total)}</p>
+              <p className="text-[10px] text-slate-400">{khr(total * EXCHANGE_RATE)}</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <button className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">
-            <Receipt className="mr-2 h-4 w-4" /> Hold
-          </button>
-          <button className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">
-            <Printer className="mr-2 h-4 w-4" /> Print
-          </button>
-          <button className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">
-            <ArrowRightLeft className="mr-2 h-4 w-4" /> Return
-          </button>
+        <div className="mx-3 h-px bg-slate-100" />
+
+        {/* Action buttons */}
+        <div className="px-3 pb-3 pt-2.5 space-y-2">
+          <div className="grid grid-cols-3 gap-1.5">
+            <button
+              type="button"
+              onClick={onHold}
+              disabled={cart.length === 0}
+              className="flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Receipt className="h-3.5 w-3.5" /> Hold
+            </button>
+            <button
+              type="button"
+              className="flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50 hover:border-slate-300"
+            >
+              <Printer className="h-3.5 w-3.5" /> Print
+            </button>
+            <button
+              type="button"
+              onClick={onClear}
+              disabled={cart.length === 0}
+              className="flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Clear
+            </button>
+          </div>
+
           <button
             type="button"
-            onClick={onClear}
-            className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            disabled={cart.length === 0}
+            onClick={onOpenPayment}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-red-500 to-rose-500 text-sm font-extrabold text-white shadow-md shadow-red-200 transition hover:from-red-600 hover:to-rose-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
           >
-            <Trash2 className="mr-2 h-4 w-4" /> Clear
+            <Wallet className="h-4 w-4" />
+            Pay Now — {usd(total)}
           </button>
         </div>
-
-        <button
-          type="button"
-          disabled={cart.length === 0}
-          onClick={onOpenPayment}
-          className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-2xl bg-red-500 px-4 text-base font-medium text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          <Wallet className="mr-2 h-5 w-5" /> Pay Now
-        </button>
       </div>
-    </SectionCard>
+    </div>
   );
 }

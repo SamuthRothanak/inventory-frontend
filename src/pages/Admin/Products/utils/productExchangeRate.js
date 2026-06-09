@@ -6,15 +6,16 @@ export function extractActiveRate(response) {
   if (!response || response?.success === false) return empty;
 
   const list = extractApiData(response);
+  const records = Array.isArray(list) ? list : list ? [list] : [];
 
-  if (!Array.isArray(list) || list.length === 0) return empty;
+  if (records.length === 0) return empty;
 
-  const activeRecords = list.filter((item) => {
+  const activeRecords = records.filter((item) => {
     const status = String(item.status ?? "").toLowerCase();
     return status === "active" || item.status === 1 || item.status === true;
   });
 
-  const pool = activeRecords.length > 0 ? activeRecords : list;
+  const pool = activeRecords.length > 0 ? activeRecords : records;
 
   const sorted = [...pool].sort((a, b) => {
     const dateA = new Date(a.rate_date || a.rateDate || 0).getTime();

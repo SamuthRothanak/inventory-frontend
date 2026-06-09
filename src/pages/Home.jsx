@@ -18,6 +18,7 @@ import {
   FiShield,
   FiFileText,
   FiSettings,
+  FiSliders,
   FiDatabase,
   FiActivity,
   FiRefreshCcw,
@@ -69,8 +70,8 @@ function MenuLink({ item, collapsed, isDark }) {
           isActive
             ? "bg-red-500 text-white shadow-sm shadow-red-500/20"
             : isDark
-            ? "text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950",
+              ? "text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950",
         ].join(" ")
       }
     >
@@ -181,13 +182,13 @@ export default function Home() {
   const isAdminPath = adminMenus.some(
     (item) =>
       location.pathname === item.path ||
-      location.pathname.startsWith(item.path + "/")
+      location.pathname.startsWith(item.path + "/"),
   );
 
   const isSystemPath = systemMenus.some(
     (item) =>
       location.pathname === item.path ||
-      location.pathname.startsWith(item.path + "/")
+      location.pathname.startsWith(item.path + "/"),
   );
 
   const [openAdmin, setOpenAdmin] = useState(isAdminPath);
@@ -215,11 +216,11 @@ export default function Home() {
     const pathname = location.pathname;
 
     const allMenus = [...mainMenus, ...adminMenus, ...systemMenus].sort(
-      (a, b) => b.path.length - a.path.length
+      (a, b) => b.path.length - a.path.length,
     );
 
     const found = allMenus.find(
-      (item) => pathname === item.path || pathname.startsWith(item.path + "/")
+      (item) => pathname === item.path || pathname.startsWith(item.path + "/"),
     );
 
     return found ? found.label : "Dashboard";
@@ -323,7 +324,7 @@ export default function Home() {
 
               <MenuGroup
                 title="System"
-                icon={FiSettings}
+                icon={FiSliders}
                 items={systemMenus}
                 open={openSystem}
                 setOpen={setOpenSystem}

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   FiAlertTriangle,
   FiEdit2,
@@ -9,6 +9,7 @@ import {
 
 import ModalShell from "./ModalShell";
 import ProductThumb from "./ProductThumb";
+import { QuickCreateUnitBox } from "./ProductSetupFormModal";
 
 function VariantThumb({ variant, size = "normal" }) {
   const className =
@@ -129,7 +130,24 @@ export default function ProductManageModal({
   onAddPriceRule,
   onEditPriceRule,
   onDeletePriceRule,
+
+  units = [],
+  isCreatingUnit = false,
+  isUpdatingUnit = false,
+  isDeletingUnit = false,
+  onCreateUnit,
+  onUpdateUnit,
+  onDeleteUnit,
 }) {
+  const [quickUnitOpen, setQuickUnitOpen] = useState(false);
+  const [quickUnit, setQuickUnit] = useState({
+    unit_code: "",
+    unit_name: "",
+    unit_type: "piece",
+    allow_decimal: false,
+    status: "active",
+  });
+
   return (
     <ModalShell
       title={`Manage Product Setup: ${product.name}`}
@@ -304,14 +322,51 @@ export default function ProductManageModal({
                     </p>
                   </div>
 
-                  <SmallActionButton
-                    variant="green"
-                    onClick={() => onAddVariantUnit?.(variant)}
-                  >
-                    <FiPlus />
-                    Add Unit Row
-                  </SmallActionButton>
+                  <div className="flex flex-wrap gap-2">
+                    <SmallActionButton
+                      variant="blue"
+                      onClick={() => setQuickUnitOpen((value) => !value)}
+                    >
+                      <FiPlus />
+                      Manage Units
+                    </SmallActionButton>
+
+                    <SmallActionButton
+                      variant="green"
+                      onClick={() => onAddVariantUnit?.(variant)}
+                    >
+                      <FiPlus />
+                      Add Unit Row
+                    </SmallActionButton>
+                  </div>
                 </div>
+
+                {quickUnitOpen && (
+                  <div className="mt-3">
+                    <QuickCreateUnitBox
+                      theme={theme}
+                      units={units}
+                      quickUnit={quickUnit}
+                      setQuickUnit={setQuickUnit}
+                      isCreatingUnit={isCreatingUnit}
+                      isUpdatingUnit={isUpdatingUnit}
+                      isDeletingUnit={isDeletingUnit}
+                      onCreateUnit={onCreateUnit}
+                      onUpdateUnit={onUpdateUnit}
+                      onDeleteUnit={onDeleteUnit}
+                      onClose={() => setQuickUnitOpen(false)}
+                      onCreated={() => {
+                        setQuickUnit({
+                          unit_code: "",
+                          unit_name: "",
+                          unit_type: "piece",
+                          allow_decimal: false,
+                          status: "active",
+                        });
+                      }}
+                    />
+                  </div>
+                )}
 
                 <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
                   {variant.units.length === 0 && (

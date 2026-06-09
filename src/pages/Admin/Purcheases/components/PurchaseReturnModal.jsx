@@ -40,9 +40,6 @@ function getResolutionDetail(item, resolutionType) {
   if (resolutionType === "credit" || resolutionType === "credit_note") {
     return `Supplier gives credit ${formatCurrencyPair(item.creditAmountUsd, item.creditAmountKhr)}`;
   }
-  if (resolutionType === "discount") {
-    return `Supplier gives discount ${formatCurrencyPair(item.creditAmountUsd, item.creditAmountKhr)}`;
-  }
   return `Supplier replaces ${item.replacementQty || item.qtyReturned || 0} ${item.unitName}; received ${item.replacementReceivedQty || 0}`;
 }
 
@@ -131,7 +128,6 @@ export function PurchaseReturnModal({
                   { value: "replacement", label: "Replacement" },
                   { value: "refund", label: "Refund" },
                   { value: "credit_note", label: "Credit Note" },
-                  { value: "discount", label: "Discount" },
                   { value: "none", label: "None" },
                 ]}
               />
@@ -192,6 +188,7 @@ export function PurchaseReturnModal({
                     label: `${item.variantName} - available ${item.availableQty} ${item.unitName}`,
                   })),
                 ]}
+                searchable
               />
               <FormInput label="Claim Qty" required type="number" value={itemForm.qtyReturned} error={itemErrors.qtyReturned} onChange={(value) => onItemChange("qtyReturned", value)} theme={theme} icon={<FiHash />} />
               <FormSelect label="Condition" required value={itemForm.condition} error={itemErrors.condition} onChange={(value) => onItemChange("condition", value)} theme={theme} icon={<FiAlertTriangle />} options={conditionOptions} />

@@ -31,6 +31,25 @@ export default function SearchableDropdown({
   const selectedOption = options.find(
     (o) => String(o.value) === String(value),
   );
+  const themeText = [
+    theme.isDark ? "dark" : "",
+    theme.select,
+    theme.input,
+    theme.modal,
+    theme.section,
+  ].join(" ");
+  const isDark =
+    Boolean(theme.isDark) ||
+    themeText.includes("bg-[#") ||
+    themeText.includes("bg-zinc-900") ||
+    themeText.includes("text-white");
+  const dropdownClass = isDark
+    ? "border-white/10 bg-[#18181b] text-zinc-100 shadow-2xl shadow-black/30"
+    : "border-zinc-200 bg-white text-zinc-800 shadow-xl shadow-zinc-200/70";
+  const searchWrapClass = isDark ? "border-white/10" : "border-zinc-200";
+  const searchInputClass = isDark
+    ? "border-white/10 bg-[#111113] text-zinc-100 placeholder:text-zinc-500"
+    : "border-zinc-300 bg-white text-zinc-900 placeholder:text-zinc-400";
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -104,16 +123,16 @@ export default function SearchableDropdown({
 
         {open && (
           <div
-            className={`absolute z-50 mt-2 w-full overflow-hidden rounded-xl border bg-white shadow-xl dark:bg-zinc-900 ${theme.section}`}
+            className={`absolute z-50 mt-2 w-full overflow-hidden rounded-xl border ${dropdownClass}`}
           >
             {searchable && (
-              <div className="border-b border-zinc-200 p-2 dark:border-white/10">
+              <div className={`border-b p-2 ${searchWrapClass}`}>
                 <input
                   autoFocus
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search..."
-                  className={`h-9 w-full rounded-lg border px-3 text-sm outline-none ${theme.input}`}
+                  className={`h-9 w-full rounded-lg border px-3 text-sm outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-500/20 ${searchInputClass}`}
                 />
               </div>
             )}
@@ -134,8 +153,10 @@ export default function SearchableDropdown({
                     onClick={() => handleSelect(option.value)}
                     className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition ${
                       isActive
-                        ? "bg-emerald-500/10 font-semibold text-emerald-600 dark:text-emerald-400"
-                        : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/10"
+                        ? "bg-red-500/10 font-semibold text-red-500 dark:text-red-400"
+                        : isDark
+                        ? "text-zinc-200 hover:bg-white/[0.06] hover:text-white"
+                        : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
                     }`}
                   >
                     <span className="truncate">{option.label}</span>

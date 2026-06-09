@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   FiBox,
   FiCheckCircle,
@@ -109,7 +109,9 @@ function makePriceRule(unitLocalKey) {
 }
 
 export default function VariantSetupFormModal({
+  mode = "add",
   product,
+  variant = null,
   units = [],
   theme,
   activeExchangeRate = DEFAULT_EXCHANGE_RATE,
@@ -118,20 +120,31 @@ export default function VariantSetupFormModal({
   onClose,
   onSave,
 }) {
+  const isEdit = mode === "edit";
   const initialUnitKey = React.useMemo(() => makeLocalKey("unit"), []);
 
-  const [variantForm, setVariantForm] = useState({
-    product_id: product?.id || "",
-    variant_code: generateVariantCode(product?.name || product?.productName),
-    variant_name: product?.name || product?.productName || "",
-    package_type: "",
-    color: "",
-    size_value: "",
-    size_unit: "",
-    low_stock_threshold: 0,
-    status: true,
+  const makeVariantForm = (sourceVariant = null) => ({
+    product_id: product?.id || sourceVariant?.productId || sourceVariant?.product_id || "",
+    variant_code: sourceVariant?.variantCode || sourceVariant?.variant_code || generateVariantCode(product?.name || product?.productName),
+    variant_name: sourceVariant?.variantName || sourceVariant?.variant_name || product?.name || product?.productName || "",
+    package_type: sourceVariant?.packageType || sourceVariant?.package_type || "",
+    color: sourceVariant?.color || "",
+    size_value: sourceVariant?.sizeValue || sourceVariant?.size_value || "",
+    size_unit: sourceVariant?.sizeUnit || sourceVariant?.size_unit || "",
+    low_stock_threshold: sourceVariant?.lowStockThreshold ?? sourceVariant?.low_stock_threshold ?? 0,
+    status:
+      sourceVariant?.status === undefined
+        ? true
+        : sourceVariant.status === true ||
+          sourceVariant.status === "active" ||
+          sourceVariant.status === 1 ||
+          sourceVariant.status === "1",
     imageFile: null,
   });
+
+  const [variantForm, setVariantForm] = useState(() =>
+    makeVariantForm(isEdit ? variant : null)
+  );
 
   const [unitRows, setUnitRows] = useState([
     {
@@ -149,6 +162,10 @@ export default function VariantSetupFormModal({
   const [formError, setFormError] = useState("");
 
   const selectedImage = variantForm.imageFile;
+
+  useEffect(() => {
+    setVariantForm(makeVariantForm(isEdit ? variant : null));
+  }, [isEdit, product, variant]);
 
   const updateVariant = (field, value) => {
     setVariantForm((prev) => ({ ...prev, [field]: value }));
@@ -207,6 +224,7 @@ export default function VariantSetupFormModal({
     if (!variantForm.variant_code.trim()) return "Variant code is required.";
     if (!variantForm.variant_name.trim()) return "Variant name is required.";
     if (!variantForm.package_type.trim()) return "Package type is required.";
+    if (isEdit) return "";
     if (unitRows.length === 0) return "At least one unit is required.";
     for (const unit of unitRows) {
       if (!unit.unit_id) return "Each unit must select a Unit.";
@@ -231,6 +249,16 @@ export default function VariantSetupFormModal({
       return;
     }
     setFormError("");
+    if (isEdit) {
+      onSave?.({
+        ...variantForm,
+        product_id: product?.id || variantForm.product_id,
+        low_stock_threshold: Number(variantForm.low_stock_threshold || 0),
+        status: Boolean(variantForm.status),
+      });
+      return;
+    }
+
     onSave?.({
       variant: {
         ...variantForm,
@@ -260,10 +288,12 @@ export default function VariantSetupFormModal({
 
   return (
     <ModalShell
-      title="Add Variant Setup"
-      subtitle={`Product: ${
-        product?.name || product?.productName || "-"
-      } · Create variant, units, and price rules.`}
+      title={isEdit ? "Edit Variant" : "Add Variant Setup"}
+      subtitle={
+        isEdit
+          ? `Product: ${product?.name || product?.productName || "-"} - Update variant information.`
+          : `Product: ${product?.name || product?.productName || "-"} - Create variant, units, and price rules.`
+      }
       theme={theme}
       onClose={onClose}
       width="max-w-6xl"
@@ -276,7 +306,7 @@ export default function VariantSetupFormModal({
           <button type="submit" form="variant-setup-form" disabled={isSaving}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
             <FiSave />
-            {isSaving ? "Saving..." : "Save Variant Setup"}
+            {isSaving ? "Saving..." : isEdit ? "Save Variant" : "Save Variant Setup"}
           </button>
         </>
       }
@@ -312,8 +342,11 @@ export default function VariantSetupFormModal({
               value={variantForm.size_value} onChange={(v) => updateVariant("size_value", v)} placeholder="330" />
             <FormInput label="Size Unit" sanitize="text" theme={theme} icon={<FiTag />}
               value={variantForm.size_unit} onChange={(v) => updateVariant("size_unit", v)} placeholder="ml" />
-            <FormInput label="Low Stock Threshold" sanitize="number" allowDecimal={false} theme={theme} icon={<FiHash />}
+            <FormInput label="Low Stock Threshold (Base Unit)" sanitize="number" allowDecimal={false} theme={theme} icon={<FiHash />}
               value={variantForm.low_stock_threshold} onChange={(v) => updateVariant("low_stock_threshold", v)} />
+            <p className={`-mt-2 text-xs leading-5 ${theme.muted}`}>
+              Count this in the base unit, e.g. Can or Bottle. Case is only a converted unit.
+            </p>
             <FormSelect label="Status" theme={theme}
               icon={variantForm.status ? <FiCheckCircle /> : <FiXCircle />}
               value={variantForm.status ? "1" : "0"}
@@ -326,6 +359,7 @@ export default function VariantSetupFormModal({
           </div>
         </Section>
 
+        {!isEdit && (
         <Section theme={theme} icon={<FiLayers />} title="2. Units & Prices"
           subtitle="Each unit (Can, Case...) has its own prices. Example: 1 Case = 24 Can.">
           <div className="mb-4 flex justify-end">
@@ -466,6 +500,7 @@ export default function VariantSetupFormModal({
             })}
           </div>
         </Section>
+        )}
       </form>
     </ModalShell>
   );
@@ -530,18 +565,16 @@ function FormInput({
 
 function FormSelect({ label, required = false, theme, icon, value, onChange, options }) {
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}{required && <span className="ml-1 text-red-400">*</span>}
-      </span>
-      <div className="relative">
-        {icon && <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>{icon}</span>}
-        <select value={value} onChange={(e) => onChange(e.target.value)}
-          className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "pl-3"} pr-3 text-sm outline-none transition focus:ring-4 ${theme.select}`}>
-          {options.map((o) => <option key={String(o.value)} value={o.value}>{o.label}</option>)}
-        </select>
-      </div>
-    </label>
+    <SearchableDropdown
+      label={label}
+      required={required}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={onChange}
+      options={options}
+      searchable={options.length > 6}
+    />
   );
 }
 
@@ -557,7 +590,7 @@ function ImageInput({ label, theme, previewFile, onChange }) {
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
-      <div className="rounded-2xl border border-dashed border-red-400/40 bg-red-500/[0.03] p-4">
+      <div className="rounded-2xl border border-dashed border-zinc-300 bg-white/0 p-4 transition hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/5">
             {previewUrl ? <img src={previewUrl} alt="Selected variant" className="h-full w-full object-cover" /> : <FiImage className="text-3xl text-red-500" />}

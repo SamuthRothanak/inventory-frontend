@@ -5,8 +5,6 @@ import {
   FiAlertTriangle,
   FiCalendar,
   FiCheckCircle,
-  FiChevronDown,
-  FiClock,
   FiCreditCard,
   FiDollarSign,
   FiEdit2,
@@ -18,8 +16,6 @@ import {
   FiPackage,
   FiPlus,
   FiRotateCcw,
-  FiSave,
-  FiSearch,
   FiShoppingCart,
   FiTrash,
   FiTruck,
@@ -31,7 +27,6 @@ import {
   deliveryPaidByOptions,
   paymentModeOptions,
   paymentStatusOptions,
-  STATUS,
 } from "../utils/purchaseConstants";
 import { calculateCurrencyPreview, formatCurrencyPair, formatDateOnly } from "../utils/purchaseUtils";
 import { purchaseFormSchema } from "../schemas/purchaseSchemas";
@@ -61,8 +56,6 @@ export function PurchaseFormModal({
 
   onClose,
 
-  onSaveDraft,
-
   onSavePrimary,
 
   primarySaveLabel,
@@ -86,6 +79,7 @@ export function PurchaseFormModal({
   };
 
   const isReceiveMode = mode === "receive_goods";
+  const isPayAfterCheck = form.paymentMode === "pay_after_check";
 
   const title = mode === "add" ? "Add Purchase" : isReceiveMode ? "Receive Goods" : "Edit Purchase";
 
@@ -113,8 +107,6 @@ export function PurchaseFormModal({
 
           <button type="button" onClick={onClose} className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">Cancel</button>
 
-          {!isReceiveMode && <button type="button" disabled={isSaving} onClick={handleSubmit(() => onSaveDraft())} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"><FiSave />{isSaving ? "Saving..." : "Save Draft"}</button>}
-
           <button type="button" disabled={isSaving} onClick={handleSubmit(() => onSavePrimary())} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"><FiCheckCircle />{isSaving ? "Saving..." : primarySaveLabel}</button>
 
         </>
@@ -137,19 +129,21 @@ export function PurchaseFormModal({
 
               <Controller control={control} name="purchaseNo" render={({ field }) => <FormInput label="Purchase No" required value={field.value} error={fieldError("purchaseNo")} onChange={bindField("purchaseNo", field.onChange)} theme={theme} placeholder="PUR-001" icon={<FiHash />} />} />
 
-              <Controller control={control} name="supplierId" render={({ field }) => <FormSelect label="Supplier" required value={field.value} error={fieldError("supplierId")} onChange={bindField("supplierId", field.onChange)} theme={theme} icon={<FiUser />} options={[{ value: "", label: "Select supplier" }, ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))]} />} />
+              <Controller control={control} name="supplierId" render={({ field }) => <FormSelect label="Supplier" required value={field.value} error={fieldError("supplierId")} onChange={bindField("supplierId", field.onChange)} theme={theme} icon={<FiUser />} options={[{ value: "", label: "Select supplier" }, ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))]} searchable />} />
 
               <Controller control={control} name="purchaseDate" render={({ field }) => <FormInput label="Purchase Date" required type="date" value={field.value} error={fieldError("purchaseDate")} onChange={bindField("purchaseDate", field.onChange)} theme={theme} icon={<FiCalendar />} />} />
 
-              <Controller control={control} name="exchangeRateUsed" render={({ field }) => <FormInput label="Exchange Rate Used" required type="number" value={field.value} error={fieldError("exchangeRateUsed")} onChange={bindField("exchangeRateUsed", field.onChange)} theme={theme} icon={<span className="text-base font-bold">KHR</span>} />} />
-
-              <Controller control={control} name="inputCurrency" render={({ field }) => <FormSelect label="Invoice Currency" required value={field.value} error={fieldError("inputCurrency")} onChange={bindField("inputCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
-
               <Controller control={control} name="paymentMode" render={({ field }) => <FormSelect label="Payment Mode" required value={field.value} error={fieldError("paymentMode")} onChange={bindField("paymentMode", field.onChange)} theme={theme} icon={<FiCreditCard />} options={paymentModeOptions} />} />
 
-              <Controller control={control} name="paymentStatus" render={({ field }) => <FormSelect label="Payment Status" required value={field.value} error={fieldError("paymentStatus")} onChange={bindField("paymentStatus", field.onChange)} theme={theme} icon={<FiDollarSign />} options={paymentStatusOptions} />} />
+              {!isPayAfterCheck && (
+                <>
+                  <Controller control={control} name="inputCurrency" render={({ field }) => <FormSelect label="Invoice Currency" required value={field.value} error={fieldError("inputCurrency")} onChange={bindField("inputCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
 
-              <Controller control={control} name="status" render={({ field }) => <FormSelect label="Status" value={field.value} error={fieldError("status")} onChange={bindField("status", field.onChange)} theme={theme} icon={<FiClock />} options={[STATUS.DRAFT, STATUS.PENDING_RECEIVE, STATUS.PENDING_STOCK_IN, STATUS.PENDING_CLAIM, STATUS.CANCELLED].map((status) => ({ value: status, label: status }))} />} />
+                  <Controller control={control} name="exchangeRateUsed" render={({ field }) => <FormInput label="Exchange Rate Used" required type="number" value={field.value} error={fieldError("exchangeRateUsed")} onChange={bindField("exchangeRateUsed", field.onChange)} theme={theme} icon={<FiCreditCard />} helper={Number(field.value || 0) > 0 ? `1 USD = ${Number(field.value).toLocaleString()} KHR` : "Example: 1 USD = 4000 KHR"} />} />
+
+                  <Controller control={control} name="paymentStatus" render={({ field }) => <FormSelect label="Payment Status" required value={field.value} error={fieldError("paymentStatus")} onChange={bindField("paymentStatus", field.onChange)} theme={theme} icon={<FiDollarSign />} options={paymentStatusOptions} />} />
+                </>
+              )}
 
             </div>
 
@@ -273,6 +267,12 @@ export function PurchaseFormModal({
 
           <FormSection title="3. Payment, Delivery & Summary" subtitle="Delivery information, discount, paid amount, balance, and total amount." icon={<FiTruck />} theme={theme}>
 
+            {isPayAfterCheck && (
+              <div className="mb-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm leading-6 text-emerald-700 dark:text-emerald-300">
+                Final payment is not required yet. After goods arrive, enter received, accepted, and damaged quantities; the payable amount will be calculated from accepted quantity only.
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
               <Controller control={control} name="deliveryOption" render={({ field }) => <FormSelect label="Delivery Option" value={field.value} onChange={bindField("deliveryOption", field.onChange)} theme={theme} icon={<FiTruck />} options={deliveryOptions} />} />
@@ -287,9 +287,13 @@ export function PurchaseFormModal({
 
               <Controller control={control} name="discountTotal" render={({ field }) => <FormInput label="Discount Total" type="number" value={field.value} error={fieldError("discountTotal")} onChange={bindField("discountTotal", field.onChange)} theme={theme} icon={<FiCreditCard />} />} />
 
-              <Controller control={control} name="paidCurrency" render={({ field }) => <FormSelect label="Paid Currency" value={field.value} error={fieldError("paidCurrency")} onChange={bindField("paidCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
+              {!isPayAfterCheck && (
+                <>
+                  <Controller control={control} name="paidCurrency" render={({ field }) => <FormSelect label="Paid Currency" value={field.value} error={fieldError("paidCurrency")} onChange={bindField("paidCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
 
-              <Controller control={control} name="paidAmount" render={({ field }) => <FormInput label="Paid Amount" type="number" value={form.paymentStatus === "paid" ? (form.paidCurrency === "KHR" ? currencyPreview.grandTotalKhr : currencyPreview.grandTotalUsd) : field.value} error={fieldError("paidAmount")} onChange={bindField("paidAmount", field.onChange)} theme={theme} icon={form.paidCurrency === "KHR" ? <span className="text-base font-bold">KHR</span> : <FiDollarSign />} />} />
+                  <Controller control={control} name="paidAmount" render={({ field }) => <FormInput label="Paid Amount" type="number" value={form.paymentStatus === "paid" ? (form.paidCurrency === "KHR" ? currencyPreview.grandTotalKhr : currencyPreview.grandTotalUsd) : field.value} error={fieldError("paidAmount")} onChange={bindField("paidAmount", field.onChange)} theme={theme} icon={form.paidCurrency === "KHR" ? <span className="text-base font-bold">KHR</span> : <FiDollarSign />} />} />
+                </>
+              )}
 
             </div>
 
@@ -303,15 +307,15 @@ export function PurchaseFormModal({
 
               <SummaryMiniBox theme={theme} label="Delivery Fee" value={formatCurrencyPair(currencyPreview.deliveryUsd, currencyPreview.deliveryKhr)} />
 
-              <SummaryMiniBox theme={theme} label="Paid Amount" value={formatCurrencyPair(currencyPreview.paidAmountUsd, currencyPreview.paidAmountKhr)} />
+              {!isPayAfterCheck && <SummaryMiniBox theme={theme} label="Paid Amount" value={formatCurrencyPair(currencyPreview.paidAmountUsd, currencyPreview.paidAmountKhr)} />}
 
-              <SummaryMiniBox theme={theme} label="Balance" value={formatCurrencyPair(currencyPreview.balanceUsd, currencyPreview.balanceKhr)} strong />
+              {!isPayAfterCheck && <SummaryMiniBox theme={theme} label="Balance" value={formatCurrencyPair(currencyPreview.balanceUsd, currencyPreview.balanceKhr)} strong />}
 
-              <SummaryMiniBox theme={theme} label="Grand Total" value={formatCurrencyPair(currencyPreview.grandTotalUsd, currencyPreview.grandTotalKhr)} strong />
+              <SummaryMiniBox theme={theme} label={isPayAfterCheck ? "Estimated Payable" : "Grand Total"} value={formatCurrencyPair(currencyPreview.grandTotalUsd, currencyPreview.grandTotalKhr)} strong />
 
             </div>
 
-            {(!form.exchangeRateUsed || Number(form.exchangeRateUsed) <= 0) && (
+            {!isPayAfterCheck && (!form.exchangeRateUsed || Number(form.exchangeRateUsed) <= 0) && (
 
               <div className="mt-4 rounded-xl bg-red-500/10 p-4 text-sm font-semibold text-red-500">
 
@@ -381,7 +385,7 @@ export function PaymentModeHint({ mode }) {
 
   if (mode === "pay_after_check") {
 
-    return <div className="mt-4 rounded-xl bg-emerald-500/10 p-4 text-sm leading-6 text-emerald-700 dark:text-emerald-400">Pay After Check: damaged goods are excluded from payment and stock. Payable qty = accepted qty. Claim qty = 0.</div>;
+    return <div className="mt-4 rounded-xl bg-emerald-500/10 p-4 text-sm leading-6 text-emerald-700 dark:text-emerald-400">Pay After Check: do not collect final payment before goods arrive. Payable amount is calculated after receiving from accepted quantity only; damaged goods are excluded from payment and stock.</div>;
 
   }
 

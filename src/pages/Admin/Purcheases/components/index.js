@@ -10,3 +10,4 @@ export { PurchaseItemModal } from "./PurchaseItemModal";
 export { PurchaseReturnModal } from "./PurchaseReturnModal";
 export { ReceiveReplacementModal } from "./ReceiveReplacementModal";
 export { ViewPurchaseModal } from "./ViewPurchaseModal";
+export { RecordPaymentModal } from "./RecordPaymentModal";

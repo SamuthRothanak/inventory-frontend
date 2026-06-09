@@ -1,5 +1,5 @@
 import React from "react";
-import { FiCalendar, FiCheckCircle, FiPackage, FiSave } from "react-icons/fi";
+import { FiCalendar, FiCheckCircle, FiHash, FiPackage, FiRotateCcw, FiSave } from "react-icons/fi";
 import { formatCurrencyPair, formatDateOnly } from "../utils/purchaseUtils";
 import { FormInput, FormSection, ModalShell } from "./PurchaseCommon";
 
@@ -42,6 +42,28 @@ export function ReceiveReplacementModal({
       }
     >
       <div className="space-y-5">
+        <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
+              <FiRotateCcw />
+            </div>
+            <div className="grid flex-1 grid-cols-1 gap-3 text-sm md:grid-cols-3">
+              <div>
+                <p className={`text-xs font-semibold ${theme.muted}`}>Supplier Claim</p>
+                <p className="mt-1 font-bold">{purchaseReturn?.purchaseReturnNo || purchaseReturn?.purchase_return_no || "-"}</p>
+              </div>
+              <div>
+                <p className={`text-xs font-semibold ${theme.muted}`}>Original Purchase</p>
+                <p className="mt-1 font-bold">{purchase?.purchaseNo || purchase?.purchase_no || "-"}</p>
+              </div>
+              <div>
+                <p className={`text-xs font-semibold ${theme.muted}`}>Resolution</p>
+                <p className="mt-1 font-bold">Supplier replacement</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className={`rounded-2xl border p-4 text-sm leading-6 ${theme.softCard}`}>
           {purchase.status === "Received"
             ? "This purchase is already stocked in. Replacement will create a new purchase-return stock movement."
@@ -57,7 +79,7 @@ export function ReceiveReplacementModal({
           <div className="space-y-3">
             {items.map((item, index) => (
               <div key={`${item.purchaseItemId}-${index}`} className={`rounded-2xl border p-4 ${theme.softCard}`}>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr_1fr] lg:items-end">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.9fr_1fr] lg:items-end">
                   <div>
                     <p className="text-sm font-bold">{item.variantName}</p>
                     <p className={`mt-1 text-xs ${theme.muted}`}>
@@ -77,6 +99,15 @@ export function ReceiveReplacementModal({
                       {formatDateOnly(item.originalExpiry) === formatDateOnly(item.expiryDate) ? "Merge same expiry" : "Create separate batch"}
                     </p>
                   </div>
+                  <FormInput
+                    label="Replacement Lot No"
+                    value={item.lotNo || ""}
+                    error={errors?.items?.[index]?.lotNo}
+                    onChange={(value) => onChangeItem(index, "lotNo", value)}
+                    theme={theme}
+                    icon={<FiHash />}
+                    placeholder="Optional"
+                  />
                   <FormInput
                     label="Replacement Expiry"
                     type="date"

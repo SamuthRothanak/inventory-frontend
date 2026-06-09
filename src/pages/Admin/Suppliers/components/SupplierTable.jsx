@@ -1,4 +1,5 @@
 import {
+  FiCheckSquare,
   FiCheckCircle,
   FiChevronLeft,
   FiChevronRight,
@@ -12,6 +13,7 @@ import {
   FiTrash2,
   FiTruck,
   FiUser,
+  FiX,
   FiXCircle,
 } from "react-icons/fi";
 
@@ -43,9 +45,17 @@ export default function SupplierTable({
   isLoading,
   isError,
   isDeleting = false,
+  bulkDeleteIsPending = false,
+  bulkSelectMode = false,
+  selectedSupplierIds = [],
   onView,
   onEdit,
   onDelete,
+  onOpenBulkSelect,
+  onCancelBulkSelect,
+  onToggleSelect,
+  onToggleSelectAll,
+  onBulkDelete,
 }) {
   const totalPages = Number(pagination?.lastPage || 1);
   const currentPage = Number(pagination?.currentPage || page || 1);
@@ -53,6 +63,13 @@ export default function SupplierTable({
   const to = Number(pagination?.to || 0);
 
   const pageNumbers = getPageNumbers(currentPage, totalPages);
+  const tableColSpan = bulkSelectMode ? 6 : 5;
+  const pageSupplierIds = suppliers.map((item) => Number(item.id));
+  const allVisibleSelected =
+    pageSupplierIds.length > 0 &&
+    pageSupplierIds.every((id) =>
+      selectedSupplierIds.some((selectedId) => Number(selectedId) === id)
+    );
 
   return (
     <div
@@ -71,12 +88,61 @@ export default function SupplierTable({
           </p>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          {bulkSelectMode ? (
+            <>
+              <button
+                type="button"
+                onClick={onCancelBulkSelect}
+                disabled={bulkDeleteIsPending}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-xs font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              >
+                <FiX />
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={onBulkDelete}
+                disabled={selectedSupplierIds.length === 0 || bulkDeleteIsPending}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FiTrash2 />
+                {bulkDeleteIsPending
+                  ? "Deleting..."
+                  : `Delete Selected (${selectedSupplierIds.length})`}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenBulkSelect}
+              disabled={suppliers.length === 0 || isLoading || isError}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-xs font-semibold text-red-500 shadow-sm transition hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <FiCheckSquare />
+              Select Multiple
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px]">
+        <table className="w-full min-w-[1040px]">
           <thead className="bg-red-600 text-white">
             <tr>
+              {bulkSelectMode && (
+                <th className="w-14 px-5 py-3 text-left text-sm font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={onToggleSelectAll}
+                    aria-label="Select all visible suppliers"
+                    className="h-4 w-4 rounded border-white/60 text-red-500 focus:ring-red-500"
+                  />
+                </th>
+              )}
+
               <th className="px-5 py-3 text-left text-sm font-semibold">
                 Supplier
               </th>
@@ -103,12 +169,12 @@ export default function SupplierTable({
             {isLoading ? (
               <TableLoading
                 theme={theme}
-                colSpan={5}
+                colSpan={tableColSpan}
                 text="Loading suppliers..."
               />
             ) : isError ? (
               <tr className={`border-t ${theme.row}`}>
-                <td colSpan="5" className="px-4 py-14 text-center">
+                <td colSpan={tableColSpan} className="px-4 py-14 text-center">
                   <p className="text-sm font-semibold text-red-500">
                     Failed to load suppliers.
                   </p>
@@ -120,6 +186,20 @@ export default function SupplierTable({
                   key={item.id}
                   className={`border-t transition ${theme.row}`}
                 >
+                  {bulkSelectMode && (
+                    <td className="px-5 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedSupplierIds.some(
+                          (id) => Number(id) === Number(item.id)
+                        )}
+                        onChange={() => onToggleSelect(item.id)}
+                        aria-label={`Select ${item.name}`}
+                        className="h-4 w-4 rounded border-zinc-300 text-red-500 focus:ring-red-500 dark:border-white/20"
+                      />
+                    </td>
+                  )}
+
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
@@ -228,7 +308,7 @@ export default function SupplierTable({
               ))
             ) : (
               <tr className={`border-t ${theme.row}`}>
-                <td colSpan="5" className="px-4 py-14 text-center">
+                <td colSpan={tableColSpan} className="px-4 py-14 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <div
                       className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}

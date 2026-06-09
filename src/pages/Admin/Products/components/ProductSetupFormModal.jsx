@@ -5,6 +5,7 @@ import {
   FiBox,
   FiCheckCircle,
   FiDollarSign,
+  FiEdit2,
   FiFileText,
   FiGrid,
   FiHash,
@@ -42,6 +43,30 @@ function onlyPositiveNumber(value, allowDecimal = true) {
 
 function onlyText(value) {
   return String(value || "").replace(/[0-9]/g, "");
+}
+
+function detectUnitType(unitName) {
+  const value = String(unitName || "").trim().toLowerCase();
+  const exactWeightKeywords = ["kg", "kgs", "g"];
+  const exactVolumeKeywords = ["ml", "l"];
+  const weightKeywords = ["kilogram", "kilograms", "gram", "grams", "គីឡូ", "គីឡូក្រាម", "ក្រាម"];
+  const volumeKeywords = ["milliliter", "milliliters", "liter", "liters", "litre", "litres", "លីត្រ", "មីលីលីត្រ"];
+
+  if (
+    exactWeightKeywords.includes(value) ||
+    weightKeywords.some((keyword) => value.includes(keyword))
+  ) {
+    return "weight";
+  }
+
+  if (
+    exactVolumeKeywords.includes(value) ||
+    volumeKeywords.some((keyword) => value.includes(keyword))
+  ) {
+    return "volume";
+  }
+
+  return "piece";
 }
 
 function preventInvalidNumberKey(event, allowDecimal = true) {
@@ -98,6 +123,8 @@ export default function ProductSetupFormModal({
   onSave,
 }) {
   const [formErrorMessage, setFormErrorMessage] = useState("");
+  const [activeVariantIndex, setActiveVariantIndex] = useState(null);
+  const [pendingNewVariantIndex, setPendingNewVariantIndex] = useState(null);
 
   const {
     register,
@@ -118,6 +145,7 @@ export default function ProductSetupFormModal({
   } = useFieldArray({ control, name: "variants" });
 
   const selectedProductImage = watch("product.imageFile");
+  const watchedVariants = watch("variants") || [];
 
   const generateVariantCode = ({ productName, variantIndex }) => {
     const cleanName = String(productName || "PRODUCT")
@@ -167,11 +195,67 @@ export default function ProductSetupFormModal({
         },
       ],
     });
+    setActiveVariantIndex(variantIndex);
+    setPendingNewVariantIndex(variantIndex);
+  };
+
+  const handleOpenVariant = (variantIndex) => {
+    setActiveVariantIndex(variantIndex);
+    setPendingNewVariantIndex(null);
+  };
+
+  const handleSaveVariantModal = () => {
+    setActiveVariantIndex(null);
+    setPendingNewVariantIndex(null);
+  };
+
+  const handleCloseVariantModal = () => {
+    if (pendingNewVariantIndex !== null) {
+      removeVariant(pendingNewVariantIndex);
+    }
+    setActiveVariantIndex(null);
+    setPendingNewVariantIndex(null);
+  };
+
+  const getUnitLabel = (unitId) => {
+    const unit = units.find((item) => String(item.id) === String(unitId));
+    return unit?.unit_name || unit?.unitName || unit?.unit_code || "Unit";
+  };
+
+  const getPackageTypeFromVariant = (variant = {}) => {
+    const variantUnits = variant.units || [];
+    const baseUnit = variantUnits.find((item) => item.is_base_unit) || variantUnits[0];
+    const unitLabel = getUnitLabel(baseUnit?.unit_id);
+    return unitLabel === "Unit" ? "" : unitLabel.toLowerCase();
+  };
+
+  const getVariantUnitSummary = (variant = {}) => {
+    const variantUnits = variant.units || [];
+    if (variantUnits.length === 0) return "No units";
+    return variantUnits
+      .map((item) => `${Number(item.conversion_qty || 1)} ${getUnitLabel(item.unit_id)}`)
+      .join(", ");
+  };
+
+  const getVariantPriceSummary = (variant = {}) => {
+    const prices = variant.priceRules || [];
+    if (prices.length === 0) return "-";
+    const firstPrice = prices[0];
+    const usd = Number(firstPrice.unit_price_usd || 0);
+    const khr = Number(firstPrice.unit_price_khr || 0);
+    return `$${usd.toFixed(2)} / ${khr.toLocaleString()} KHR`;
   };
 
   const submitForm = (values) => {
     setFormErrorMessage("");
-    onSave(values);
+    const normalizedValues = {
+      ...values,
+      variants: (values.variants || []).map((variant) => ({
+        ...variant,
+        package_type: String(variant.package_type || getPackageTypeFromVariant(variant) || "").trim(),
+      })),
+    };
+    onSave(normalizedValues);
   };
 
   const handleInvalidSubmit = () => {
@@ -228,6 +312,8 @@ export default function ProductSetupFormModal({
             <input type="hidden" {...register("product.category_id")} />
             <FormSelectRHF label="Status" error={errors.product?.status?.message} theme={theme}
               icon={watch("product.status") === "active" ? <FiCheckCircle /> : <FiXCircle />}
+              value={watch("product.status")}
+              onChange={(value) => setValue("product.status", value, { shouldValidate: true })}
               inputProps={register("product.status")}
               options={[{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }]} />
           </div>
@@ -271,32 +357,108 @@ export default function ProductSetupFormModal({
             </div>
           )}
 
-          <div className="space-y-5">
-            {variantFields.map((variantField, variantIndex) => (
-              <VariantSetupCard
-                key={variantField.id}
-                variantIndex={variantIndex}
-                register={register}
-                control={control}
-                setValue={setValue}
-                watch={watch}
-                errors={errors}
-                theme={theme}
-                units={units}
-                activeExchangeRate={activeExchangeRate}
-                activeKhrRounding={activeKhrRounding}
-                isCreatingUnit={isCreatingUnit}
-                isUpdatingUnit={isUpdatingUnit}
-                isDeletingUnit={isDeletingUnit}
-                onCreateUnit={onCreateUnit}
-                onUpdateUnit={onUpdateUnit}
-                onDeleteUnit={onDeleteUnit}
-                onRemoveVariant={() => removeVariant(variantIndex)}
-              />
-            ))}
-          </div>
+          {variantFields.length > 0 && (
+            <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-white/10">
+              <table className="w-full min-w-[920px] text-sm">
+                <thead className="bg-red-600 text-white">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Variant</th>
+                    <th className="px-4 py-3 text-left">Package / Size</th>
+                    <th className="px-4 py-3 text-left">Units</th>
+                    <th className="px-4 py-3 text-left">Price</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {variantFields.map((variantField, variantIndex) => {
+                    const variant = watchedVariants[variantIndex] || {};
+                    return (
+                      <tr key={variantField.id} className="border-t border-zinc-200 dark:border-white/10">
+                        <td className="px-4 py-3">
+                          <p className="font-semibold">{variant.variant_name || `Variant #${variantIndex + 1}`}</p>
+                          <p className={`mt-1 text-xs ${theme.muted}`}>{variant.variant_code || "-"}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p>{variant.package_type || "-"}</p>
+                          <p className={`mt-1 text-xs ${theme.muted}`}>
+                            {[variant.size_value, variant.size_unit].filter(Boolean).join(" ") || "No size"}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3">{getVariantUnitSummary(variant)}</td>
+                        <td className="px-4 py-3 font-semibold">{getVariantPriceSummary(variant)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${variant.status ? "bg-emerald-500/10 text-emerald-500" : "bg-zinc-500/10 text-zinc-400"}`}>
+                            {variant.status ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <button type="button" onClick={() => handleOpenVariant(variantIndex)}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700">
+                              <FiEdit2 />
+                              Edit
+                            </button>
+                            <button type="button" onClick={() => removeVariant(variantIndex)}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
+                              <FiTrash2 />
+                              Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </FormSection>
       </form>
+
+      {activeVariantIndex !== null && variantFields[activeVariantIndex] && (
+        <ModalShell
+          title={pendingNewVariantIndex !== null ? "Add Variant" : "Edit Variant"}
+          subtitle="Set variant information, units, and price rules for this product."
+          theme={theme}
+          onClose={handleCloseVariantModal}
+          width="max-w-6xl"
+          footer={
+            <>
+              <button type="button" onClick={handleCloseVariantModal}
+                className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+                Cancel
+              </button>
+              <button type="button" onClick={handleSaveVariantModal}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600">
+                <FiSave />
+                Save Variant
+              </button>
+            </>
+          }
+        >
+          <VariantSetupCard
+            key={variantFields[activeVariantIndex].id}
+            variantIndex={activeVariantIndex}
+            register={register}
+            control={control}
+            setValue={setValue}
+            watch={watch}
+            errors={errors}
+            theme={theme}
+            units={units}
+            activeExchangeRate={activeExchangeRate}
+            activeKhrRounding={activeKhrRounding}
+            isCreatingUnit={isCreatingUnit}
+            isUpdatingUnit={isUpdatingUnit}
+            isDeletingUnit={isDeletingUnit}
+            onCreateUnit={onCreateUnit}
+            onUpdateUnit={onUpdateUnit}
+            onDeleteUnit={onDeleteUnit}
+            onRemoveVariant={null}
+          />
+        </ModalShell>
+      )}
     </ModalShell>
   );
 }
@@ -346,6 +508,20 @@ function VariantSetupCard({
   const allPriceRules = watch(`variants.${variantIndex}.priceRules`) || [];
   const variantErrors = errors.variants?.[variantIndex];
 
+  const getUnitPackageType = (unitId) => {
+    const unit = units.find((item) => String(item.id) === String(unitId));
+    const name = unit?.unit_name || unit?.unitName || unit?.unit_code || "";
+    return String(name).trim().toLowerCase();
+  };
+
+  const autoFillPackageType = (unitId) => {
+    const currentPackageType = watch(`variants.${variantIndex}.package_type`);
+    const packageType = getUnitPackageType(unitId);
+    if (!currentPackageType && packageType) {
+      setValue(`variants.${variantIndex}.package_type`, packageType, { shouldValidate: true });
+    }
+  };
+
   const unitLabel = (unitItem, index) => {
     const unit = units.find((u) => String(u.id) === String(unitItem?.unit_id));
     const name = unit?.unit_name || unit?.unitName || unit?.unit_code;
@@ -358,10 +534,10 @@ function VariantSetupCard({
     appendUnit({
       local_key: makeLocalKey("unit"),
       unit_id: "",
-      conversion_qty: 1,
+      conversion_qty: "",
       is_base_unit: false,
       is_default_sale_unit: false,
-      is_default_purchase_unit: false,
+      is_default_purchase_unit: true,
       status: true,
     });
   };
@@ -440,11 +616,13 @@ function VariantSetupCard({
             Configure variant image, units, and price rules per unit.
           </p>
         </div>
-        <button type="button" onClick={onRemoveVariant}
-          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
-          <FiTrash2 />
-          Remove Variant
-        </button>
+        {onRemoveVariant && (
+          <button type="button" onClick={onRemoveVariant}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
+            <FiTrash2 />
+            Remove Variant
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -452,16 +630,19 @@ function VariantSetupCard({
           inputProps={register(`variants.${variantIndex}.variant_code`)} placeholder="PV-COCA-330ML-CAN" />
         <FormInput label="Variant Name" required error={variantErrors?.variant_name?.message} theme={theme} icon={<FiPackage />}
           inputProps={register(`variants.${variantIndex}.variant_name`)} placeholder="Coca Cola 330ml Can" />
-        <FormInput label="Package Type" required error={variantErrors?.package_type?.message} theme={theme} icon={<FiBox />}
-          inputProps={register(`variants.${variantIndex}.package_type`)} placeholder="can, bottle" />
+        <FormInput label="Package Type" error={variantErrors?.package_type?.message} theme={theme} icon={<FiBox />}
+          inputProps={register(`variants.${variantIndex}.package_type`)} placeholder="Auto from base unit, e.g. can" />
         <FormInput label="Color" sanitize="text" error={variantErrors?.color?.message} theme={theme} icon={<FiTag />}
           inputProps={register(`variants.${variantIndex}.color`)} placeholder="red" />
         <FormInput label="Size Value" sanitize="number" allowDecimal={true} error={variantErrors?.size_value?.message} theme={theme} icon={<FiHash />}
           inputProps={register(`variants.${variantIndex}.size_value`)} placeholder="330" />
         <FormInput label="Size Unit" sanitize="text" error={variantErrors?.size_unit?.message} theme={theme} icon={<FiTag />}
           inputProps={register(`variants.${variantIndex}.size_unit`)} placeholder="ml" />
-        <FormInput label="Low Stock Threshold" type="number" sanitize="number" allowDecimal={false} error={variantErrors?.low_stock_threshold?.message} theme={theme} icon={<FiHash />}
+        <FormInput label="Low Stock Threshold (Base Unit)" type="number" sanitize="number" allowDecimal={false} error={variantErrors?.low_stock_threshold?.message} theme={theme} icon={<FiHash />}
           inputProps={register(`variants.${variantIndex}.low_stock_threshold`)} />
+        <p className={`-mt-2 text-xs leading-5 ${theme.muted}`}>
+          Count this in the base unit, e.g. Can or Bottle. Case is only a converted unit.
+        </p>
         <FormSelect label="Status" theme={theme} icon={<FiCheckCircle />}
           value={watch(`variants.${variantIndex}.status`) ? "1" : "0"}
           onChange={(value) => setValue(`variants.${variantIndex}.status`, value === "1", { shouldValidate: true })}
@@ -557,7 +738,12 @@ function VariantSetupCard({
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_1fr_2fr]">
                   <SearchableDropdown label="Unit" required error={unitErrors?.unit_id?.message} theme={theme} icon={<FiLayers />}
                     value={watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`)}
-                    onChange={(v) => setValue(`variants.${variantIndex}.units.${unitIndex}.unit_id`, v, { shouldValidate: true })}
+                    onChange={(v) => {
+                      setValue(`variants.${variantIndex}.units.${unitIndex}.unit_id`, v, { shouldValidate: true });
+                      if (watch(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`)) {
+                        autoFillPackageType(v);
+                      }
+                    }}
                     placeholder="Select unit"
                     options={[
                       ...units.map((u) => ({
@@ -567,7 +753,23 @@ function VariantSetupCard({
                     ]} />
                   <input type="hidden" {...register(`variants.${variantIndex}.units.${unitIndex}.unit_id`)} />
                   <FormInput label="Conversion Qty" required type="number" sanitize="number" allowDecimal={true} error={unitErrors?.conversion_qty?.message} theme={theme} icon={<FiHash />}
-                    inputProps={register(`variants.${variantIndex}.units.${unitIndex}.conversion_qty`)} />
+                    inputProps={{
+                      ...register(`variants.${variantIndex}.units.${unitIndex}.conversion_qty`),
+                      onChange: (e) => {
+                        register(`variants.${variantIndex}.units.${unitIndex}.conversion_qty`).onChange(e);
+                        const qty = Number(e.target.value || 1);
+                        const base = `variants.${variantIndex}.units.${unitIndex}`;
+                        if (qty === 1) {
+                          setValue(`${base}.is_base_unit`, true, { shouldValidate: true });
+                          setValue(`${base}.is_default_sale_unit`, true, { shouldValidate: true });
+                          setValue(`${base}.is_default_purchase_unit`, false, { shouldValidate: true });
+                        } else {
+                          setValue(`${base}.is_base_unit`, false, { shouldValidate: true });
+                          setValue(`${base}.is_default_sale_unit`, false, { shouldValidate: true });
+                          setValue(`${base}.is_default_purchase_unit`, true, { shouldValidate: true });
+                        }
+                      },
+                    }} />
                   <div>
                     <p className={`mb-2 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
                       <FiInfo /> Unit Options
@@ -575,7 +777,12 @@ function VariantSetupCard({
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <CheckBox label="Base Unit" helper="Smallest stock unit, e.g. Can"
                         checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`)}
-                        onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`, c, { shouldValidate: true })} />
+                        onChange={(c) => {
+                          setValue(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`, c, { shouldValidate: true });
+                          if (c) {
+                            autoFillPackageType(watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`));
+                          }
+                        }} />
                       <CheckBox label="Default Sale" helper="Default unit for selling"
                         checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`)}
                         onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`, c, { shouldValidate: true })} />
@@ -617,6 +824,8 @@ function VariantSetupCard({
                         <div key={rf.id} className={`rounded-lg border p-3 ${theme.section}`}>
                           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                             <FormSelectRHF label="Applies To" required error={ruleErrors?.applies_to?.message} theme={theme} icon={<FiTag />}
+                              value={watch(`variants.${variantIndex}.priceRules.${idx}.applies_to`)}
+                              onChange={(value) => setValue(`variants.${variantIndex}.priceRules.${idx}.applies_to`, value, { shouldValidate: true })}
                               inputProps={register(`variants.${variantIndex}.priceRules.${idx}.applies_to`)}
                               options={[
                                 { value: "retail", label: "Retail" },
@@ -670,23 +879,29 @@ function VariantSetupCard({
   );
 }
 
-function QuickCreateUnitBox({
+export function QuickCreateUnitBox({
   theme, units, quickUnit, setQuickUnit,
   isCreatingUnit, isUpdatingUnit, isDeletingUnit,
   onCreateUnit, onUpdateUnit, onDeleteUnit, onClose, onCreated,
 }) {
   const [editingUnitId, setEditingUnitId] = useState(null);
+  const [unitError, setUnitError] = useState("");
 
   const generateUnitCode = (unitName) =>
     String(unitName || "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
+  const getSuggestedUnitType = (unitName = quickUnit.unit_name) =>
+    detectUnitType(unitName);
+
   const resetForm = () => {
     setEditingUnitId(null);
+    setUnitError("");
     setQuickUnit({ unit_code: "", unit_name: "", unit_type: "piece", allow_decimal: false, status: "active" });
   };
 
   const handleEdit = (unit) => {
     setEditingUnitId(unit.id);
+    setUnitError("");
     setQuickUnit({
       unit_code: unit.unit_code || "",
       unit_name: unit.unit_name || unit.unitName || "",
@@ -697,26 +912,51 @@ function QuickCreateUnitBox({
   };
 
   const handleSave = async () => {
+    setUnitError("");
     const finalUnitName = quickUnit.unit_name.trim();
     const finalUnitCode = quickUnit.unit_code.trim() || generateUnitCode(finalUnitName);
     if (!finalUnitName) { alert("Please input unit name."); return; }
     if (!finalUnitCode) { alert("Unit code could not be generated."); return; }
+    const duplicateUnit = units.find((unit) => {
+      const unitCode = String(unit.unit_code || unit.unitCode || "").toUpperCase();
+      const unitName = String(unit.unit_name || unit.unitName || "").trim().toLowerCase();
+      const sameCode = unitCode === finalUnitCode.toUpperCase();
+      const sameName = unitName === finalUnitName.toLowerCase();
+      const sameRecord = editingUnitId && String(unit.id) === String(editingUnitId);
+
+      return !sameRecord && (sameCode || sameName);
+    });
+
+    if (duplicateUnit) {
+      setUnitError(`Unit "${finalUnitName}" already exists. Please edit the existing unit or use another name.`);
+      return;
+    }
+
     const payload = {
       unit_code: finalUnitCode.toUpperCase(),
       unit_name: finalUnitName,
-      unit_type: quickUnit.unit_type || "piece",
+      unit_type: getSuggestedUnitType(finalUnitName),
       allow_decimal: Boolean(quickUnit.allow_decimal),
       status: quickUnit.status || "active",
     };
-    if (editingUnitId) {
-      if (!onUpdateUnit) { alert("Update unit handler is missing."); return; }
-      await onUpdateUnit({ id: editingUnitId, payload });
-      resetForm();
-      return;
+    try {
+      if (editingUnitId) {
+        if (!onUpdateUnit) { alert("Update unit handler is missing."); return; }
+        await onUpdateUnit({ id: editingUnitId, payload });
+        resetForm();
+        return;
+      }
+      if (!onCreateUnit) { alert("Create unit handler is missing."); return; }
+      await onCreateUnit(payload);
+      onCreated?.();
+    } catch (error) {
+      const validationMessage =
+        error?.response?.data?.message ||
+        Object.values(error?.response?.data?.errors || {})?.flat()?.[0] ||
+        "Unit could not be saved. Please check the unit name/code.";
+
+      setUnitError(validationMessage);
     }
-    if (!onCreateUnit) { alert("Create unit handler is missing."); return; }
-    await onCreateUnit(payload);
-    onCreated?.();
   };
 
   const handleDelete = async (unit) => {
@@ -750,7 +990,15 @@ function QuickCreateUnitBox({
         <label className="block md:col-span-1">
           <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>Unit Name *</span>
           <input value={quickUnit.unit_name}
-            onChange={(e) => { const n = e.target.value; setQuickUnit((p) => ({ ...p, unit_name: n, unit_code: generateUnitCode(n) })); }}
+            onChange={(e) => {
+              const n = e.target.value;
+              setQuickUnit((p) => ({
+                ...p,
+                unit_name: n,
+                unit_code: generateUnitCode(n),
+                unit_type: detectUnitType(n),
+              }));
+            }}
             placeholder="Case"
             className={`h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
         </label>
@@ -763,24 +1011,23 @@ function QuickCreateUnitBox({
         </label>
         <label className="block md:col-span-1">
           <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>Unit Type</span>
-          <select value={quickUnit.unit_type}
-            onChange={(e) => setQuickUnit((p) => ({ ...p, unit_type: e.target.value }))}
-            className={`h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${theme.select}`}>
-            <option value="piece">Piece</option>
-            <option value="weight">Weight</option>
-            <option value="volume">Volume</option>
-            <option value="custom">Custom</option>
-          </select>
+          <div className={`flex h-11 items-center rounded-xl border px-3 text-sm capitalize ${theme.softCard}`}>
+            {getSuggestedUnitType()}
+          </div>
         </label>
-        <label className="block md:col-span-1">
-          <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>Status</span>
-          <select value={quickUnit.status}
-            onChange={(e) => setQuickUnit((p) => ({ ...p, status: e.target.value }))}
-            className={`h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${theme.select}`}>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-        </label>
+        <div className="md:col-span-1">
+          <SearchableDropdown
+            label="Status"
+            theme={theme}
+            value={quickUnit.status}
+            onChange={(value) => setQuickUnit((previous) => ({ ...previous, status: value }))}
+            options={[
+              { value: "active", label: "Active" },
+              { value: "inactive", label: "Inactive" },
+            ]}
+            searchable={false}
+          />
+        </div>
         <div className="flex items-end">
           <button type="button" disabled={isCreatingUnit || isUpdatingUnit} onClick={handleSave}
             className="h-11 w-full rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
@@ -788,6 +1035,12 @@ function QuickCreateUnitBox({
           </button>
         </div>
       </div>
+
+      {unitError && (
+        <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-500">
+          {unitError}
+        </div>
+      )}
 
       <label className={`mt-3 flex cursor-pointer items-center gap-2 text-xs ${theme.muted}`}>
         <input type="checkbox" checked={Boolean(quickUnit.allow_decimal)}
@@ -857,7 +1110,7 @@ function ImageInput({ label, theme, previewFile, onChange, uniqueId = "" }) {
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
-      <div className="rounded-2xl border border-dashed border-red-400/40 bg-red-500/[0.03] p-4">
+      <div className="rounded-2xl border border-dashed border-zinc-300 bg-white/0 p-4 transition hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/5">
             {previewUrl ? <img src={previewUrl} alt="Selected" className="h-full w-full object-cover" /> : <FiImage className="text-3xl text-red-500" />}
@@ -986,38 +1239,48 @@ function FormTextarea({ label, error = "", theme, icon, inputProps, placeholder 
   );
 }
 
-function FormSelectRHF({ label, required = false, error = "", theme, icon, inputProps, options }) {
+function FormSelectRHF({ label, required = false, error = "", theme, icon, value, onChange, inputProps, options }) {
+  const handleChange = (nextValue) => {
+    if (onChange) {
+      onChange(nextValue);
+      return;
+    }
+
+    inputProps?.onChange?.({
+      target: {
+        name: inputProps.name,
+        value: nextValue,
+      },
+    });
+  };
+
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}{required && <span className="ml-1 text-red-400">*</span>}
-      </span>
-      <div className="relative">
-        {icon && <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>{icon}</span>}
-        <select {...inputProps}
-          className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "pl-3"} pr-3 text-sm outline-none transition focus:ring-4 ${theme.select} ${error ? "border-red-500 focus:border-red-500" : ""}`}>
-          {options.map((o) => <option key={String(o.value)} value={o.value}>{o.label}</option>)}
-        </select>
-      </div>
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
-    </label>
+    <SearchableDropdown
+      label={label}
+      required={required}
+      error={error}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={handleChange}
+      options={options}
+      searchable={options.length > 6}
+    />
   );
 }
 
 function FormSelect({ label, required = false, theme, icon, value, onChange, options }) {
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}{required && <span className="ml-1 text-red-400">*</span>}
-      </span>
-      <div className="relative">
-        {icon && <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>{icon}</span>}
-        <select value={value} onChange={(e) => onChange(e.target.value)}
-          className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "pl-3"} pr-3 text-sm outline-none transition focus:ring-4 ${theme.select}`}>
-          {options.map((o) => <option key={String(o.value)} value={o.value}>{o.label}</option>)}
-        </select>
-      </div>
-    </label>
+    <SearchableDropdown
+      label={label}
+      required={required}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={onChange}
+      options={options}
+      searchable={options.length > 6}
+    />
   );
 }
 

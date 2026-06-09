@@ -2,10 +2,12 @@ import {
   FiCheckCircle,
   FiChevronLeft,
   FiChevronRight,
+  FiCheckSquare,
   FiEdit2,
   FiEye,
   FiSearch,
   FiTrash2,
+  FiX,
   FiXCircle,
 } from "react-icons/fi";
 
@@ -23,15 +25,32 @@ export default function CategoryTable({
   isError,
   error,
   deleteIsPending,
+  bulkDeleteIsPending,
+  bulkSelectMode = false,
+  selectedCategoryIds = [],
   theme,
   onView,
   onEdit,
   onDelete,
+  onOpenBulkSelect,
+  onCancelBulkSelect,
+  onToggleSelect,
+  onToggleSelectAll,
+  onBulkDelete,
 }) {
   const totalPages = Number(pagination?.lastPage || 1);
   const currentPage = Number(pagination?.currentPage || page || 1);
   const from = Number(pagination?.from || 0);
   const to = Number(pagination?.to || 0);
+  const selectedCount = selectedCategoryIds.length;
+  const pageIds = categories.map((item) => Number(item.id));
+  const hasCategories = categories.length > 0;
+  const allPageSelected =
+    hasCategories &&
+    pageIds.every((id) =>
+      selectedCategoryIds.some((selectedId) => Number(selectedId) === id)
+    );
+  const tableColSpan = bulkSelectMode ? 5 : 4;
 
   const pageNumbers = getPageNumbers(currentPage, totalPages);
 
@@ -52,12 +71,58 @@ export default function CategoryTable({
           </p>
         </div>
 
+        {bulkSelectMode ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onCancelBulkSelect}
+              disabled={bulkDeleteIsPending || deleteIsPending}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+            >
+              <FiX />
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={onBulkDelete}
+              disabled={selectedCount === 0 || bulkDeleteIsPending || deleteIsPending}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FiTrash2 />
+              {bulkDeleteIsPending ? "Deleting..." : `Delete Selected (${selectedCount})`}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpenBulkSelect}
+            disabled={!hasCategories || isLoading || isError}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-sm font-semibold text-red-500 shadow-sm transition hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FiCheckSquare />
+            Select Multiple
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px]">
           <thead className="bg-red-600 text-white">
             <tr>
+              {bulkSelectMode && (
+                <th className="w-14 px-5 py-3 text-left text-sm font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={allPageSelected}
+                    disabled={!hasCategories || isLoading || isError}
+                    onChange={onToggleSelectAll}
+                    className="h-4 w-4 rounded border-white/40 accent-red-500"
+                    aria-label="Select all categories on this page"
+                  />
+                </th>
+              )}
+
               <th className="px-5 py-3 text-left text-sm font-semibold">
                 Category
               </th>
@@ -80,12 +145,12 @@ export default function CategoryTable({
             {isLoading ? (
               <TableLoading
                 theme={theme}
-                colSpan={4}
+                colSpan={tableColSpan}
                 text="Loading categories..."
               />
             ) : isError ? (
               <tr className={`border-t ${theme.row}`}>
-                <td colSpan="4" className="px-4 py-14 text-center">
+                <td colSpan={tableColSpan} className="px-4 py-14 text-center">
                   <p className="text-sm font-semibold text-red-500">
                     {error?.response?.data?.message ||
                       "Failed to load categories."}
@@ -98,6 +163,21 @@ export default function CategoryTable({
                   key={item.id}
                   className={`border-t transition ${theme.row}`}
                 >
+                  {bulkSelectMode && (
+                    <td className="px-5 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedCategoryIds.some(
+                          (id) => Number(id) === Number(item.id)
+                        )}
+                        onChange={() => onToggleSelect(item.id)}
+                        disabled={deleteIsPending || bulkDeleteIsPending}
+                        className="h-4 w-4 rounded border-zinc-300 accent-red-500 dark:border-white/20"
+                        aria-label={`Select ${item.name}`}
+                      />
+                    </td>
+                  )}
+
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
                       <CategoryImage image={item.imagePath} name={item.name} />
@@ -114,9 +194,11 @@ export default function CategoryTable({
                             Category
                           </span>
 
-                          <span className={`text-xs ${theme.muted}`}>
-                            Updated: {item.updatedAt}
-                          </span>
+                          {item.hasBeenUpdated && (
+                            <span className={`text-xs ${theme.muted}`}>
+                              Updated: {item.updatedAt}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -169,7 +251,7 @@ export default function CategoryTable({
               ))
             ) : (
               <tr className={`border-t ${theme.row}`}>
-                <td colSpan="4" className="px-4 py-14 text-center">
+                <td colSpan={tableColSpan} className="px-4 py-14 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <div
                       className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}

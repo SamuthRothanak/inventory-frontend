@@ -1,19 +1,8 @@
 import api from "../lib/axios";
 
-const getCreatedData = (response) => {
-  if (response?.data?.id) return response.data;
-  if (response?.data?.data?.id) return response.data.data;
-  if (response?.id) return response;
-  return null;
-};
-
-const withoutItems = (payload = {}) => {
-  const { items, ...header } = payload;
-  return header;
-};
-
 const withoutClientId = (payload = {}) => {
-  const { id, ...data } = payload;
+  const data = { ...payload };
+  delete data.id;
   return data;
 };
 
@@ -38,6 +27,17 @@ const sanitizePurchaseItemPayload = (payload = {}) => {
   return next;
 };
 
+const sanitizePurchasePayload = (payload = {}) => ({
+  ...payload,
+  items: Array.isArray(payload.items)
+    ? payload.items.map((item) => {
+        const next = sanitizePurchaseItemPayload(item);
+        if (!isBackendId(next.id)) delete next.id;
+        return next;
+      })
+    : payload.items,
+});
+
 export const getPurchasesApi = async (params = {}) => {
   const response = await api.get("/purchases", { params });
   return response.data;
@@ -61,74 +61,12 @@ export const getPurchaseByIdApi = async (id) => {
 };
 
 export const createPurchaseApi = async (payload) => {
-  const items = Array.isArray(payload.items) ? payload.items : [];
-  const response = await api.post("/purchases", withoutItems(payload));
-  const purchase = getCreatedData(response.data);
-
-  if (!items.length) return response.data;
-
-  if (!purchase?.id) {
-    throw new Error("Purchase created, but purchase id was not found.");
-  }
-
-  const createdItemIds = [];
-
-  try {
-    const createdItems = [];
-
-    for (const item of items) {
-      const itemResponse = await createPurchaseItemApi({
-        ...item,
-        purchase_id: purchase.id,
-      });
-      const createdItem = getCreatedData(itemResponse);
-      if (createdItem?.id) createdItemIds.push(createdItem.id);
-      createdItems.push(itemResponse);
-    }
-
-    return {
-      ...response.data,
-      items: createdItems,
-    };
-  } catch (error) {
-    for (const item of [...createdItemIds].reverse()) {
-      try {
-        await deletePurchaseItemApi(item);
-      } catch (cleanupError) {
-        console.warn("Cleanup purchase item failed:", cleanupError);
-      }
-    }
-
-    try {
-      await deletePurchaseApi(purchase.id);
-    } catch (cleanupError) {
-      console.warn("Cleanup purchase failed:", cleanupError);
-    }
-
-    throw error;
-  }
+  const response = await api.post("/purchases", sanitizePurchasePayload(payload));
+  return response.data;
 };
 
 export const updatePurchaseApi = async ({ id, payload }) => {
-  const items = Array.isArray(payload.items) ? payload.items : [];
-  const response = await api.put(`/purchases/${id}`, withoutItems(payload));
-
-  for (const item of items) {
-    const itemPayload = sanitizePurchaseItemPayload({
-      ...withoutClientId(item),
-      purchase_id: id,
-    });
-
-    if (isBackendId(item.id)) {
-      await updatePurchaseItemApi({
-        id: item.id,
-        payload: itemPayload,
-      });
-    } else {
-      await createPurchaseItemApi(itemPayload);
-    }
-  }
-
+  const response = await api.put(`/purchases/${id}`, sanitizePurchasePayload(payload));
   return response.data;
 };
 
@@ -177,52 +115,8 @@ export const getPurchaseReturnsApi = async (params = {}) => {
 };
 
 export const createPurchaseReturnApi = async (payload) => {
-  const items = Array.isArray(payload.items) ? payload.items : [];
-  const response = await api.post("/purchase-returns", withoutItems(payload));
-  const purchaseReturn = getCreatedData(response.data);
-
-  if (!items.length) return response.data;
-
-  if (!purchaseReturn?.id) {
-    throw new Error("Purchase return created, but return id was not found.");
-  }
-
-  const createdItemIds = [];
-
-  try {
-    const createdItems = [];
-
-    for (const item of items) {
-      const itemResponse = await createPurchaseReturnItemApi({
-        ...item,
-        purchase_return_id: purchaseReturn.id,
-      });
-      const createdItem = getCreatedData(itemResponse);
-      if (createdItem?.id) createdItemIds.push(createdItem.id);
-      createdItems.push(itemResponse);
-    }
-
-    return {
-      ...response.data,
-      items: createdItems,
-    };
-  } catch (error) {
-    for (const item of [...createdItemIds].reverse()) {
-      try {
-        await deletePurchaseReturnItemApi(item);
-      } catch (cleanupError) {
-        console.warn("Cleanup purchase return item failed:", cleanupError);
-      }
-    }
-
-    try {
-      await deletePurchaseReturnApi(purchaseReturn.id);
-    } catch (cleanupError) {
-      console.warn("Cleanup purchase return failed:", cleanupError);
-    }
-
-    throw error;
-  }
+  const response = await api.post("/purchase-returns", payload);
+  return response.data;
 };
 
 export const updatePurchaseReturnApi = async ({ id, payload }) => {
@@ -245,7 +139,17 @@ export const updatePurchaseReturnItemApi = async ({ id, payload }) => {
   return response.data;
 };
 
-export const confirmPurchaseStockInApi = async (id) => {
-  const response = await api.post(`/purchases/${id}/confirm-stock-in`);
+export const deletePurchaseReturnItemApi = async (id) => {
+  const response = await api.delete(`/purchase-return-items/${id}`);
+  return response.data;
+};
+
+export const confirmPurchaseStockInApi = async (id, payload = {}) => {
+  const response = await api.post(`/purchases/${id}/confirm-stock-in`, payload);
+  return response.data;
+};
+
+export const recordPurchasePaymentApi = async ({ id, payload }) => {
+  const response = await api.patch(`/purchases/${id}/record-payment`, payload);
   return response.data;
 };

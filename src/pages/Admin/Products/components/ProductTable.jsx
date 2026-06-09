@@ -120,13 +120,9 @@ export default function ProductTable({
                       <div className="flex items-center gap-3">
                         <ProductThumb product={product} />
 
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-sm font-semibold">
                             {product.name}
-                          </p>
-
-                          <p className={`mt-1 text-xs ${theme.subText}`}>
-                            ID: {product.id}
                           </p>
                         </div>
                       </div>
@@ -138,11 +134,6 @@ export default function ProductTable({
                           product.category_name ||
                           product.category?.name ||
                           "-"}
-                      </p>
-
-                      <p className={`mt-1 text-xs ${theme.subText}`}>
-                        Category ID:{" "}
-                        {product.categoryId || product.category_id || "-"}
                       </p>
                     </td>
 

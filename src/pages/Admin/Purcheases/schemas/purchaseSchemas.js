@@ -11,7 +11,7 @@ export const purchaseFormSchema = z
     supplierId: z.union([z.string().trim().min(1, "Supplier is required."), z.coerce.number().positive("Supplier is required.")]),
     purchaseDate: z.string().trim().min(1, "Purchase date is required."),
     inputCurrency: z.enum(["USD", "KHR"]),
-    exchangeRateUsed: requiredPositiveNumber,
+    exchangeRateUsed: optionalNumber,
     paymentMode: z.enum(["pay_after_check", "prepaid", "partial_prepaid"]),
     paymentStatus: z.enum(["unpaid", "partial", "paid"]),
     status: z.string().trim().min(1, "Status is required."),
@@ -26,7 +26,17 @@ export const purchaseFormSchema = z
     note: z.string().optional(),
   })
   .superRefine((form, context) => {
-    if (form.paymentStatus === "partial" && Number(form.paidAmount || 0) <= 0) {
+    const requiresPaymentInfo = form.paymentMode !== "pay_after_check";
+
+    if (requiresPaymentInfo && Number(form.exchangeRateUsed || 0) <= 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["exchangeRateUsed"],
+        message: "Exchange rate must be greater than 0.",
+      });
+    }
+
+    if (requiresPaymentInfo && form.paymentStatus === "partial" && Number(form.paidAmount || 0) <= 0) {
       context.addIssue({
         code: "custom",
         path: ["paidAmount"],

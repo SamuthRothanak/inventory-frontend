@@ -13,6 +13,7 @@ import {
 } from "react-icons/fi";
 
 import ModalShell from "./ModalShell";
+import SearchableDropdown from "./SearchableDropdown";
 import {
   productDefaultValues,
   productSchema,
@@ -125,6 +126,8 @@ export default function ProductFormModal({
               error={errors.category_id?.message}
               theme={theme}
               icon={<FiGrid />}
+              value={watch("category_id")}
+              onChange={(value) => setValue("category_id", value, { shouldValidate: true })}
               inputProps={register("category_id")}
               options={[
                 { value: "", label: "Select category" },
@@ -146,6 +149,8 @@ export default function ProductFormModal({
                   <FiXCircle />
                 )
               }
+              value={watch("status")}
+              onChange={(value) => setValue("status", value, { shouldValidate: true })}
               inputProps={register("status")}
               options={[
                 { value: "active", label: "Active" },
@@ -313,41 +318,35 @@ function FormSelect({
   theme,
   icon,
   inputProps,
+  value,
+  onChange,
   options,
 }) {
+  const handleChange = (nextValue) => {
+    if (onChange) {
+      onChange(nextValue);
+      return;
+    }
+
+    inputProps?.onChange?.({
+      target: {
+        name: inputProps.name,
+        value: nextValue,
+      },
+    });
+  };
+
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-        {required && <span className="ml-1 text-red-400">*</span>}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <select
-          {...inputProps}
-          className={`h-11 w-full rounded-xl border ${
-            icon ? "pl-10" : "pl-3"
-          } pr-3 text-sm outline-none transition focus:ring-4 ${theme.select} ${
-            error ? "border-red-500 focus:border-red-500" : ""
-          }`}
-        >
-          {options.map((option) => (
-            <option key={String(option.value)} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
-    </label>
+    <SearchableDropdown
+      label={label}
+      required={required}
+      error={error}
+      theme={theme}
+      icon={icon}
+      value={value ?? ""}
+      onChange={handleChange}
+      options={options}
+      searchable={options.length > 6}
+    />
   );
 }

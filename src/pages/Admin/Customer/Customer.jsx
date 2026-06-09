@@ -3,8 +3,8 @@ import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FiCheckCircle,
-  FiChevronDown,
   FiFilter,
+  FiHash,
   FiPlusCircle,
   FiSearch,
   FiUsers,
@@ -12,6 +12,7 @@ import {
 } from "react-icons/fi";
 
 import {
+  bulkDeleteCustomersApi,
   getCustomersApi,
   createCustomerApi,
   updateCustomerApi,
@@ -22,6 +23,8 @@ import SummaryCard from "./components/SummaryCard";
 import CustomerTable from "./components/CustomerTable";
 import CustomerFormModal from "./components/CustomerFormModal";
 import ViewCustomerModal from "./components/ViewCustomerModal";
+import CustomerDropdown from "./components/CustomerDropdown";
+import { useNotification } from "../../../components/AppNotification";
 
 import {
   extractCustomers,
@@ -87,18 +90,33 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
+function getErrorMessage(error, fallback = "Something went wrong.") {
+  const response = error?.response?.data;
+
+  if (response?.message && response?.errors) {
+    const firstError = Object.values(response.errors)?.[0]?.[0];
+    return firstError || response.message;
+  }
+
+  return response?.message || error?.message || fallback;
+}
+
 export default function Customer() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
   const queryClient = useQueryClient();
+  const notify = useNotification();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState([]);
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [serverMessage, setServerMessage] = useState("");
 
   useLockBodyScroll(Boolean(modalMode));
 
@@ -149,6 +167,21 @@ export default function Customer() {
       inactive: total - active,
     };
   }, [statsQuery.data]);
+
+  const allCustomers = useMemo(() => {
+    return extractCustomers(statsQuery.data);
+  }, [statsQuery.data]);
+
+  useEffect(() => {
+    const visibleIds = new Set(customers.map((item) => Number(item.id)));
+    setSelectedCustomerIds((previous) =>
+      previous.filter((id) => visibleIds.has(Number(id)))
+    );
+  }, [customers]);
+
+  const invalidateCustomers = () => {
+    queryClient.invalidateQueries({ queryKey: ["customers"] });
+  };
 
   const theme = {
     pageTitle: isDark ? "text-white" : "text-zinc-900",
@@ -203,60 +236,112 @@ export default function Customer() {
   const createMutation = useMutation({
     mutationFn: createCustomerApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomers();
+      notify.success("Customer created", "The customer has been saved.");
       closeModal();
     },
     onError: (error) => {
-      alert(error?.response?.data?.message || "Failed to create customer.");
+      const message = getErrorMessage(error, "Failed to create customer.");
+      setServerMessage(message);
+      notify.error("Create failed", message);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: updateCustomerApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomers();
+      notify.success("Customer updated", "The customer has been updated.");
       closeModal();
     },
     onError: (error) => {
-      alert(error?.response?.data?.message || "Failed to update customer.");
+      const message = getErrorMessage(error, "Failed to update customer.");
+      setServerMessage(message);
+      notify.error("Update failed", message);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteCustomerApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomers();
+      notify.success("Customer deleted", "The customer has been deleted.");
     },
     onError: (error) => {
-      alert(
-        error?.response?.data?.message ||
+      notify.error(
+        "Delete failed",
+        getErrorMessage(
+          error,
           "Failed to delete customer. This customer may already be used in sales."
+        )
+      );
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: bulkDeleteCustomersApi,
+    onSuccess: () => {
+      setSelectedCustomerIds([]);
+      setBulkSelectMode(false);
+      invalidateCustomers();
+      notify.success(
+        "Customers deleted",
+        "Selected customers have been deleted."
+      );
+    },
+    onError: (error) => {
+      notify.error(
+        "Bulk delete failed",
+        getErrorMessage(error, "Failed to delete selected customers.")
       );
     },
   });
 
   const openAddModal = () => {
+    setServerMessage("");
     setSelectedCustomer(null);
     setModalMode("add");
   };
 
   const openViewModal = (customer) => {
+    setServerMessage("");
     setSelectedCustomer(customer);
     setModalMode("view");
   };
 
   const openEditModal = (customer) => {
+    setServerMessage("");
     setSelectedCustomer(customer);
     setModalMode("edit");
   };
 
   const closeModal = () => {
+    setServerMessage("");
     setModalMode(null);
     setSelectedCustomer(null);
   };
 
   const handleSaveCustomer = (form) => {
+    setServerMessage("");
     const payload = toCustomerPayload(form);
+    const normalizedShopName = payload.shop_name.trim().toLowerCase();
+    const duplicateCustomer = allCustomers.find((customer) => {
+      const isSameCustomer =
+        modalMode === "edit" &&
+        Number(customer.id) === Number(selectedCustomer?.id);
+
+      return (
+        !isSameCustomer &&
+        customer.shopName.trim().toLowerCase() === normalizedShopName
+      );
+    });
+
+    if (duplicateCustomer) {
+      const message = "This customer shop name already exists.";
+      setServerMessage(message);
+      notify.error("Duplicate customer", message);
+      return;
+    }
 
     if (modalMode === "add") {
       createMutation.mutate(payload);
@@ -281,10 +366,65 @@ export default function Customer() {
     deleteMutation.mutate(customer.id);
   };
 
+  const handleToggleCustomer = (customerId) => {
+    if (!bulkSelectMode) return;
+
+    setSelectedCustomerIds((previous) => {
+      const id = Number(customerId);
+      if (previous.some((item) => Number(item) === id)) {
+        return previous.filter((item) => Number(item) !== id);
+      }
+
+      return [...previous, id];
+    });
+  };
+
+  const handleToggleAllCustomers = () => {
+    if (!bulkSelectMode) return;
+
+    const pageIds = customers.map((customer) => Number(customer.id));
+    const allSelected = pageIds.every((id) =>
+      selectedCustomerIds.some((selectedId) => Number(selectedId) === id)
+    );
+
+    setSelectedCustomerIds((previous) => {
+      if (allSelected) {
+        return previous.filter((id) => !pageIds.includes(Number(id)));
+      }
+
+      return [...new Set([...previous.map(Number), ...pageIds])];
+    });
+  };
+
+  const handleBulkDeleteCustomers = () => {
+    if (selectedCustomerIds.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedCustomerIds.length} selected customer${selectedCustomerIds.length > 1 ? "s" : ""}?`
+    );
+
+    if (!confirmed) return;
+
+    bulkDeleteMutation.mutate(selectedCustomerIds);
+  };
+
+  const openBulkSelectMode = () => {
+    setBulkSelectMode(true);
+  };
+
+  const closeBulkSelectMode = () => {
+    setBulkSelectMode(false);
+    setSelectedCustomerIds([]);
+  };
+
   const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isDeleting = deleteMutation.isPending || bulkDeleteMutation.isPending;
 
   const actionError =
-    createMutation.error || updateMutation.error || deleteMutation.error;
+    createMutation.error ||
+    updateMutation.error ||
+    deleteMutation.error ||
+    bulkDeleteMutation.error;
 
   const actionErrorMessage =
     actionError?.response?.data?.message ||
@@ -335,41 +475,28 @@ export default function Customer() {
             />
           </div>
 
-          <div className="relative">
-            <FiFilter
-              className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
+          <CustomerDropdown
+            icon={<FiFilter />}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            theme={theme}
+            options={[
+              { value: "All", label: "All Status" },
+              { value: "Active", label: "Active" },
+              { value: "Inactive", label: "Inactive" },
+            ]}
+          />
 
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className={`h-12 w-full appearance-none rounded-2xl border pl-11 pr-11 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-            >
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
-
-          <div className="relative">
-            <select
-              value={perPage}
-              onChange={(event) => setPerPage(Number(event.target.value))}
-              className={`h-12 w-full appearance-none rounded-2xl border px-4 pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-            >
-              <option value={10}>10 / page</option>
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
+          <CustomerDropdown
+            icon={<FiHash />}
+            value={perPage}
+            onChange={(value) => setPerPage(Number(value))}
+            theme={theme}
+            options={[10, 25, 50].map((value) => ({
+              value,
+              label: `${value} / page`,
+            }))}
+          />
         </div>
 
         <button
@@ -405,10 +532,18 @@ export default function Customer() {
         isFetching={customersQuery.isFetching}
         isLoading={customersQuery.isLoading}
         isError={customersQuery.isError}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={isDeleting}
+        bulkDeleteIsPending={bulkDeleteMutation.isPending}
+        bulkSelectMode={bulkSelectMode}
+        selectedCustomerIds={selectedCustomerIds}
         onView={openViewModal}
         onEdit={openEditModal}
         onDelete={handleDeleteCustomer}
+        onOpenBulkSelect={openBulkSelectMode}
+        onCancelBulkSelect={closeBulkSelectMode}
+        onToggleSelect={handleToggleCustomer}
+        onToggleSelectAll={handleToggleAllCustomers}
+        onBulkDelete={handleBulkDeleteCustomers}
       />
 
       {modalMode === "view" && selectedCustomer && (
@@ -428,6 +563,7 @@ export default function Customer() {
           onClose={closeModal}
           onSubmit={handleSaveCustomer}
           isSaving={isSaving}
+          serverMessage={serverMessage}
         />
       )}
     </section>

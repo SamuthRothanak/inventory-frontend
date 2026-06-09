@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import {
   FiCalendar,
   FiEye,
   FiPrinter,
@@ -18,7 +27,6 @@ import {
   FiUser,
   FiHash,
   FiClock,
-  FiTruck,
   FiPackage,
   FiX,
   FiSave,
@@ -305,6 +313,16 @@ const initialSales = [
   },
 ];
 
+const weeklyChartData = [
+  { day: "SUN", amount: 2800 },
+  { day: "MON", amount: 1200 },
+  { day: "TUE", amount: 1500 },
+  { day: "WED", amount: 1800 },
+  { day: "THU", amount: 900 },
+  { day: "FRI", amount: 3400 },
+  { day: "SAT", amount: 200 },
+];
+
 const emptyReturnForm = {
   returnType: "partial_return",
   resolutionType: "refund",
@@ -482,14 +500,6 @@ export default function Sale() {
     )
     .reduce((total, sale) => total + Number(sale.grandTotal || 0), 0);
 
-  const resetFilters = () => {
-    setSearchTerm("");
-    setStartDate("");
-    setSaleTypeFilter("All");
-    setPaymentStatusFilter("All");
-    setSaleStatusFilter("All");
-  };
-
   const getPaymentSummary = (sale) => {
     if (!sale.payments.length) return "Unpaid";
 
@@ -656,24 +666,6 @@ export default function Sale() {
 
   return (
     <section className="space-y-6">
-      {/* Page Action */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          {/* <h1 className={`text-2xl font-bold ${theme.pageTitle}`}>Sales</h1>
-          <p className={`mt-1 text-sm ${theme.muted}`}>
-            Manage sale invoices, payment history, receipt printing, and returns.
-          </p> */}
-        </div>
-
-        <Link
-          to="/pos"
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600"
-        >
-          Open POS
-          <FiArrowUpRight className="text-lg" />
-        </Link>
-      </div>
-
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
@@ -709,85 +701,88 @@ export default function Sale() {
         />
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:max-w-6xl xl:grid-cols-[1.7fr_180px_180px_190px_190px]">
-          <div className="relative">
-            <FiSearch
-              className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
+      <SalesActivityChart
+        theme={theme}
+        isDark={isDark}
+        data={weeklyChartData}
+      />
 
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search invoice, customer, cashier, product..."
-              className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
-            />
-          </div>
-
-          <div className="relative">
-            <FiCalendar
-              className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-
-            <input
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-              className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
-            />
-          </div>
-
-          <FilterSelect
-            icon={<FiUser />}
-            value={saleTypeFilter}
-            onChange={setSaleTypeFilter}
-            theme={theme}
-            options={[
-              { value: "All", label: "All Type" },
-              { value: "retail", label: "Retail" },
-              { value: "wholesale", label: "Wholesale" },
-            ]}
+      {/* Filters: Open POS moved here, Reset removed */}
+      <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1.7fr_180px_180px_190px_190px_170px]">
+        <div className="relative">
+          <FiSearch
+            className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
           />
 
-          <FilterSelect
-            icon={<FiCreditCard />}
-            value={paymentStatusFilter}
-            onChange={setPaymentStatusFilter}
-            theme={theme}
-            options={[
-              { value: "All", label: "All Payment" },
-              { value: "unpaid", label: "Unpaid" },
-              { value: "partial", label: "Partial" },
-              { value: "paid", label: "Paid" },
-              { value: "refunded", label: "Refunded" },
-            ]}
-          />
-
-          <FilterSelect
-            icon={<FiFilter />}
-            value={saleStatusFilter}
-            onChange={setSaleStatusFilter}
-            theme={theme}
-            options={[
-              { value: "All", label: "All Status" },
-              { value: "draft", label: "Draft" },
-              { value: "confirmed", label: "Confirmed" },
-              { value: "completed", label: "Completed" },
-              { value: "cancelled", label: "Cancelled" },
-            ]}
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search invoice, customer, cashier, product..."
+            className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
           />
         </div>
 
-        <button
-          type="button"
-          onClick={resetFilters}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+        <div className="relative">
+          <FiCalendar
+            className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
+          />
+
+          <input
+            type="date"
+            value={startDate}
+            onChange={(event) => setStartDate(event.target.value)}
+            className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+          />
+        </div>
+
+        <FilterSelect
+          icon={<FiUser />}
+          value={saleTypeFilter}
+          onChange={setSaleTypeFilter}
+          theme={theme}
+          options={[
+            { value: "All", label: "All Type" },
+            { value: "retail", label: "Retail" },
+            { value: "wholesale", label: "Wholesale" },
+          ]}
+        />
+
+        <FilterSelect
+          icon={<FiCreditCard />}
+          value={paymentStatusFilter}
+          onChange={setPaymentStatusFilter}
+          theme={theme}
+          options={[
+            { value: "All", label: "All Payment" },
+            { value: "unpaid", label: "Unpaid" },
+            { value: "partial", label: "Partial" },
+            { value: "paid", label: "Paid" },
+            { value: "refunded", label: "Refunded" },
+          ]}
+        />
+
+        <FilterSelect
+          icon={<FiFilter />}
+          value={saleStatusFilter}
+          onChange={setSaleStatusFilter}
+          theme={theme}
+          options={[
+            { value: "All", label: "All Status" },
+            { value: "draft", label: "Draft" },
+            { value: "confirmed", label: "Confirmed" },
+            { value: "completed", label: "Completed" },
+            { value: "cancelled", label: "Cancelled" },
+          ]}
+        />
+
+        <Link
+          to="/pos"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600"
         >
-          <FiRotateCcw />
-          Reset
-        </button>
+          Open POS
+          <FiArrowUpRight className="text-lg" />
+        </Link>
       </div>
 
       {/* Sales Table */}
@@ -1007,16 +1002,7 @@ export default function Sale() {
       </div>
 
       {modalMode === "view" && selectedSale && (
-        <ViewSaleModal
-          sale={selectedSale}
-          theme={theme}
-          onClose={closeModal}
-          getPaymentSummary={getPaymentSummary}
-          getSaleStatusClass={getSaleStatusClass}
-          getSaleStatusIcon={getSaleStatusIcon}
-          getPaymentStatusClass={getPaymentStatusClass}
-          getPaymentStatusIcon={getPaymentStatusIcon}
-        />
+        <ViewSaleModal sale={selectedSale} theme={theme} onClose={closeModal} />
       )}
 
       {modalMode === "return" && selectedSale && (
@@ -1031,6 +1017,127 @@ export default function Sale() {
         />
       )}
     </section>
+  );
+}
+
+function SalesActivityChart({ theme, isDark, data }) {
+  const [period, setPeriod] = useState("Week");
+  const periods = ["Week", "Month", "Year"];
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div
+          className={`rounded-xl border px-3 py-2 text-sm shadow-md ${theme.card}`}
+        >
+          <p className="font-bold">${Number(payload[0].value).toLocaleString()}</p>
+          <p className={`text-xs ${theme.muted}`}>{label}</p>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+      <div className="mb-5 flex items-center justify-between">
+        <h2 className={`text-base font-semibold ${theme.pageTitle}`}>
+          Sales Activity
+        </h2>
+
+        <div
+          className={`flex items-center gap-1 rounded-xl border p-1 ${
+            isDark
+              ? "border-white/10 bg-white/5"
+              : "border-zinc-200 bg-zinc-100"
+          }`}
+        >
+          {periods.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setPeriod(p)}
+              className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                period === p
+                  ? "bg-red-500 text-white shadow-sm"
+                  : `${theme.muted} hover:text-zinc-900 dark:hover:text-white`
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="h-[260px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={data}
+            margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke={
+                isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"
+              }
+              vertical={false}
+            />
+
+            <XAxis
+              dataKey="day"
+              tick={{
+                fontSize: 11,
+                fill: isDark ? "#71717a" : "#a1a1aa",
+              }}
+              axisLine={false}
+              tickLine={false}
+            />
+
+            <YAxis
+              tickFormatter={(v) => `${v / 1000}k`}
+              tick={{
+                fontSize: 11,
+                fill: isDark ? "#71717a" : "#a1a1aa",
+              }}
+              axisLine={false}
+              tickLine={false}
+              domain={[0, 4000]}
+              ticks={[0, 1000, 2000, 3000, 4000]}
+            />
+
+            <Tooltip
+              content={<CustomTooltip />}
+              cursor={{
+                stroke: isDark
+                  ? "rgba(255,255,255,0.1)"
+                  : "rgba(0,0,0,0.07)",
+                strokeWidth: 1,
+              }}
+            />
+
+            <Line
+              type="monotone"
+              dataKey="amount"
+              stroke="#ef4444"
+              strokeWidth={2.5}
+              dot={{
+                r: 3,
+                fill: isDark ? "#18181b" : "#fff",
+                stroke: "#ef4444",
+                strokeWidth: 2,
+              }}
+              activeDot={{
+                r: 6,
+                fill: "#ef4444",
+                stroke: isDark ? "#18181b" : "#fff",
+                strokeWidth: 2,
+              }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
   );
 }
 
@@ -1078,6 +1185,19 @@ function FilterSelect({ icon, value, onChange, options, theme }) {
         className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
       />
     </div>
+  );
+}
+
+function StatusBadge({ status, getStatusClass, getStatusIcon }) {
+  return (
+    <span
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold capitalize ${getStatusClass(
+        status
+      )}`}
+    >
+      {getStatusIcon(status)}
+      {status}
+    </span>
   );
 }
 
@@ -1140,16 +1260,7 @@ function ModalShell({
   );
 }
 
-function ViewSaleModal({
-  sale,
-  theme,
-  onClose,
-  getPaymentSummary,
-  getSaleStatusClass,
-  getSaleStatusIcon,
-  getPaymentStatusClass,
-  getPaymentStatusIcon,
-}) {
+function ViewSaleModal({ sale, theme, onClose }) {
   return (
     <ModalShell
       title={sale.saleNo}
@@ -1183,30 +1294,6 @@ function ViewSaleModal({
               label="Exchange Rate"
               value={`1 USD = ${sale.exchangeRateKhrPerUsd} KHR`}
             />
-
-            <div>
-              <p className="text-xs font-semibold text-zinc-500">Sale Status</p>
-              <div className="mt-2">
-                <StatusBadge
-                  status={sale.saleStatus}
-                  getStatusClass={getSaleStatusClass}
-                  getStatusIcon={getSaleStatusIcon}
-                />
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold text-zinc-500">
-                Payment Status
-              </p>
-              <div className="mt-2">
-                <StatusBadge
-                  status={sale.paymentStatus}
-                  getStatusClass={getPaymentStatusClass}
-                  getStatusIcon={getPaymentStatusIcon}
-                />
-              </div>
-            </div>
           </div>
         </div>
 
@@ -1218,14 +1305,13 @@ function ViewSaleModal({
             theme={theme}
           >
             <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
-              <table className="w-full min-w-[860px] text-sm">
+              <table className="w-full min-w-[760px] text-sm">
                 <thead className="bg-red-600 text-white">
                   <tr>
                     <th className="px-3 py-3 text-left">Product Variant</th>
                     <th className="px-3 py-3 text-left">Qty</th>
                     <th className="px-3 py-3 text-left">Base Qty</th>
                     <th className="px-3 py-3 text-left">Unit Price</th>
-                    <th className="px-3 py-3 text-left">Discount</th>
                     <th className="px-3 py-3 text-left">Line Total</th>
                   </tr>
                 </thead>
@@ -1256,10 +1342,6 @@ function ViewSaleModal({
                         ${Number(item.unitPrice).toFixed(2)}
                       </td>
 
-                      <td className="px-3 py-3">
-                        ${Number(item.discountAmount).toFixed(2)}
-                      </td>
-
                       <td className="px-3 py-3 font-semibold">
                         ${Number(item.lineTotal).toFixed(2)}
                       </td>
@@ -1267,54 +1349,6 @@ function ViewSaleModal({
                   ))}
                 </tbody>
               </table>
-            </div>
-          </FormSection>
-
-          <FormSection
-            title="Payments"
-            subtitle={`Payment summary: ${getPaymentSummary(sale)}`}
-            icon={<FiCreditCard />}
-            theme={theme}
-          >
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {sale.payments.length > 0 ? (
-                sale.payments.map((payment) => (
-                  <div
-                    key={payment.id}
-                    className={`rounded-xl border p-4 ${theme.softCard}`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold">
-                        {payment.providerName}
-                      </p>
-
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
-                      >
-                        {payment.currencyCode}
-                      </span>
-                    </div>
-
-                    <p className="mt-3 text-xl font-bold">
-                      {payment.currencyCode === "KHR" ? "៛" : "$"}
-                      {Number(payment.amountReceived).toLocaleString()}
-                    </p>
-
-                    <p className={`mt-1 text-xs ${theme.muted}`}>
-                      Applied: $
-                      {Number(payment.amountAppliedInvoiceCurrency).toFixed(2)}
-                    </p>
-
-                    {payment.referenceNo && (
-                      <p className={`mt-1 text-xs ${theme.muted}`}>
-                        Ref: {payment.referenceNo}
-                      </p>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <p className={`text-sm ${theme.muted}`}>No payment records.</p>
-              )}
             </div>
           </FormSection>
 
@@ -1372,45 +1406,6 @@ function ViewSaleModal({
               <p className="mt-2 text-sm leading-6">{sale.note || "-"}</p>
             </div>
           </FormSection>
-
-          {sale.returns.length > 0 && (
-            <FormSection
-              title="Sales Returns"
-              subtitle="Return or refund records for this invoice."
-              icon={<FiRefreshCcw />}
-              theme={theme}
-            >
-              <div className="space-y-3">
-                {sale.returns.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`rounded-xl border p-4 ${theme.softCard}`}
-                  >
-                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold">
-                          {item.salesReturnNo}
-                        </p>
-
-                        <p className={`mt-1 text-xs ${theme.muted}`}>
-                          {item.returnType} · {item.resolutionType} ·{" "}
-                          {item.createdAt}
-                        </p>
-                      </div>
-
-                      <p className="text-sm font-bold">
-                        ${Number(item.totalAmount).toFixed(2)}
-                      </p>
-                    </div>
-
-                    <p className={`mt-2 text-xs ${theme.muted}`}>
-                      {item.reason}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </FormSection>
-          )}
         </div>
       </div>
     </ModalShell>
@@ -1568,19 +1563,6 @@ function FormSection({ title, subtitle, icon, theme, children }) {
   );
 }
 
-function StatusBadge({ status, getStatusClass, getStatusIcon }) {
-  return (
-    <span
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold capitalize ${getStatusClass(
-        status
-      )}`}
-    >
-      {getStatusIcon(status)}
-      {status}
-    </span>
-  );
-}
-
 function FormInput({
   label,
   required = false,
@@ -1677,7 +1659,6 @@ function FormSelect({
   theme,
   error = "",
   icon,
-  disabled = false,
 }) {
   return (
     <label className="block">
@@ -1697,11 +1678,10 @@ function FormSelect({
 
         <select
           value={value}
-          disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
           className={`h-11 w-full appearance-none rounded-xl border ${
             icon ? "pl-10" : "pl-3"
-          } pr-10 text-sm outline-none transition focus:ring-4 disabled:cursor-not-allowed disabled:opacity-70 ${
+          } pr-10 text-sm outline-none transition focus:ring-4 ${
             theme.select
           } ${error ? "border-red-500 focus:border-red-500" : ""}`}
         >

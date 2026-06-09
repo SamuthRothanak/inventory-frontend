@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FiAlertTriangle,
   FiCheckCircle,
-  FiChevronDown,
+  FiChevronLeft,
+  FiChevronRight,
   FiClock,
   FiCreditCard,
   FiDollarSign,
@@ -13,7 +14,6 @@ import {
   FiFileText,
   FiFilter,
   FiHash,
-  FiInfo,
   FiPackage,
   FiPlus,
   FiPlusCircle,
@@ -33,7 +33,9 @@ import {
   createPurchaseReturnApi,
   getPurchaseByIdApi,
   getPurchaseReturnsApi,
+  getPurchaseStatsApi,
   getPurchasesApi,
+  recordPurchasePaymentApi,
   syncPurchaseItemsApi,
   updatePurchaseApi,
   updatePurchaseReturnApi,
@@ -42,9 +44,9 @@ import { getActiveSuppliersApi } from "../../../services/supplier.service";
 import { getActiveExchangeRateApi } from "../../../services/exchangeRate.service";
 import { getProductVariantUnitsApi } from "../../../services/productVariantUnit.service";
 import { useNotification } from "../../../components/AppNotification";
+import TableLoading from "../../../components/TableLoading";
 
 import {
-  AlertMiniCard,
   EmptyState,
   FilterSelect,
   PurchaseFormModal,
@@ -52,6 +54,7 @@ import {
   PurchaseMobileCard,
   PurchaseReturnModal,
   ReceiveReplacementModal,
+  RecordPaymentModal,
   PurchaseTable,
   SummaryCard,
   ViewPurchaseModal,
@@ -63,10 +66,6 @@ import {
   emptyPurchaseReturnItemForm,
 } from "./schemas/purchaseSchemas";
 import {
-  initialPurchaseReturns,
-  initialPurchases,
-  initialSuppliers,
-  initialVariantUnits,
   paymentModeOptions,
   RETURN_STATUS,
   STATUS,
@@ -101,8 +100,8 @@ export default function Purchases() {
   const queryClient = useQueryClient();
   const notify = useNotification();
 
-  const [localPurchases, setLocalPurchases] = useState(initialPurchases);
-  const [purchaseReturns, setPurchaseReturns] = useState(initialPurchaseReturns);
+  const [localPurchases, setLocalPurchases] = useState([]);
+  const [purchaseReturns, setPurchaseReturns] = useState([]);
   const [stockMovements, setStockMovements] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -111,11 +110,10 @@ export default function Purchases() {
   const [paymentModeFilter, setPaymentModeFilter] = useState("All");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
-  const [variantUnitSearch, setVariantUnitSearch] = useState("");
-  const [debouncedVariantUnitSearch, setDebouncedVariantUnitSearch] = useState("");
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [recordPaymentPurchase, setRecordPaymentPurchase] = useState(null);
 
   const [purchaseForm, setPurchaseForm] = useState(emptyPurchaseForm);
   const [purchaseItems, setPurchaseItems] = useState([]);
@@ -149,14 +147,6 @@ export default function Purchases() {
   }, [searchTerm]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedVariantUnitSearch(variantUnitSearch.trim());
-    }, 300);
-
-    return () => window.clearTimeout(timer);
-  }, [variantUnitSearch]);
-
-  useEffect(() => {
     setPage(1);
   }, [debouncedSearchTerm, statusFilter, paymentModeFilter, perPage]);
 
@@ -183,6 +173,12 @@ export default function Purchases() {
     keepPreviousData: true,
   });
 
+  const purchaseStatsQuery = useQuery({
+    queryKey: ["purchases", "stats"],
+    queryFn: getPurchaseStatsApi,
+    staleTime: 1000 * 60,
+  });
+
   const purchaseReturnsQuery = useQuery({
     queryKey: ["purchase-returns", "purchase-page"],
     queryFn: () => getPurchaseReturnsApi({ per_page: 500 }),
@@ -203,15 +199,10 @@ export default function Purchases() {
   });
 
   const variantUnitsQuery = useQuery({
-    queryKey: [
-      "product-variant-units",
-      "purchase-search",
-      { search: debouncedVariantUnitSearch },
-    ],
+    queryKey: ["product-variant-units", "purchase-options"],
     queryFn: () =>
       getProductVariantUnitsApi({
-        per_page: 20,
-        search: debouncedVariantUnitSearch || undefined,
+        per_page: 500,
         status: "active",
       }),
     enabled: itemModalOpen,
@@ -219,13 +210,11 @@ export default function Purchases() {
   });
 
   const suppliers = useMemo(() => {
-    const data = extractApiData(suppliersQuery.data).map(normalizeSupplier);
-    return data.length > 0 ? data : initialSuppliers;
+    return extractApiData(suppliersQuery.data).map(normalizeSupplier);
   }, [suppliersQuery.data]);
 
   useEffect(() => {
     const data = extractApiData(purchaseReturnsQuery.data);
-    if (data.length === 0) return;
 
     setPurchaseReturns(data.map((item) => ({
       id: item.id,
@@ -242,6 +231,14 @@ export default function Purchases() {
       subtotal: Number(item.total_amount_usd ?? item.subtotal_usd ?? item.subtotal ?? 0),
       subtotalUsd: Number(item.total_amount_usd ?? item.subtotal_usd ?? item.subtotalUsd ?? 0),
       subtotalKhr: Number(item.total_amount_khr ?? item.subtotal_khr ?? item.subtotalKhr ?? 0),
+      refundStatus: item.refund_status || item.refundStatus || "none",
+      refundAmountUsd: Number(item.refund_amount_usd ?? item.refundAmountUsd ?? 0),
+      refundAmountKhr: Number(item.refund_amount_khr ?? item.refundAmountKhr ?? 0),
+      refundedAt: item.refunded_at || item.refundedAt || null,
+      creditNoteNo: item.credit_note_no || item.creditNoteNo || "",
+      creditAmountUsd: Number(item.credit_amount_usd ?? item.creditAmountUsd ?? 0),
+      creditAmountKhr: Number(item.credit_amount_khr ?? item.creditAmountKhr ?? 0),
+      creditStatus: item.credit_status || item.creditStatus || "none",
       note: item.note || "",
       status: normalizeReturnStatusLabel(item.status || item.resolution_status || item.resolutionStatus || RETURN_STATUS.SUBMITTED),
       items: item.items || item.purchase_return_items || [],
@@ -281,18 +278,21 @@ export default function Purchases() {
   }, [activeExchangeRate, activeKhrRounding, modalMode]);
 
   const variantUnits = useMemo(() => {
-    const data = extractApiData(variantUnitsQuery.data).map(normalizeVariantUnit);
-    return data.length > 0 ? data : initialVariantUnits;
+    return extractApiData(variantUnitsQuery.data).map(normalizeVariantUnit);
   }, [variantUnitsQuery.data]);
 
   const serverPurchases = useMemo(() => {
     return extractApiData(purchasesQuery.data).map(normalizePurchase);
   }, [purchasesQuery.data]);
 
-  const purchases = serverPurchases.length > 0 ? serverPurchases : localPurchases;
+  const purchases = purchasesQuery.data ? serverPurchases : localPurchases;
   const pagination = useMemo(() => {
     return getPaginationMeta(purchasesQuery.data, purchases.length);
   }, [purchasesQuery.data, purchases.length]);
+  const pageNumbers = useMemo(
+    () => getPageNumbers(pagination.currentPage, pagination.lastPage),
+    [pagination.currentPage, pagination.lastPage]
+  );
 
   const calculateSubtotal = (items) => items.reduce((total, item) => total + Number(item.lineTotal || 0), 0);
 
@@ -310,7 +310,6 @@ export default function Purchases() {
 
   const getClaimRequiredCount = (purchase) => purchase.items.reduce((total, item) => total + Number(item.claimQty || 0), 0);
   const getDamagedCount = (purchase) => purchase.items.reduce((total, item) => total + Number(item.damagedQty || 0), 0);
-
 
   const filteredPurchases = useMemo(() => {
     const search = searchTerm.toLowerCase();
@@ -330,9 +329,6 @@ export default function Purchases() {
     });
   }, [purchases, searchTerm, statusFilter, paymentModeFilter]);
 
-  const pendingReceive = purchases.filter((item) => item.status === STATUS.PENDING_RECEIVE).length;
-  const pendingStockIn = purchases.filter((item) => item.status === STATUS.PENDING_STOCK_IN).length;
-  const pendingClaims = purchases.filter((item) => item.status === STATUS.PENDING_CLAIM).length;
   const totalPurchaseReturnAmount = purchaseReturns.reduce((total, item) => total + Number(item.subtotal || 0), 0);
 
   const getStatusClass = (status) => {
@@ -414,6 +410,56 @@ export default function Purchases() {
     return purchase.status;
   };
 
+  const getPurchaseLines = (purchase = {}) => {
+    const items = Array.isArray(purchase.items) ? purchase.items : [];
+    if (items.length > 0) return items;
+    return Array.isArray(purchase.summaryItems) ? purchase.summaryItems : [];
+  };
+
+  const getRemainingStockInQty = (item = {}) => {
+    const directRemaining = Number(item.remainingStockInQty ?? item.remaining_stock_in_qty ?? 0);
+    if (directRemaining > 0) return directRemaining;
+
+    const conversionQty = Number(item.conversionQty ?? item.conversion_qty ?? 1) || 1;
+    const acceptedBaseQty = Number(item.acceptedBaseQty ?? item.accepted_base_qty ?? 0);
+    const stockedInBaseQty = Number(item.stockedInBaseQty ?? item.stocked_in_base_qty ?? 0);
+    if (acceptedBaseQty > 0 || stockedInBaseQty > 0) return Math.max(0, acceptedBaseQty - stockedInBaseQty);
+
+    const acceptedQty = Number(item.acceptedQty ?? item.accepted_qty ?? 0);
+    const stockedInQty = Number(item.stockedInQty ?? item.stocked_in_qty ?? 0);
+    return Math.max(0, (acceptedQty - stockedInQty) * conversionQty);
+  };
+
+  const hasRemainingStockInQty = (purchase) =>
+    getPurchaseLines(purchase).some((item) => getRemainingStockInQty(item) > 0);
+
+  const hasAnyStockedInQty = (purchase) =>
+    getPurchaseLines(purchase).some((item) => Number(item.stockedInQty ?? item.stocked_in_qty ?? 0) > 0);
+
+  const hasPendingReplacementStockIn = (purchase) =>
+    getRelatedPurchaseReturns(purchase).some((item) => {
+      const resolutionType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type || "");
+      const receivedQty = Number(item.replacementReceivedQty ?? item.replacement_received_qty ?? 0);
+      const stockedQty = Number(item.replacementStockedInQty ?? item.replacement_stocked_in_qty ?? 0);
+      return resolutionType === "replacement" && receivedQty > stockedQty;
+    });
+
+  const pendingReceive = purchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_RECEIVE).length;
+  const pendingStockIn = purchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_STOCK_IN).length;
+  const pendingClaims = purchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_CLAIM).length;
+  const purchaseStats = extractApiObject(purchaseStatsQuery.data) || {};
+  const totalPurchasesCount = Number(purchaseStats.total_purchases ?? purchaseStats.totalPurchases ?? pagination.total ?? purchases.length);
+  const pendingReceiveCount = Number(purchaseStats.pending_receive ?? purchaseStats.pendingReceive ?? pendingReceive);
+  const pendingStockInCount = Number(purchaseStats.pending_stock_in ?? purchaseStats.pendingStockIn ?? pendingStockIn);
+  const pendingClaimsCount = Number(purchaseStats.pending_claim ?? purchaseStats.pendingClaim ?? pendingClaims);
+  const totalGrandUsd = Number(purchaseStats.total_grand_usd ?? 0);
+  const totalGrandKhr = Number(purchaseStats.total_grand_khr ?? 0);
+  const totalBalanceUsd = Number(purchaseStats.total_balance_usd ?? 0);
+  const totalBalanceKhr = Number(purchaseStats.total_balance_khr ?? 0);
+
+  const fmtUsd = (n) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtKhr = (n) => `៛${Math.round(n).toLocaleString("en-US")}`;
+
   const getOpenReplacementClaim = (purchase) => {
     return getRelatedPurchaseReturns(purchase).find((item) => {
       const status = normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status);
@@ -422,11 +468,24 @@ export default function Purchases() {
     });
   };
 
+  const getOpenMoneyClaim = (purchase) => {
+    return getRelatedPurchaseReturns(purchase).find((item) => {
+      const status = normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status);
+      const resolutionType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type);
+      return ["refund", "credit_note"].includes(resolutionType) && status !== RETURN_STATUS.COMPLETED && status !== RETURN_STATUS.CANCELLED;
+    });
+  };
+
   const getPurchaseProblemLabel = (purchase) => {
     const claimQty = getClaimRequiredCount(purchase);
     const damagedQty = getDamagedCount(purchase);
     const replacementClaim = getOpenReplacementClaim(purchase);
+    const moneyClaim = getOpenMoneyClaim(purchase);
     if (replacementClaim) return "Waiting supplier replacement";
+    if (moneyClaim) {
+      const resolutionType = normalizeReturnResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type);
+      return resolutionType === "refund" ? "Waiting refund from supplier" : "Credit note pending";
+    }
     if (purchase.status === STATUS.PENDING_CLAIM && hasResolvedSupplierClaim(purchase) && !getOpenSupplierClaim(purchase)) return "Supplier claim resolved";
     if (getOpenSupplierClaim(purchase)) return "Supplier claim created";
     if ((purchase.paymentMode === "prepaid" || purchase.paymentMode === "partial_prepaid") && claimQty > 0) return `${claimQty} claim required`;
@@ -440,6 +499,11 @@ export default function Purchases() {
     if (effectiveStatus === STATUS.DRAFT) return "Continue editing";
     if (effectiveStatus === STATUS.PENDING_RECEIVE) return "Receive goods";
     if (getOpenReplacementClaim(purchase)) return "Receive replacement";
+    const moneyClaim = getOpenMoneyClaim(purchase);
+    if (moneyClaim) {
+      const resolutionType = normalizeReturnResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type);
+      return resolutionType === "refund" ? "Mark refund received" : "Resolve credit note";
+    }
     if (getOpenSupplierClaim(purchase)) return "Supplier claim created";
     if (effectiveStatus === STATUS.PENDING_CLAIM) return "Create supplier claim";
     if (effectiveStatus === STATUS.PENDING_STOCK_IN) return "Open Inventory";
@@ -542,6 +606,41 @@ export default function Purchases() {
     },
     onError: (error) => {
       notify.error("Receive replacement failed", getErrorMessage(error));
+    },
+  });
+
+  const resolveSupplierClaimMutation = useMutation({
+    mutationFn: ({ claim, payload }) =>
+      updatePurchaseReturnApi({
+        id: claim.id,
+        payload,
+      }),
+    onSuccess: () => {
+      invalidatePurchaseQueries();
+      notify.success("Supplier claim resolved", "The refund or credit note has been marked as completed.");
+      closeModal();
+    },
+    onError: (error) => {
+      notify.error("Resolve claim failed", getErrorMessage(error));
+    },
+  });
+
+  const recordPaymentMutation = useMutation({
+    mutationFn: ({ id, payload }) => recordPurchasePaymentApi({ id, payload }),
+    onSuccess: (response) => {
+      invalidatePurchaseQueries();
+      const updated = normalizePurchase(extractApiObject(response));
+      setRecordPaymentPurchase(null);
+      if (updated) setSelectedPurchase(updated);
+      if (updated?.paymentStatus === "paid") {
+        notify.success("Payment completed", "Purchase has been fully paid.");
+        closeModal();
+      } else {
+        notify.success("Payment recorded", "Partial payment has been recorded successfully.");
+      }
+    },
+    onError: (error) => {
+      notify.error("Record payment failed", getErrorMessage(error));
     },
   });
 
@@ -921,15 +1020,16 @@ export default function Purchases() {
 
   const validatePurchaseForm = () => {
     const nextErrors = {};
+    const requiresPaymentInfo = purchaseForm.paymentMode !== "pay_after_check";
     if (!purchaseForm.purchaseNo.trim()) nextErrors.purchaseNo = "Purchase number is required.";
     if (!purchaseForm.supplierId) nextErrors.supplierId = "Please select supplier.";
     if (!purchaseForm.purchaseDate) nextErrors.purchaseDate = "Purchase date is required.";
-    if (!purchaseForm.exchangeRateUsed || Number(purchaseForm.exchangeRateUsed) <= 0) nextErrors.exchangeRateUsed = "Exchange rate must be greater than 0.";
+    if (requiresPaymentInfo && (!purchaseForm.exchangeRateUsed || Number(purchaseForm.exchangeRateUsed) <= 0)) nextErrors.exchangeRateUsed = "Exchange rate must be greater than 0.";
     if (!purchaseForm.paymentMode) nextErrors.paymentMode = "Payment mode is required.";
-    if (!purchaseForm.paymentStatus) nextErrors.paymentStatus = "Payment status is required.";
+    if (requiresPaymentInfo && !purchaseForm.paymentStatus) nextErrors.paymentStatus = "Payment status is required.";
     if (Number(purchaseForm.discountTotal || 0) < 0) nextErrors.discountTotal = "Discount cannot be negative.";
     if (Number(purchaseForm.deliveryFee || 0) < 0) nextErrors.deliveryFee = "Delivery fee cannot be negative.";
-    if (Number(purchaseForm.paidAmount || 0) < 0) nextErrors.paidAmount = "Paid amount cannot be negative.";
+    if (requiresPaymentInfo && Number(purchaseForm.paidAmount || 0) < 0) nextErrors.paidAmount = "Paid amount cannot be negative.";
     if (purchaseItems.length === 0) nextErrors.items = "Please add at least one purchase item.";
 
     const totals = calculateCurrencyPreview({
@@ -938,6 +1038,7 @@ export default function Purchases() {
     });
 
     if (
+      requiresPaymentInfo &&
       purchaseForm.paymentStatus !== "paid" &&
       (totals.paidAmountUsd > totals.grandTotalUsd + 0.0001 ||
         totals.paidAmountKhr > totals.grandTotalKhr + 1)
@@ -953,7 +1054,12 @@ export default function Purchases() {
     const supplier = suppliers.find((item) => String(item.id) === String(purchaseForm.supplierId));
     const subtotal = calculateSubtotal(purchaseItems);
     const grandTotal = calculateGrandTotal(purchaseItems, purchaseForm);
-    const paidAmount = purchaseForm.paymentStatus === "paid" ? grandTotal : Number(purchaseForm.paidAmount || 0);
+    const paidAmount =
+      purchaseForm.paymentMode === "pay_after_check"
+        ? 0
+        : purchaseForm.paymentStatus === "paid"
+          ? grandTotal
+          : Number(purchaseForm.paidAmount || 0);
     const balanceAmount = calculateBalanceAmount(grandTotal, paidAmount);
     const totalClaimQty = purchaseItems.reduce((total, item) => total + Number(item.claimQty || 0), 0);
 
@@ -979,7 +1085,7 @@ export default function Purchases() {
       createdBy: "Admin",
       purchaseDate: purchaseForm.purchaseDate,
       inputCurrency: purchaseForm.inputCurrency || "USD",
-      exchangeRateUsed: Number(purchaseForm.exchangeRateUsed || 0),
+      exchangeRateUsed: Number(purchaseForm.exchangeRateUsed || activeExchangeRate || 0),
       paymentMode: purchaseForm.paymentMode,
       paymentStatus: purchaseForm.paymentStatus,
       subtotal,
@@ -1044,13 +1150,14 @@ export default function Purchases() {
       items: purchaseItems,
       form: purchaseForm,
     });
+    const exchangeRateForApi = Number(purchaseForm.exchangeRateUsed || activeExchangeRate || 0);
 
     return {
       purchase_no: localPayload.purchaseNo,
       supplier_id: localPayload.supplierId,
       purchase_date: localPayload.purchaseDate,
       input_currency: currencyToApi(purchaseForm.inputCurrency || "USD"),
-      exchange_rate_used: Number(purchaseForm.exchangeRateUsed || 0),
+      exchange_rate_used: exchangeRateForApi > 0 ? exchangeRateForApi : null,
       khr_rounding: purchaseForm.khrRounding || "floor",
       exchange_rate_source: purchaseForm.exchangeRateSource || "manual",
       exchange_rate_note: purchaseForm.exchangeRateNote || null,
@@ -1201,7 +1308,16 @@ export default function Purchases() {
   };
 
   const handleConfirmStockIn = (purchase) => {
-    if (getEffectivePurchaseStatus(purchase) !== STATUS.PENDING_STOCK_IN) return;
+    const effectiveStatus = getEffectivePurchaseStatus(purchase);
+    const purchaseLines = getPurchaseLines(purchase);
+    const hasRemainingStock = hasRemainingStockInQty(purchase);
+    const hasReplacementStockIn = hasPendingReplacementStockIn(purchase);
+    const hasStockedIn = hasAnyStockedInQty(purchase);
+    const canOpenInventory =
+      (effectiveStatus === STATUS.PENDING_STOCK_IN && (hasRemainingStock || hasReplacementStockIn || purchaseLines.length === 0)) ||
+      (effectiveStatus === STATUS.PENDING_CLAIM && hasRemainingStock && !hasStockedIn);
+
+    if (!canOpenInventory) return;
 
     // IMPORTANT UX / DATA-SAFETY RULE:
     // Purchases prepares a purchase for stock-in only.
@@ -1254,6 +1370,7 @@ export default function Purchases() {
           replacementQty * Number(purchaseItem.unitCostUsd ?? purchaseItem.unitCost ?? 0)
       ),
       lineTotalKhr: Number(returnItem?.line_total_khr ?? returnItem?.lineTotalKhr ?? replacementQty * Number(purchaseItem.unitCostKhr ?? 0)),
+      lotNo: returnItem?.lot_no || returnItem?.lotNo || "",
     };
   };
 
@@ -1411,7 +1528,7 @@ export default function Purchases() {
   const buildReplacementReturnPayload = ({ purchase, purchaseReturn, items, stockInReplacement }) => {
     const now = new Date().toISOString().slice(0, 10);
     const replacementQty = items.reduce((total, item) => total + Number(item.qty || 0), 0);
-    const replacementReceivedQty = stockInReplacement ? replacementQty : 0;
+    const replacementReceivedQty = replacementQty;
 
     return {
       purchase_id: purchaseReturn.purchaseId || purchaseReturn.purchase_id || purchase.id,
@@ -1434,11 +1551,20 @@ export default function Purchases() {
       refund_amount_khr: 0,
       replacement_qty: replacementQty,
       replacement_received_qty: replacementReceivedQty,
+      defer_replacement_stock_in: true,
       credit_status: "none",
       credit_amount_usd: 0,
       credit_amount_khr: 0,
-      note: purchaseReturn.note || "Supplier replacement received.",
+      note:
+        purchaseReturn.note ||
+        `Supplier replacement received for claim ${purchaseReturn.purchaseReturnNo || purchaseReturn.purchase_return_no || ""} from purchase ${purchase.purchaseNo || purchase.purchase_no || ""}.`,
       resolved_at: now,
+      replacement_items: items.map((item) => ({
+        purchase_return_item_id: item.returnItemId || null,
+        purchase_item_id: item.purchaseItemId,
+        lot_no: item.lotNo || null,
+        expired_date: formatDateOnly(item.expiryDate) || null,
+      })),
       items: getReturnItems(purchaseReturn).map((returnItem) => {
         const receivedItem = items.find((item) => String(item.returnItemId || "") === String(returnItem.id || ""));
         const itemReplacementQty = getReturnItemReplacementQty(returnItem);
@@ -1459,7 +1585,7 @@ export default function Purchases() {
           line_total_usd: Number(returnItem.line_total_usd ?? returnItem.lineTotalUsd ?? receivedItem?.lineTotalUsd ?? 0),
           line_total_khr: Number(returnItem.line_total_khr ?? returnItem.lineTotalKhr ?? receivedItem?.lineTotalKhr ?? 0),
           replacement_qty: itemReplacementQty,
-          replacement_received_qty: stockInReplacement ? Number(receivedItem?.qty || itemReplacementQty) : 0,
+          replacement_received_qty: Number(receivedItem?.qty || itemReplacementQty),
           refund_amount_usd: 0,
           refund_amount_khr: 0,
           credit_amount_usd: 0,
@@ -1476,7 +1602,7 @@ export default function Purchases() {
   const handleSaveReceiveReplacement = () => {
     if (!replacementPurchase || !replacementReturn || !validateReplacementItems()) return;
 
-    const stockInReplacement = isPurchaseAlreadyStocked(replacementPurchase);
+    const stockInReplacement = false;
     const returnPayload = buildReplacementReturnPayload({
       purchase: replacementPurchase,
       purchaseReturn: replacementReturn,
@@ -1484,9 +1610,7 @@ export default function Purchases() {
       stockInReplacement,
     });
     const nextItems = buildItemsAfterReplacement(replacementPurchase, replacementItems);
-    const purchasePayload = stockInReplacement
-      ? null
-      : buildBackendPurchasePayloadFromDetail(replacementPurchase, nextItems);
+    const purchasePayload = null;
 
     if (purchasesQuery.data && !String(replacementReturn.id).startsWith("local-")) {
       receiveReplacementMutation.mutate({
@@ -1524,6 +1648,62 @@ export default function Purchases() {
     }
     notify.success("Replacement received", "Supplier replacement has been marked as received.");
     closeReplacementModal();
+    closeModal();
+  };
+
+  const handleResolveSupplierClaim = (purchase, claim) => {
+    if (!claim) return;
+
+    const resolutionType = normalizeReturnResolutionType(claim.resolutionType || claim.resolution_type || "");
+    const now = new Date().toISOString().slice(0, 10);
+    const isRefund = resolutionType === "refund";
+    const isCredit = resolutionType === "credit_note";
+    const actionLabel = isRefund ? "mark this refund as received" : "mark this credit note as resolved";
+    const ok = window.confirm(`Do you want to ${actionLabel} for ${claim.purchaseReturnNo || claim.purchase_return_no || "this supplier claim"}?`);
+    if (!ok) return;
+
+    const payload = {
+      resolution_type: resolutionType,
+      resolution_status: "resolved",
+      status: "resolved",
+      resolved_at: now,
+      note: claim.note || "",
+    };
+
+    if (isRefund) {
+      payload.refund_status = "received";
+      payload.refund_amount_usd = Number(claim.refundAmountUsd ?? claim.refund_amount_usd ?? claim.subtotalUsd ?? claim.subtotal ?? 0);
+      payload.refund_amount_khr = Number(claim.refundAmountKhr ?? claim.refund_amount_khr ?? claim.subtotalKhr ?? 0);
+      payload.refunded_at = now;
+    }
+
+    if (isCredit) {
+      payload.credit_status = "issued";
+      payload.credit_amount_usd = Number(claim.creditAmountUsd ?? claim.credit_amount_usd ?? claim.subtotalUsd ?? claim.subtotal ?? 0);
+      payload.credit_amount_khr = Number(claim.creditAmountKhr ?? claim.credit_amount_khr ?? claim.subtotalKhr ?? 0);
+    }
+
+    if (purchasesQuery.data && !String(claim.id).startsWith("local-")) {
+      resolveSupplierClaimMutation.mutate({ claim, payload });
+      return;
+    }
+
+    setPurchaseReturns((previous) =>
+      previous.map((item) =>
+        String(item.id) === String(claim.id)
+          ? {
+              ...item,
+              status: RETURN_STATUS.COMPLETED,
+              resolutionStatus: "resolved",
+              refundStatus: isRefund ? "received" : item.refundStatus,
+              refundedAt: isRefund ? now : item.refundedAt,
+              creditStatus: isCredit ? "issued" : item.creditStatus,
+              resolvedAt: now,
+            }
+          : item
+      )
+    );
+    notify.success("Supplier claim resolved", "The refund or credit note has been marked as completed.");
     closeModal();
   };
 
@@ -1854,30 +2034,15 @@ export default function Purchases() {
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className={`text-2xl font-bold tracking-tight ${theme.pageTitle}`}>Purchases</h1>
-          <p className={`mt-1 text-sm ${theme.muted}`}>Manage supplier invoices, receiving, stock-in, damaged goods, and supplier claims.</p>
-        </div>
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-        >
-          <FiPlusCircle className="text-lg" />
-          Add Purchase
-        </button>
-      </div>
-
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard theme={theme} title="Total Purchases" value={Number(pagination.total || purchases.length)} icon={<FiShoppingCart className="text-[34px] text-red-500" />} iconBg="bg-red-500/10" />
-        <SummaryCard theme={theme} title="Pending Receive" value={pendingReceive} icon={<FiTruck className="text-[34px] text-indigo-500" />} iconBg="bg-indigo-500/10" />
-        <SummaryCard theme={theme} title="Pending Stock In" value={pendingStockIn} icon={<FiClock className="text-[34px] text-blue-500" />} iconBg="bg-blue-500/10" />
-        <SummaryCard theme={theme} title="Supplier Claims" value={pendingClaims} icon={<FiRotateCcw className="text-[34px] text-red-500" />} iconBg="bg-red-500/10" />
+        <SummaryCard theme={theme} title="Total Purchases" value={totalPurchasesCount} icon={<FiShoppingCart className="text-[34px] text-violet-500" />} iconBg="bg-violet-500/10" />
+        <SummaryCard theme={theme} title="Total Amount" value={fmtUsd(totalGrandUsd)} subValue={fmtKhr(totalGrandKhr)} icon={<FiDollarSign className="text-[34px] text-emerald-500" />} iconBg="bg-emerald-500/10" />
+        <SummaryCard theme={theme} title="Outstanding Balance" value={fmtUsd(totalBalanceUsd)} subValue={fmtKhr(totalBalanceKhr)} subValueColor={totalBalanceUsd > 0 ? "text-amber-500" : "text-emerald-500"} icon={<FiCreditCard className="text-[34px] text-amber-500" />} iconBg="bg-amber-500/10" />
+        <SummaryCard theme={theme} title="Supplier Claims" value={pendingClaimsCount} icon={<FiRotateCcw className="text-[34px] text-red-500" />} iconBg="bg-red-500/10" />
       </div>
 
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full grid-cols-1 gap-3 xl:max-w-6xl xl:grid-cols-[1fr_220px_220px]">
+        <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_220px_220px_220px_auto]">
           <div className="relative">
             <FiSearch className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`} />
             <input
@@ -1907,16 +2072,25 @@ export default function Purchases() {
             icon={<FiCreditCard />}
             options={[{ value: "All", label: "All Payment" }, ...paymentModeOptions]}
           />
+
+          <FilterSelect
+            value={perPage}
+            setValue={(value) => setPerPage(Number(value))}
+            theme={theme}
+            icon={<FiHash />}
+            options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / page` }))}
+          />
+
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+          >
+            <FiPlusCircle className="text-lg" />
+            Add Purchase
+          </button>
         </div>
       </div>
-
-      {(pendingReceive > 0 || pendingStockIn > 0 || pendingClaims > 0) && (
-        <div className={`grid grid-cols-1 gap-4 rounded-2xl border p-5 shadow-sm xl:grid-cols-3 ${theme.card}`}>
-          <AlertMiniCard theme={theme} icon={<FiTruck />} title="Pending Receive" value={pendingReceive} description="Prepaid purchases waiting for goods arrival." colorClass="text-indigo-500" onClick={() => setStatusFilter(STATUS.PENDING_RECEIVE)} />
-          <AlertMiniCard theme={theme} icon={<FiClock />} title="Pending Stock In" value={pendingStockIn} description="Goods checked. Confirm stock one time from Inventory." colorClass="text-blue-500" onClick={() => setStatusFilter(STATUS.PENDING_STOCK_IN)} />
-          <AlertMiniCard theme={theme} icon={<FiAlertTriangle />} title="Pending Claim" value={pendingClaims} description="Prepaid damaged goods need supplier resolution." colorClass="text-red-500" onClick={() => setStatusFilter(STATUS.PENDING_CLAIM)} />
-        </div>
-      )}
 
       <div className={`overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}>
         <div className="flex flex-col gap-2 border-b border-zinc-200 px-5 py-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
@@ -1930,29 +2104,44 @@ export default function Purchases() {
         </div>
 
         <div className="hidden xl:block">
-          <PurchaseTable
-            purchases={filteredPurchases}
-            purchaseReturns={purchaseReturns}
-            theme={theme}
-            getEffectivePurchaseStatus={getEffectivePurchaseStatus}
-            getPurchaseProblemLabel={getPurchaseProblemLabel}
-            getClaimRequiredCount={getClaimRequiredCount}
-            getDamagedCount={getDamagedCount}
-            getNextActionLabel={getNextActionLabel}
-            getStatusClass={getStatusClass}
-            getStatusIcon={getStatusIcon}
-            openViewModal={openViewModal}
-            openEditModal={openEditModal}
-            openReceiveGoodsModal={openReceiveGoodsModal}
-            openPurchaseReturnModal={openPurchaseReturnModal}
-            handleReceiveReplacement={handleReceiveReplacement}
-            handleConfirmStockIn={handleConfirmStockIn}
-            handleCancelPurchase={handleCancelPurchase}
-          />
+          {purchasesQuery.isLoading ? (
+            <table className="w-full">
+              <tbody>
+                <TableLoading theme={theme} colSpan={5} text="Loading purchases..." />
+              </tbody>
+            </table>
+          ) : (
+            <PurchaseTable
+              purchases={filteredPurchases}
+              purchaseReturns={purchaseReturns}
+              theme={theme}
+              getEffectivePurchaseStatus={getEffectivePurchaseStatus}
+              getPurchaseProblemLabel={getPurchaseProblemLabel}
+              getClaimRequiredCount={getClaimRequiredCount}
+              getDamagedCount={getDamagedCount}
+              getNextActionLabel={getNextActionLabel}
+              getStatusClass={getStatusClass}
+              getStatusIcon={getStatusIcon}
+              openViewModal={openViewModal}
+              openEditModal={openEditModal}
+              openReceiveGoodsModal={openReceiveGoodsModal}
+              openPurchaseReturnModal={openPurchaseReturnModal}
+              handleReceiveReplacement={handleReceiveReplacement}
+              handleResolveSupplierClaim={handleResolveSupplierClaim}
+              handleConfirmStockIn={handleConfirmStockIn}
+              handleCancelPurchase={handleCancelPurchase}
+            />
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 p-4 xl:hidden">
-          {filteredPurchases.length === 0 ? (
+          {purchasesQuery.isLoading ? (
+            <table className="w-full">
+              <tbody>
+                <TableLoading theme={theme} colSpan={1} text="Loading purchases..." />
+              </tbody>
+            </table>
+          ) : filteredPurchases.length === 0 ? (
             <EmptyState theme={theme} icon={<FiSearch />} title="No purchases found" description="Try changing your search keyword or filters." />
           ) : (
             filteredPurchases.map((purchase) => (
@@ -1971,6 +2160,7 @@ export default function Purchases() {
                 openReceiveGoodsModal={openReceiveGoodsModal}
                 openPurchaseReturnModal={openPurchaseReturnModal}
                 handleReceiveReplacement={handleReceiveReplacement}
+                handleResolveSupplierClaim={handleResolveSupplierClaim}
                 handleConfirmStockIn={handleConfirmStockIn}
                 handleCancelPurchase={handleCancelPurchase}
               />
@@ -1989,28 +2179,45 @@ export default function Purchases() {
                 type="button"
                 disabled={page <= 1 || purchasesQuery.isFetching}
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
-                className="h-9 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
               >
+                <FiChevronLeft />
                 Previous
               </button>
 
-              <select
-                value={perPage}
-                onChange={(event) => setPerPage(Number(event.target.value))}
-                className={`h-9 rounded-xl border px-3 text-xs outline-none ${theme.select}`}
-              >
-                <option value={10}>10 / page</option>
-                <option value={20}>20 / page</option>
-                <option value={50}>50 / page</option>
-              </select>
+              {pageNumbers.map((item) =>
+                item === "..." ? (
+                  <span
+                    key={item}
+                    className={`px-2 text-sm font-semibold ${theme.muted}`}
+                  >
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    disabled={purchasesQuery.isFetching}
+                    onClick={() => setPage(item)}
+                    className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      item === pagination.currentPage
+                        ? "bg-red-600 text-white"
+                        : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
 
               <button
                 type="button"
                 disabled={page >= pagination.lastPage || purchasesQuery.isFetching}
                 onClick={() => setPage((current) => Math.min(pagination.lastPage, current + 1))}
-                className="h-9 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
               >
                 Next
+                <FiChevronRight />
               </button>
             </div>
           </div>
@@ -2031,7 +2238,19 @@ export default function Purchases() {
           onClose={closeModal}
           onReturn={() => openPurchaseReturnModal(selectedPurchase)}
           onReceiveReplacement={(purchaseReturn) => handleReceiveReplacement(selectedPurchase, purchaseReturn)}
+          onResolveClaim={(purchaseReturn) => handleResolveSupplierClaim(selectedPurchase, purchaseReturn)}
           onConfirmStockIn={() => handleConfirmStockIn(selectedPurchase)}
+          onRecordPayment={() => setRecordPaymentPurchase(selectedPurchase)}
+        />
+      )}
+
+      {recordPaymentPurchase && (
+        <RecordPaymentModal
+          purchase={recordPaymentPurchase}
+          theme={theme}
+          onClose={() => setRecordPaymentPurchase(null)}
+          onSubmit={(payload) => recordPaymentMutation.mutate({ id: recordPaymentPurchase.id, payload })}
+          isSaving={recordPaymentMutation.isPending}
         />
       )}
 
@@ -2048,7 +2267,6 @@ export default function Purchases() {
           onEditItem={openEditItemModal}
           onRemoveItem={handleRemoveItem}
           onClose={closeModal}
-          onSaveDraft={() => handleSavePurchase(STATUS.DRAFT)}
           onSavePrimary={() => handleSavePurchase(STATUS.PENDING_STOCK_IN)}
           primarySaveLabel={getPrimarySaveLabel()}
           isSaving={createPurchaseMutation.isPending || updatePurchaseMutation.isPending}
@@ -2094,8 +2312,6 @@ export default function Purchases() {
           form={itemForm}
           errors={itemErrors}
           variantUnits={variantUnits}
-          variantUnitSearch={variantUnitSearch}
-          setVariantUnitSearch={setVariantUnitSearch}
           exchangeRateUsed={Number(purchaseForm.exchangeRateUsed || activeExchangeRate || 0)}
           paymentMode={purchaseForm.paymentMode}
           theme={theme}
@@ -2108,3 +2324,29 @@ export default function Purchases() {
   );
 }
 
+function getPageNumbers(currentPage, totalPages) {
+  const current = Number(currentPage || 1);
+  const total = Number(totalPages || 1);
+
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, index) => index + 1);
+  }
+
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, "...", total];
+  }
+
+  if (current >= total - 3) {
+    return [
+      1,
+      "...",
+      total - 4,
+      total - 3,
+      total - 2,
+      total - 1,
+      total,
+    ];
+  }
+
+  return [1, "...", current - 1, current, current + 1, "...", total];
+}

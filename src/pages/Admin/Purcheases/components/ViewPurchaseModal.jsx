@@ -1,6 +1,7 @@
 import React from "react";
 import {
   FiCheckCircle,
+  FiCreditCard,
   FiDollarSign,
   FiInfo,
   FiPackage,
@@ -25,7 +26,9 @@ export function ViewPurchaseModal({
   onClose,
   onReturn,
   onReceiveReplacement,
+  onResolveClaim,
   onConfirmStockIn,
+  onRecordPayment,
 }) {
   const relatedReturns = [
     ...(Array.isArray(purchase.returns) ? purchase.returns : []),
@@ -39,6 +42,13 @@ export function ViewPurchaseModal({
     (total, item) => total + Number(item.acceptedQty || 0) * Number(item.conversionQty || 1),
     0
   );
+  const remainingStockInBaseQty = purchase.items.reduce(
+    (total, item) =>
+      total +
+      Math.max(0, Number(item.acceptedQty || 0) - Number(item.stockedInQty || 0)) *
+        Number(item.conversionQty || 1),
+    0
+  );
   const acceptedBaseUnit = purchase.items.find((item) => Number(item.acceptedQty || 0) > 0)?.baseUnit || "base unit";
   const normalizeReturnStatus = (value = "") => {
     const status = String(value || "").trim().toLowerCase().replaceAll(" ", "_");
@@ -48,23 +58,54 @@ export function ViewPurchaseModal({
   };
   const normalizeResolutionType = (value = "") => {
     const type = String(value || "").trim().toLowerCase();
-    return type === "credit_note" ? "credit" : type;
+    return type === "credit" ? "credit_note" : type;
   };
   const activeReturn = relatedReturns.find((item) => !["completed", "cancelled"].includes(normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status)));
-  const hasUnappliedClaimQty = claimItems.length > 0;
-  const isAlreadyStocked = purchase.status === STATUS.RECEIVED || purchase.items.some((item) => Number(item.stockedInQty || 0) > 0);
+  const hasRemainingStockIn = remainingStockInBaseQty > 0;
+  const isFullyStocked = purchase.status === STATUS.RECEIVED || (purchase.items.length > 0 && !hasRemainingStockIn);
   const replacementReturn = relatedReturns.find((item) => {
     const status = normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status);
     const isReplacement = normalizeResolutionType(item.resolutionType || item.resolution_type) === "replacement";
-    const isOpen = !["completed", "cancelled", "canceled"].includes(status);
-    const isResolvedButNotApplied = status === "completed" && hasUnappliedClaimQty && !isAlreadyStocked;
-    return isReplacement && (isOpen || isResolvedButNotApplied);
+    return isReplacement && !["completed", "cancelled", "canceled"].includes(status);
   });
+  const moneyReturn = relatedReturns.find((item) => {
+    const status = normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status);
+    const resolutionType = normalizeResolutionType(item.resolutionType || item.resolution_type);
+    return ["refund", "credit_note"].includes(resolutionType) && !["completed", "cancelled"].includes(status);
+  });
+  const canOpenInventory =
+    hasRemainingStockIn &&
+    [STATUS.PENDING_STOCK_IN, STATUS.PENDING_CLAIM].includes(effectiveStatus);
   const canCreateClaim =
     !activeReturn &&
     totalClaimQty > 0 &&
-    effectiveStatus !== STATUS.PENDING_RECEIVE &&
-    effectiveStatus !== STATUS.CANCELLED;
+    effectiveStatus === STATUS.PENDING_CLAIM &&
+    !isFullyStocked;
+  const resolvedRefundUsd = relatedReturns
+    .filter((item) => normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status) === "completed" && normalizeResolutionType(item.resolutionType || item.resolution_type) === "refund")
+    .reduce((sum, item) => sum + Number(item.refundAmountUsd ?? item.refund_amount_usd ?? 0), 0);
+  const resolvedRefundKhr = relatedReturns
+    .filter((item) => normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status) === "completed" && normalizeResolutionType(item.resolutionType || item.resolution_type) === "refund")
+    .reduce((sum, item) => sum + Number(item.refundAmountKhr ?? item.refund_amount_khr ?? 0), 0);
+  const resolvedCreditUsd = relatedReturns
+    .filter((item) => normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status) === "completed" && normalizeResolutionType(item.resolutionType || item.resolution_type) === "credit_note")
+    .reduce((sum, item) => sum + Number(item.creditAmountUsd ?? item.credit_amount_usd ?? 0), 0);
+  const resolvedCreditKhr = relatedReturns
+    .filter((item) => normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status) === "completed" && normalizeResolutionType(item.resolutionType || item.resolution_type) === "credit_note")
+    .reduce((sum, item) => sum + Number(item.creditAmountKhr ?? item.credit_amount_khr ?? 0), 0);
+  const totalDeductionUsd = resolvedRefundUsd + resolvedCreditUsd;
+  const totalDeductionKhr = resolvedRefundKhr + resolvedCreditKhr;
+  const grandTotalUsd = Number(purchase.grandTotalUsd ?? purchase.grandTotal ?? 0);
+  const grandTotalKhr = Number(purchase.grandTotalKhr ?? 0);
+  const netCostUsd = Math.max(0, grandTotalUsd - totalDeductionUsd);
+  const netCostKhr = Math.max(0, grandTotalKhr - totalDeductionKhr);
+  const hasSupplierDeduction = totalDeductionUsd > 0 || totalDeductionKhr > 0;
+  const deductionLabel =
+    (resolvedCreditUsd > 0 || resolvedCreditKhr > 0) && (resolvedRefundUsd > 0 || resolvedRefundKhr > 0)
+      ? "Refund + Credit Deduction"
+      : resolvedCreditUsd > 0 || resolvedCreditKhr > 0
+        ? "Credit Deduction"
+        : "Supplier Refund";
 
   return (
     <ModalShell
@@ -100,10 +141,31 @@ export function ViewPurchaseModal({
               <FiTruck /> Receive Replacement
             </button>
           )}
+          {moneyReturn && (
+            <button
+              type="button"
+              onClick={() => onResolveClaim?.(moneyReturn)}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+            >
+              <FiDollarSign />
+              {normalizeResolutionType(moneyReturn.resolutionType || moneyReturn.resolution_type) === "refund"
+                ? "Mark Refund Received"
+                : "Resolve Credit Note"}
+            </button>
+          )}
+          {purchase.paymentMode === "pay_after_check" && purchase.paymentStatus !== "paid" && effectiveStatus !== STATUS.CANCELLED && (
+            <button
+              type="button"
+              onClick={onRecordPayment}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-amber-600"
+            >
+              <FiCreditCard /> Record Payment
+            </button>
+          )}
           <button
             type="button"
             onClick={onConfirmStockIn}
-            disabled={effectiveStatus !== STATUS.PENDING_STOCK_IN}
+            disabled={!canOpenInventory}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FiCheckCircle /> Open in Inventory
@@ -138,14 +200,40 @@ export function ViewPurchaseModal({
               <SummaryMiniBox theme={theme} label="Paid" value={formatCurrencyPair(purchase.paidAmountUsd ?? purchase.paidAmount, purchase.paidAmountKhr)} />
               <SummaryMiniBox theme={theme} label="Balance" value={formatCurrencyPair(purchase.balanceAmountUsd ?? purchase.balanceAmount, purchase.balanceAmountKhr)} strong />
               <SummaryMiniBox theme={theme} label="Grand Total" value={formatCurrencyPair(purchase.grandTotalUsd ?? purchase.grandTotal, purchase.grandTotalKhr)} strong />
+              {hasSupplierDeduction && (
+                <>
+                  <div className="col-span-2 border-t border-dashed border-zinc-200 dark:border-white/10" />
+                  <SummaryMiniBox
+                    theme={theme}
+                    label={deductionLabel}
+                    value={`-${formatCurrencyPair(totalDeductionUsd, totalDeductionKhr)}`}
+                    colorClass="text-amber-500"
+                  />
+                  <SummaryMiniBox
+                    theme={theme}
+                    label="Net Cost"
+                    value={formatCurrencyPair(netCostUsd, netCostKhr)}
+                    strong
+                    colorClass="text-emerald-500"
+                  />
+                </>
+              )}
             </div>
           </FormSection>
 
           <FormSection title="Flow Status" subtitle="Recommended user action." icon={<FiInfo />} theme={theme}>
-            <FlowTimeline status={effectiveStatus} theme={theme} />
-            <div className="mt-4 rounded-xl bg-red-500/10 p-4 text-sm leading-6 text-red-600 dark:text-red-400">
+            <FlowTimeline status={effectiveStatus} theme={theme} paymentMode={purchase.paymentMode} hasClaimStep={totalClaimQty > 0 || effectiveStatus === STATUS.PENDING_CLAIM} />
+            <div
+              className={`mt-4 rounded-xl p-4 text-sm leading-6 ${
+                effectiveStatus === STATUS.RECEIVED
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : effectiveStatus === STATUS.CANCELLED
+                    ? "bg-zinc-500/10 text-zinc-600 dark:text-zinc-300"
+                    : "bg-red-500/10 text-red-600 dark:text-red-400"
+              }`}
+            >
               {effectiveStatus === STATUS.PENDING_RECEIVE && "Next: receive goods and enter damaged / accepted quantity."}
-              {effectiveStatus === STATUS.PENDING_CLAIM && "Next: create supplier claim for damaged prepaid goods."}
+              {effectiveStatus === STATUS.PENDING_CLAIM && (hasRemainingStockIn ? "Next: confirm accepted quantity in Inventory, and create supplier claim for damaged goods." : "Next: create supplier claim for damaged prepaid goods.")}
               {effectiveStatus === STATUS.PENDING_STOCK_IN && "Next: open this purchase in Inventory and confirm stock in one time. Only accepted quantity enters inventory."}
               {effectiveStatus === STATUS.RECEIVED && "Completed: this purchase already entered stock."}
               {effectiveStatus === STATUS.DRAFT && "Next: continue editing and save purchase."}
@@ -223,16 +311,26 @@ export function ViewPurchaseModal({
                     <p className="mt-3 text-sm">{formatCurrencyPair(item.subtotalUsd ?? item.subtotal, item.subtotalKhr)}</p>
                     <p className={`mt-2 text-xs leading-5 ${theme.muted}`}>{item.note || "-"}</p>
                     {normalizeResolutionType(item.resolutionType || item.resolution_type) === "replacement" &&
-                      (!["completed", "cancelled"].includes(normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status)) ||
-                        (normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status) === "completed" &&
-                          hasUnappliedClaimQty &&
-                          !isAlreadyStocked)) && (
+                      !["completed", "cancelled"].includes(normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status)) && (
                         <button
                           type="button"
                           onClick={() => onReceiveReplacement?.(item)}
                           className="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-purple-700"
                         >
                           <FiTruck /> Receive Replacement
+                        </button>
+                      )}
+                    {["refund", "credit_note"].includes(normalizeResolutionType(item.resolutionType || item.resolution_type)) &&
+                      !["completed", "cancelled"].includes(normalizeReturnStatus(item.status || item.resolutionStatus || item.resolution_status)) && (
+                        <button
+                          type="button"
+                          onClick={() => onResolveClaim?.(item)}
+                          className="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                        >
+                          <FiDollarSign />
+                          {normalizeResolutionType(item.resolutionType || item.resolution_type) === "refund"
+                            ? "Mark Refund Received"
+                            : "Resolve Credit Note"}
                         </button>
                       )}
                   </div>
@@ -271,8 +369,15 @@ export function ViewPurchaseModal({
   );
 }
 
-export function FlowTimeline({ status, theme }) {
-  const steps = [STATUS.DRAFT, STATUS.PENDING_RECEIVE, STATUS.PENDING_CLAIM, STATUS.PENDING_STOCK_IN, STATUS.RECEIVED];
+export function FlowTimeline({ status, theme, paymentMode = "", hasClaimStep = false }) {
+  const isPayAfterCheck = paymentMode === "pay_after_check";
+  const steps = [
+    STATUS.DRAFT,
+    ...(isPayAfterCheck ? [] : [STATUS.PENDING_RECEIVE]),
+    ...(hasClaimStep ? [STATUS.PENDING_CLAIM] : []),
+    STATUS.PENDING_STOCK_IN,
+    STATUS.RECEIVED,
+  ];
   const currentIndex = steps.indexOf(status);
 
   return (
@@ -280,12 +385,15 @@ export function FlowTimeline({ status, theme }) {
       {steps.map((step, index) => {
         const active = step === status;
         const done = currentIndex > index;
+        const isCompletedStep = active && step === STATUS.RECEIVED;
 
         return (
           <div key={step} className="flex items-center gap-3">
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-full text-sm ${
-                active
+                isCompletedStep
+                  ? "bg-emerald-500 text-white"
+                  : active
                   ? "bg-red-500 text-white"
                   : done
                     ? "bg-emerald-500 text-white"
@@ -294,7 +402,7 @@ export function FlowTimeline({ status, theme }) {
             >
               {done ? <FiCheckCircle /> : index + 1}
             </div>
-            <p className={`text-sm ${active ? "font-bold text-red-500" : theme.muted}`}>{step}</p>
+            <p className={`text-sm ${isCompletedStep ? "font-bold text-emerald-500" : active ? "font-bold text-red-500" : theme.muted}`}>{step}</p>
           </div>
         );
       })}

@@ -1,3 +1,4 @@
+import api from "../lib/axios";
 import { createProductApi, deleteProductApi } from "./product.service";
 import {
   createProductVariantApi,
@@ -37,6 +38,54 @@ const makeSetupVariantCode = (code, productId, variantIndex) => {
   return `${baseCode}-P${productId}`;
 };
 
+const hasFileUpload = (payload) => {
+  if (typeof File === "undefined") return false;
+  if (payload?.product?.imageFile instanceof File) return true;
+
+  return (payload?.variants || []).some(
+    (variant) => variant.imageFile instanceof File
+  );
+};
+
+const buildSetupPayload = (payload) => ({
+  product: {
+    name: payload.product?.name,
+    category_id: payload.product?.category_id,
+    description: payload.product?.description || "",
+    status: payload.product?.status || "active",
+  },
+  variants: (payload.variants || []).map((variant) => ({
+    variant_code: variant.variant_code,
+    variant_name: variant.variant_name,
+    package_type: variant.package_type,
+    color: variant.color || "",
+    size_value: variant.size_value || "",
+    size_unit: variant.size_unit || "",
+    low_stock_threshold: Number(variant.low_stock_threshold || 0),
+    status: Boolean(variant.status),
+    units: (variant.units || []).map((unit) => ({
+      local_key: unit.local_key,
+      unit_id: Number(unit.unit_id),
+      conversion_qty: Number(unit.conversion_qty || 1),
+      is_base_unit: Boolean(unit.is_base_unit),
+      is_default_sale_unit: Boolean(unit.is_default_sale_unit),
+      is_default_purchase_unit: Boolean(unit.is_default_purchase_unit),
+      status: Boolean(unit.status),
+    })),
+    priceRules: (variant.priceRules || []).map((rule) => ({
+      local_unit_key: rule.local_unit_key,
+      applies_to: rule.applies_to,
+      min_qty: Number(rule.min_qty || 1),
+      input_currency: (rule.input_currency || "USD").toUpperCase(),
+      input_price: Number(rule.input_price || 0),
+      unit_price_usd: Number(rule.unit_price_usd || 0),
+      unit_price_khr: Number(rule.unit_price_khr || 0),
+      exchange_rate_used: Number(payload.exchangeRate || 0),
+      status: rule.status || "active",
+    })),
+  })),
+});
+
 const cleanupCreatedSetup = async ({ priceRuleIds, variantUnitIds, variantIds, productId }) => {
   for (const id of [...priceRuleIds].reverse()) {
     try {
@@ -71,7 +120,7 @@ const cleanupCreatedSetup = async ({ priceRuleIds, variantUnitIds, variantIds, p
   }
 };
 
-export const createProductSetupApi = async (payload) => {
+const createProductSetupLegacyApi = async (payload) => {
   const createdIds = {
     productId: null,
     variantIds: [],
@@ -195,6 +244,19 @@ export const createProductSetupApi = async (payload) => {
     };
   } catch (error) {
     await cleanupCreatedSetup(createdIds);
+    throw new Error(getErrorMessage(error));
+  }
+};
+
+export const createProductSetupApi = async (payload) => {
+  if (hasFileUpload(payload)) {
+    return createProductSetupLegacyApi(payload);
+  }
+
+  try {
+    const response = await api.post("/products/setup", buildSetupPayload(payload));
+    return response.data;
+  } catch (error) {
     throw new Error(getErrorMessage(error));
   }
 };
