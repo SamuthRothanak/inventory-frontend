@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import {
   FiCheckCircle,
   FiFilter,
@@ -90,7 +91,7 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
-function getErrorMessage(error, fallback = "Something went wrong.") {
+function getErrorMessage(error, fallback = "មានបញ្ហាមួយបានកើតឡើង។") {
   const response = error?.response?.data;
 
   if (response?.message && response?.errors) {
@@ -106,6 +107,7 @@ export default function Customer() {
   const isDark = outlet?.isDark ?? false;
   const queryClient = useQueryClient();
   const notify = useNotification();
+  const confirm = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -237,13 +239,13 @@ export default function Customer() {
     mutationFn: createCustomerApi,
     onSuccess: () => {
       invalidateCustomers();
-      notify.success("Customer created", "The customer has been saved.");
+      notify.success("បង្កើតអតិថិជនរួចរាល់", "អតិថិជនត្រូវបានរក្សាទុករួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      const message = getErrorMessage(error, "Failed to create customer.");
+      const message = getErrorMessage(error, "មិនអាចបង្កើតអតិថិជនបានទេ។");
       setServerMessage(message);
-      notify.error("Create failed", message);
+      notify.error("បង្កើតបរាជ័យ", message);
     },
   });
 
@@ -251,13 +253,13 @@ export default function Customer() {
     mutationFn: updateCustomerApi,
     onSuccess: () => {
       invalidateCustomers();
-      notify.success("Customer updated", "The customer has been updated.");
+      notify.success("កែអតិថិជនរួចរាល់", "អតិថិជនត្រូវបានធ្វើបច្ចុប្បន្នភាពរួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      const message = getErrorMessage(error, "Failed to update customer.");
+      const message = getErrorMessage(error, "មិនអាចកែអតិថិជនបានទេ។");
       setServerMessage(message);
-      notify.error("Update failed", message);
+      notify.error("កែបរាជ័យ", message);
     },
   });
 
@@ -265,14 +267,14 @@ export default function Customer() {
     mutationFn: deleteCustomerApi,
     onSuccess: () => {
       invalidateCustomers();
-      notify.success("Customer deleted", "The customer has been deleted.");
+      notify.success("លុបអតិថិជនរួចរាល់", "អតិថិជនត្រូវបានលុបចោលរួចហើយ។");
     },
     onError: (error) => {
       notify.error(
-        "Delete failed",
+        "លុបបរាជ័យ",
         getErrorMessage(
           error,
-          "Failed to delete customer. This customer may already be used in sales."
+          "មិនអាចលុបអតិថិជនបានទេ។ អតិថិជននេះប្រហែលជាត្រូវបានប្រើក្នុងការលក់រួចហើយ។"
         )
       );
     },
@@ -285,14 +287,14 @@ export default function Customer() {
       setBulkSelectMode(false);
       invalidateCustomers();
       notify.success(
-        "Customers deleted",
-        "Selected customers have been deleted."
+        "លុបអតិថិជនរួចរាល់",
+        "អតិថិជនដែលបានជ្រើសរើសត្រូវបានលុបចោលរួចហើយ។"
       );
     },
     onError: (error) => {
       notify.error(
-        "Bulk delete failed",
-        getErrorMessage(error, "Failed to delete selected customers.")
+        "លុបជាក្រុមបរាជ័យ",
+        getErrorMessage(error, "មិនអាចលុបអតិថិជនដែលបានជ្រើសរើសបានទេ។")
       );
     },
   });
@@ -337,9 +339,9 @@ export default function Customer() {
     });
 
     if (duplicateCustomer) {
-      const message = "This customer shop name already exists.";
+      const message = "ឈ្មោះហាងអតិថិជននេះមានរួចហើយ។";
       setServerMessage(message);
-      notify.error("Duplicate customer", message);
+      notify.error("អតិថិជនស្ទួន", message);
       return;
     }
 
@@ -356,13 +358,9 @@ export default function Customer() {
     }
   };
 
-  const handleDeleteCustomer = (customer) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${customer.shopName}"?`
-    );
-
-    if (!confirmed) return;
-
+  const handleDeleteCustomer = async (customer) => {
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបអតិថិជន "${customer.shopName}" មែនទេ?`);
+    if (!ok) return;
     deleteMutation.mutate(customer.id);
   };
 
@@ -396,15 +394,10 @@ export default function Customer() {
     });
   };
 
-  const handleBulkDeleteCustomers = () => {
+  const handleBulkDeleteCustomers = async () => {
     if (selectedCustomerIds.length === 0) return;
-
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${selectedCustomerIds.length} selected customer${selectedCustomerIds.length > 1 ? "s" : ""}?`
-    );
-
-    if (!confirmed) return;
-
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបអតិថិជនចំនួន ${selectedCustomerIds.length} ដែលបានជ្រើសរើសមែនទេ?`);
+    if (!ok) return;
     bulkDeleteMutation.mutate(selectedCustomerIds);
   };
 
@@ -429,14 +422,14 @@ export default function Customer() {
   const actionErrorMessage =
     actionError?.response?.data?.message ||
     actionError?.message ||
-    "Something went wrong.";
+    "មានបញ្ហាមួយបានកើតឡើង។";
 
   return (
     <section className="space-y-6">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <SummaryCard
           theme={theme}
-          title="Total Customers"
+          title="អតិថិជនទាំងអស់"
           value={summary.total}
           icon={<FiUsers className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
@@ -444,7 +437,7 @@ export default function Customer() {
 
         <SummaryCard
           theme={theme}
-          title="Active Customers"
+          title="អតិថិជនដំណើរការ"
           value={summary.active}
           icon={<FiCheckCircle className="text-[44px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
@@ -452,7 +445,7 @@ export default function Customer() {
 
         <SummaryCard
           theme={theme}
-          title="Inactive Customers"
+          title="អតិថិជនមិនដំណើរការ"
           value={summary.inactive}
           icon={<FiXCircle className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
@@ -468,7 +461,7 @@ export default function Customer() {
 
             <input
               type="text"
-              placeholder="Search customer, shop, phone, address..."
+              placeholder="ស្វែងរកអតិថិជន ហាង ទូរស័ព្ទ ឬអាសយដ្ឋាន..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
@@ -481,9 +474,9 @@ export default function Customer() {
             onChange={setStatusFilter}
             theme={theme}
             options={[
-              { value: "All", label: "All Status" },
-              { value: "Active", label: "Active" },
-              { value: "Inactive", label: "Inactive" },
+              { value: "All", label: "ស្ថានភាពទាំងអស់" },
+              { value: "Active", label: "ដំណើរការ" },
+              { value: "Inactive", label: "មិនដំណើរការ" },
             ]}
           />
 
@@ -494,7 +487,7 @@ export default function Customer() {
             theme={theme}
             options={[10, 25, 50].map((value) => ({
               value,
-              label: `${value} / page`,
+              label: `${value} / ទំព័រ`,
             }))}
           />
         </div>
@@ -505,14 +498,14 @@ export default function Customer() {
           className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
         >
           <FiPlusCircle className="text-lg" />
-          Add Customer
+          បន្ថែមអតិថិជន
         </button>
       </div>
 
       {customersQuery.isError && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
           {customersQuery.error?.response?.data?.message ||
-            "Failed to load customers."}
+            "មិនអាចផ្ទុកអតិថិជនបានទេ។"}
         </div>
       )}
 

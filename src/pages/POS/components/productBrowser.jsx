@@ -3,13 +3,6 @@ import { Search, Package2 } from "./posIcons";
 import { EmptyState } from "./ui";
 import { getAppliedRule, usd, cn } from "./posData";
 
-const CATEGORY_META = {
-  All:   { icon: "🏪", color: "text-slate-600",  activeBg: "bg-red-500   text-white shadow-red-200"   },
-  Drink: { icon: "🥤", color: "text-blue-600",   activeBg: "bg-blue-500  text-white shadow-blue-200"  },
-  Food:  { icon: "🍱", color: "text-amber-600",  activeBg: "bg-amber-500 text-white shadow-amber-200" },
-  Snack: { icon: "🍿", color: "text-purple-600", activeBg: "bg-purple-500 text-white shadow-purple-200"},
-  Care:  { icon: "🧴", color: "text-green-600",  activeBg: "bg-green-500 text-white shadow-green-200" },
-};
 
 function stockBorderClass(stockBaseQty, lowStockThreshold) {
   if (stockBaseQty <= 0)                 return "border-t-red-400";
@@ -18,15 +11,23 @@ function stockBorderClass(stockBaseQty, lowStockThreshold) {
 }
 
 function stockLabel(stockBaseQty, lowStockThreshold) {
-  if (stockBaseQty <= 0)                 return { text: "Out",  cls: "bg-red-500/90 text-white" };
-  if (stockBaseQty <= lowStockThreshold) return { text: "Low",  cls: "bg-amber-500/90 text-white" };
+  if (stockBaseQty <= 0)                 return { text: "អស់", cls: "bg-red-500/90 text-white" };
+  if (stockBaseQty <= lowStockThreshold) return { text: "ស្ទើរអស់", cls: "bg-amber-500/90 text-white" };
   return null;
 }
 
 // ─── Grid Card ────────────────────────────────────────────────────
+function variantSuffix(item) {
+  const name = item.variantName || "";
+  const prefix = (item.productName || "") + " ";
+  if (name.startsWith(prefix)) return name.slice(prefix.length).trim();
+  if (name === item.productName) return "";
+  return name;
+}
+
 function ProductCardGrid({ item, publicRule, isOut, onClick }) {
-  const borderTop = stockBorderClass(item.stockBaseQty, item.lowStockThreshold);
-  const label     = stockLabel(item.stockBaseQty, item.lowStockThreshold);
+  const label  = stockLabel(item.stockBaseQty, item.lowStockThreshold);
+  const suffix = variantSuffix(item);
 
   return (
     <button
@@ -34,19 +35,18 @@ function ProductCardGrid({ item, publicRule, isOut, onClick }) {
       disabled={isOut}
       onClick={onClick}
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-xl border border-slate-200 border-t-[3px] bg-white text-left shadow-sm transition-all",
-        borderTop,
+        "group relative flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition-all",
         isOut
           ? "cursor-not-allowed opacity-40 grayscale"
           : "hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg active:scale-[0.97]"
       )}
     >
       {/* Image */}
-      <div className="relative w-full overflow-hidden bg-slate-100" style={{ paddingBottom: "72%" }}>
+      <div className="relative w-full overflow-hidden bg-white" style={{ paddingBottom: "65%" }}>
         <img
           src={item.image}
           alt={item.variantName}
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+          className="absolute inset-0 h-full w-full object-contain p-2"
         />
         {label && (
           <span className={cn(
@@ -61,7 +61,11 @@ function ProductCardGrid({ item, publicRule, isOut, onClick }) {
       {/* Info */}
       <div className="flex flex-1 flex-col p-2.5">
         <p className="line-clamp-1 text-[12px] font-bold leading-tight text-slate-900">{item.productName}</p>
-        <p className="mt-0.5 line-clamp-1 text-[10px] text-slate-400">{item.variantName}</p>
+        {suffix && (
+          <span className="mt-1.5 inline-flex w-fit items-center rounded-md bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-600 ring-1 ring-inset ring-sky-200">
+            {suffix}
+          </span>
+        )}
         <div className="mt-2 flex items-center justify-between">
           <span className="text-sm font-extrabold text-red-500">{usd(publicRule.usd)}</span>
           <span className="text-[10px] font-medium text-slate-400">{item.stockBaseQty}</span>
@@ -76,6 +80,7 @@ function ProductCardList({ item, publicRule, isOut, onClick }) {
   const dotColor = item.stockBaseQty <= 0 ? "bg-red-400"
     : item.stockBaseQty <= item.lowStockThreshold ? "bg-amber-400"
     : "bg-emerald-400";
+  const suffix = variantSuffix(item);
 
   return (
     <button
@@ -95,11 +100,18 @@ function ProductCardList({ item, publicRule, isOut, onClick }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold text-slate-900">{item.productName}</p>
-        <p className="truncate text-xs text-slate-400">{item.variantName} · {item.code}</p>
+        <div className="mt-0.5 flex items-center gap-1.5">
+          {suffix && (
+            <span className="shrink-0 rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold text-sky-600 ring-1 ring-inset ring-sky-200">
+              {suffix}
+            </span>
+          )}
+          {item.code && <span className="truncate text-[10px] text-slate-400">{item.code}</span>}
+        </div>
       </div>
       <div className="shrink-0 text-right">
         <p className="text-sm font-extrabold text-red-500">{usd(publicRule.usd)}</p>
-        <p className="text-[10px] text-slate-400">{item.stockBaseQty} pcs</p>
+        <p className="text-[10px] text-slate-400">{item.stockBaseQty} ខ្នាតទំនិញ</p>
       </div>
     </button>
   );
@@ -138,7 +150,7 @@ export default function ProductBrowser({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search product, variant, code…"
+              placeholder="ស្វែងរកទំនិញ លេខកូដ..."
               className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-sm text-slate-700 outline-none placeholder:text-slate-400 transition focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
             />
             {search && (
@@ -197,8 +209,7 @@ export default function ProductBrowser({
         {/* Row 2: category tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-3 scrollbar-none">
           {categories.map((tab) => {
-            const meta    = CATEGORY_META[tab] ?? { icon: "📦", color: "text-slate-600", activeBg: "bg-slate-500 text-white" };
-            const count   = countForTab(tab);
+            const count    = countForTab(tab);
             const isActive = category === tab;
             return (
               <button
@@ -208,15 +219,14 @@ export default function ProductBrowser({
                 className={cn(
                   "flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all",
                   isActive
-                    ? cn("shadow-sm", meta.activeBg)
-                    : cn("border border-slate-200 bg-slate-50 hover:bg-white hover:shadow-sm", meta.color)
+                    ? "bg-red-500 text-white shadow-sm shadow-red-200"
+                    : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-white hover:shadow-sm"
                 )}
               >
-                <span className="text-sm leading-none">{meta.icon}</span>
                 {tab}
                 <span className={cn(
                   "rounded-full px-1.5 py-0.5 text-[9px] font-bold",
-                  isActive ? "bg-white/25" : "bg-slate-200 text-slate-500"
+                  isActive ? "bg-white/25 text-white" : "bg-slate-200 text-slate-500"
                 )}>
                   {count}
                 </span>
@@ -232,8 +242,8 @@ export default function ProductBrowser({
         {filteredProducts.length === 0 ? (
           <EmptyState
             icon={<Package2 className="h-6 w-6" />}
-            title="No products found"
-            description="Try a different category or keyword."
+            title="រកមិនឃើញទំនិញ"
+            description="ព្យាយាមប្តូរប្រភេទ ឬពាក្យស្វែងរក"
           />
         ) : viewMode === "grid" ? (
           <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">

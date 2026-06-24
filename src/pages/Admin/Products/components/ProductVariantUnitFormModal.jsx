@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef } from "react";
+﻿import React, { useMemo, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FiHash, FiInfo, FiLayers, FiSave } from "react-icons/fi";
@@ -73,7 +73,7 @@ export default function ProductVariantUnitFormModal({
 
       return {
         value: unitId,
-        label: `${unit.unit_name || unit.unitName || unit.unit_code || unit.id}${alreadyAdded ? " (already added)" : ""}`,
+        label: `${unit.unit_name || unit.unitName || unit.unit_code || unit.id}${alreadyAdded ? " (បានបន្ថែមហើយ)" : ""}`,
         disabled: alreadyAdded,
       };
     });
@@ -102,7 +102,8 @@ export default function ProductVariantUnitFormModal({
       is_base_unit: !hasExistingUnits,
       is_default_sale_unit: !hasExistingUnits,
     });
-  }, [isEdit, variant, variantUnit, reset]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, variant?.id, variantUnit?.id, reset]);
 
   const conversionQty = watch("conversion_qty");
 
@@ -130,7 +131,7 @@ export default function ProductVariantUnitFormModal({
     if (existingUnitIds.has(String(values.unit_id))) {
       setError("unit_id", {
         type: "manual",
-        message: "This unit already exists for this variant.",
+        message: "ខ្នាតទំនិញនេះ បានបន្ថែមហើយ ។",
       });
       return;
     }
@@ -140,8 +141,8 @@ export default function ProductVariantUnitFormModal({
 
   return (
     <ModalShell
-      title={isEdit ? "Edit Variant Unit" : "Add Variant Unit"}
-      subtitle={`Variant: ${variant?.variantName || "-"} · Define base unit and conversion.`}
+      title={isEdit ? "កែខ្នាតទំនិញ" : "បន្ថែមខ្នាតទំនិញ"}
+      subtitle={`មុខទំនិញ: ${variant?.variantName || "-"} · កំណត់ខ្នាតមូលដ្ឋាននិងការប្ដូរ ។`}
       theme={theme}
       onClose={onClose}
       width="max-w-3xl"
@@ -149,12 +150,12 @@ export default function ProductVariantUnitFormModal({
         <>
           <button type="button" onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
-            Cancel
+            បោះបង់
           </button>
           <button type="submit" form="variant-unit-form" disabled={isSaving}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
             <FiSave />
-            {isSaving ? "Saving..." : "Save Unit"}
+            {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកខ្នាតទំនិញ"}
           </button>
         </>
       }
@@ -164,38 +165,39 @@ export default function ProductVariantUnitFormModal({
         <input type="hidden" {...register("product_variant_id")} />
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <FormSelect label="Unit" required error={errors.unit_id?.message} theme={theme} icon={<FiLayers />}
+          <FormSelect label="ខ្នាតទំនិញ" required error={errors.unit_id?.message} theme={theme} icon={<FiLayers />}
             value={watch("unit_id")}
             onChange={(value) => setValue("unit_id", value, { shouldValidate: true })}
             options={[
-              { value: "", label: "Select unit" },
+              { value: "", label: "ជ្រើសខ្នាតទំនិញ" },
               ...unitOptions,
             ]} />
-          <FormInput label="Conversion Qty" required sanitize="number" allowDecimal={true}
+          <FormInput label="ចំនួនបម្លែង" required sanitize="number" allowDecimal={true}
             error={errors.conversion_qty?.message} theme={theme} icon={<FiHash />}
+            hint="ឧ. 1 Can = 1 · 1 Case = 24 Cans"
             inputProps={register("conversion_qty")} />
         </div>
 
         <p className={`mb-2 mt-5 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
-          <FiInfo /> Unit Options (tap to toggle)
+          <FiInfo /> ជម្រើសខ្នាតទំនិញ
         </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <CheckRow label="Base Unit" helper="Smallest stock unit, e.g. Can"
+          <CheckRow label="ខ្នាតទំនិញស្តុក" helper="តាមដានស្តុកក្នុងខ្នាតទំនិញនេះ"
             checked={watch("is_base_unit")}
             onChange={(c) => setValue("is_base_unit", c, { shouldValidate: true })} />
-          <CheckRow label="Default Sale Unit" helper="Default unit for selling"
+          <CheckRow label="លក់ក្នុង POS" helper="ប្រើស្វ័យប្រវត្ដិពេលលក់ដល់អតិថិជន"
             checked={watch("is_default_sale_unit")}
             onChange={(c) => setValue("is_default_sale_unit", c, { shouldValidate: true })} />
-          <CheckRow label="Default Purchase Unit" helper="Default unit for buying"
+          <CheckRow label="ទិញពីអ្នកផ្គត់ផ្គង់" helper="ប្រើស្វ័យប្រវត្ដិពេលបញ្ជាទិញស្តុក"
             checked={watch("is_default_purchase_unit")}
             onChange={(c) => setValue("is_default_purchase_unit", c, { shouldValidate: true })} />
-          <CheckRow label="Active" helper="Can use this unit"
+          <CheckRow label="ដំណើរការ" helper="អាចប្រើខ្នាតទំនិញនេះ"
             checked={watch("status")}
             onChange={(c) => setValue("status", c, { shouldValidate: true })} />
         </div>
 
         <p className={`mt-4 text-xs ${theme.muted}`}>
-          Example: Base Unit = Can, Case conversion = 24. Meaning 1 Case = 24 Cans.
+          ឧ: ខ្នាតមូលដ្ឋាន = Can (ប្ដូរ=1) ។ Case = 24 Cans (ប្ដូរ=24) ។ Case ជាខ្នាតទំនិញ មិនមែនជាមុខទំនិញផ្សេង ។
         </p>
       </form>
     </ModalShell>
@@ -224,7 +226,7 @@ function CheckRow({ label, helper, checked, onChange }) {
 
 function FormInput({
   label, required = false, error = "", theme, icon, inputProps,
-  type = "text", sanitize = "none", allowDecimal = true,
+  type = "text", sanitize = "none", allowDecimal = true, hint,
 }) {
   const isNumberInput = sanitize === "number" || type === "number";
   return (
@@ -265,6 +267,7 @@ function FormInput({
           className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${error ? "border-red-500 focus:border-red-500" : ""}`}
         />
       </div>
+      {hint && <p className={`mt-1 text-xs ${theme.muted}`}>{hint}</p>}
       {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
     </label>
   );
@@ -280,7 +283,7 @@ function FormSelect({ label, required = false, error = "", theme, icon, value, o
       icon={icon}
       value={value}
       onChange={onChange}
-      options={options.filter((option) => !option.disabled)}
+      options={options}
       searchable={options.length > 6}
     />
   );

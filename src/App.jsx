@@ -53,6 +53,8 @@ import Purchases from "./pages/Admin/Purcheases/Purchases";
 import ExchangeRate from "./pages/Admin/ExchangeRate/ExchangeRate";
 import Report from "./pages/Admin/Reports/Report";
 import Setting from "./pages/Admin/Settings/Setting";
+import AuditLog from "./pages/Admin/AuditLog/AuditLog";
+import BackupData from "./pages/Admin/BackupData/BackupData";
 
 export default function App() {
   return (
@@ -82,6 +84,8 @@ export default function App() {
         <Route path="exchange-rate" element={<ExchangeRate/>} />
         <Route path="reports" element={<Report/>}/>
         <Route path="settings" element={<Setting/>}/>
+        <Route path="backup-data" element={<BackupData/>}/>
+        <Route path="audit-log" element={<AuditLog/>}/>
       </Route>
 
       <Route

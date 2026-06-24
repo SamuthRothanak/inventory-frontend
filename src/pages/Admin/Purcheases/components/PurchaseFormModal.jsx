@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -81,7 +81,7 @@ export function PurchaseFormModal({
   const isReceiveMode = mode === "receive_goods";
   const isPayAfterCheck = form.paymentMode === "pay_after_check";
 
-  const title = mode === "add" ? "Add Purchase" : isReceiveMode ? "Receive Goods" : "Edit Purchase";
+  const title = mode === "add" ? "បន្ថែមការទិញ" : isReceiveMode ? "ទទួលទំនិញ" : "កែការទិញ";
 
   const currencyPreview = calculateCurrencyPreview({ items, form });
 
@@ -93,7 +93,7 @@ export function PurchaseFormModal({
 
       title={title}
 
-      subtitle={isReceiveMode ? "Update received, damaged, accepted quantity and expiry date." : "Support Pay After Check, Prepaid, damaged goods, and supplier claims."}
+      subtitle={isReceiveMode ? "បញ្ចូលចំនួនទទួល, ខូចខាត, ទទួលយក និងកាលបរិច្ឆេទផុតកំណត់។" : "គាំទ្រការបង់ប្រាក់ក្រោយពិនិត្យ, បង់ជាមុន, ទំនិញខូចខាត និងការទាមទារ អ្នកផ្គត់ផ្គង់។"}
 
       theme={theme}
 
@@ -105,9 +105,9 @@ export function PurchaseFormModal({
 
         <>
 
-          <button type="button" onClick={onClose} className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">Cancel</button>
+          <button type="button" onClick={onClose} className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">បោះបង់</button>
 
-          <button type="button" disabled={isSaving} onClick={handleSubmit(() => onSavePrimary())} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"><FiCheckCircle />{isSaving ? "Saving..." : primarySaveLabel}</button>
+          <button type="button" disabled={isSaving} onClick={handleSubmit(() => onSavePrimary())} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"><FiCheckCircle />{isSaving ? "កំពុងរក្សាទុក..." : primarySaveLabel}</button>
 
         </>
 
@@ -123,27 +123,27 @@ export function PurchaseFormModal({
 
         {!isReceiveMode && (
 
-          <FormSection title="1. Purchase Information" subtitle="Choose supplier and payment workflow." icon={<FiShoppingCart />} theme={theme}>
+          <FormSection title="១. ព័ត៌មានការទិញ" subtitle="ជ្រើស អ្នកផ្គត់ផ្គង់ និងវិធីទូទាត់។" icon={<FiShoppingCart />} theme={theme}>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
-              <Controller control={control} name="purchaseNo" render={({ field }) => <FormInput label="Purchase No" required value={field.value} error={fieldError("purchaseNo")} onChange={bindField("purchaseNo", field.onChange)} theme={theme} placeholder="PUR-001" icon={<FiHash />} />} />
+              <Controller control={control} name="purchaseNo" render={({ field }) => <FormInput label="លេខការទិញ" required value={field.value} error={fieldError("purchaseNo")} onChange={bindField("purchaseNo", field.onChange)} theme={theme} placeholder="PUR-001" icon={<FiHash />} />} />
 
-              <Controller control={control} name="supplierId" render={({ field }) => <FormSelect label="Supplier" required value={field.value} error={fieldError("supplierId")} onChange={bindField("supplierId", field.onChange)} theme={theme} icon={<FiUser />} options={[{ value: "", label: "Select supplier" }, ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))]} searchable />} />
+              <Controller control={control} name="supplierId" render={({ field }) => <FormSelect label="អ្នកផ្គត់ផ្គង់" required value={field.value} error={fieldError("supplierId")} onChange={bindField("supplierId", field.onChange)} theme={theme} icon={<FiUser />} options={[{ value: "", label: "ជ្រើស អ្នកផ្គត់ផ្គង់" }, ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))]} searchable />} />
 
-              <Controller control={control} name="purchaseDate" render={({ field }) => <FormInput label="Purchase Date" required type="date" value={field.value} error={fieldError("purchaseDate")} onChange={bindField("purchaseDate", field.onChange)} theme={theme} icon={<FiCalendar />} />} />
+              <Controller control={control} name="purchaseDate" render={({ field }) => <FormInput label="កាលបរិច្ឆេទទិញ" required type="date" value={field.value} error={fieldError("purchaseDate")} onChange={bindField("purchaseDate", field.onChange)} theme={theme} icon={<FiCalendar />} />} />
 
-              <Controller control={control} name="paymentMode" render={({ field }) => <FormSelect label="Payment Mode" required value={field.value} error={fieldError("paymentMode")} onChange={bindField("paymentMode", field.onChange)} theme={theme} icon={<FiCreditCard />} options={paymentModeOptions} />} />
+              <Controller control={control} name="paymentMode" render={({ field }) => <FormSelect label="របៀបទូទាត់" required value={field.value} error={fieldError("paymentMode")} onChange={bindField("paymentMode", field.onChange)} theme={theme} icon={<FiCreditCard />} options={paymentModeOptions} />} />
 
               {!isPayAfterCheck && (
                 <>
-                  <Controller control={control} name="inputCurrency" render={({ field }) => <FormSelect label="Invoice Currency" required value={field.value} error={fieldError("inputCurrency")} onChange={bindField("inputCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
+                  <Controller control={control} name="inputCurrency" render={({ field }) => <FormSelect label="រូបិយប័ណ្ណវិក្កយបត្រ" required value={field.value} error={fieldError("inputCurrency")} onChange={bindField("inputCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
 
-                  <Controller control={control} name="exchangeRateUsed" render={({ field }) => <FormInput label="Exchange Rate Used" required type="number" value={field.value} error={fieldError("exchangeRateUsed")} onChange={bindField("exchangeRateUsed", field.onChange)} theme={theme} icon={<FiCreditCard />} helper={Number(field.value || 0) > 0 ? `1 USD = ${Number(field.value).toLocaleString()} KHR` : "Example: 1 USD = 4000 KHR"} />} />
-
-                  <Controller control={control} name="paymentStatus" render={({ field }) => <FormSelect label="Payment Status" required value={field.value} error={fieldError("paymentStatus")} onChange={bindField("paymentStatus", field.onChange)} theme={theme} icon={<FiDollarSign />} options={paymentStatusOptions} />} />
+                  <Controller control={control} name="exchangeRateUsed" render={({ field }) => <FormInput label="អត្រាប្ដូររូបិយប័ណ្ណ" required type="number" value={field.value} error={fieldError("exchangeRateUsed")} onChange={bindField("exchangeRateUsed", field.onChange)} theme={theme} icon={<FiCreditCard />} helper={Number(field.value || 0) > 0 ? `1 USD = ${Number(field.value).toLocaleString()} KHR` : "ឧ: 1 USD = 4000 KHR"} />} />
                 </>
               )}
+
+              <Controller control={control} name="paymentStatus" render={({ field }) => <FormSelect label="ស្ថានភាពទូទាត់" required={!isPayAfterCheck} value={field.value} error={isPayAfterCheck ? "" : fieldError("paymentStatus")} onChange={bindField("paymentStatus", field.onChange)} theme={theme} icon={<FiDollarSign />} options={paymentStatusOptions} disabled={isPayAfterCheck} />} />
 
             </div>
 
@@ -151,7 +151,7 @@ export function PurchaseFormModal({
 
             <div className="mt-4">
 
-              <FormTextarea label="Note" value={form.note} onChange={(value) => onChange("note", value)} theme={theme} placeholder="Purchase note..." icon={<FiFileText />} />
+              <FormTextarea label="កំណត់ចំណាំ" value={form.note} onChange={(value) => onChange("note", value)} theme={theme} placeholder="កំណត់ចំណាំការទិញ..." icon={<FiFileText />} />
 
             </div>
 
@@ -161,19 +161,19 @@ export function PurchaseFormModal({
 
 
 
-        <FormSection title={isReceiveMode ? "Receiving Items" : "2. Items & Receiving"} subtitle={isReceiveMode ? "Click edit on each item and enter received, damaged, accepted quantity." : "Add items, received qty, damaged qty, accepted qty, paid qty, and claim qty."} icon={<FiPackage />} theme={theme}>
+        <FormSection title={isReceiveMode ? "ទំនិញទទួល" : "២. ទំនិញ & ការទទួល"} subtitle={isReceiveMode ? "ចុចកែលើទំនិញ បំពេញចំនួនទទួល, ខូចខាត, ទទួលយក។" : "បន្ថែមទំនិញ, ចំនួនទទួល, ខូចខាត, ទទួលយក, បង់ប្រាក់ និងការទាមទារ។"} icon={<FiPackage />} theme={theme}>
 
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
             <div>
 
-              <p className="text-sm font-semibold">Items</p>
+              <p className="text-sm font-semibold">ទំនិញ</p>
 
-              <p className={`mt-1 text-xs ${theme.muted}`}>Only accepted quantity enters inventory after Inventory confirmation.</p>
+              <p className={`mt-1 text-xs ${theme.muted}`}>តែចំនួនទទួលយកប៉ុណ្ណោះដែលចូលស្តុក បន្ទាប់ពីបញ្ជាក់ ស្តុក។</p>
 
             </div>
 
-            {!isReceiveMode && <button type="button" onClick={onAddItem} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600"><FiPlus />Add Item</button>}
+            {!isReceiveMode && <button type="button" onClick={onAddItem} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600"><FiPlus />បន្ថែមទំនិញ</button>}
 
           </div>
 
@@ -185,7 +185,7 @@ export function PurchaseFormModal({
 
           {items.length === 0 ? (
 
-            <EmptyState theme={theme} icon={<FiPackage />} title="No purchase items" description="Example: Coca-Cola Case, received 200, damaged 10, accepted 190." />
+            <EmptyState theme={theme} icon={<FiPackage />} title="គ្មានទំនិញ" description="ឧ: Coca-Cola Case, ទទួល 200, ខូច 10, ទទួលយក 190។" />
 
           ) : (
 
@@ -197,25 +197,25 @@ export function PurchaseFormModal({
 
                   <tr>
 
-                    <th className="px-3 py-3 text-left">Product Variant</th>
+                    <th className="px-3 py-3 text-left">ទំនិញ</th>
 
-                    <th className="px-3 py-3 text-left">Invoiced</th>
+                    <th className="px-3 py-3 text-left">វិក្កយបត្រ</th>
 
-                    <th className="px-3 py-3 text-left">Paid</th>
+                    <th className="px-3 py-3 text-left">បង់</th>
 
-                    <th className="px-3 py-3 text-left">Received</th>
+                    <th className="px-3 py-3 text-left">ទទួល</th>
 
-                    <th className="px-3 py-3 text-left">Accepted</th>
+                    <th className="px-3 py-3 text-left">ទទួលយក</th>
 
-                    <th className="px-3 py-3 text-left">Damaged</th>
+                    <th className="px-3 py-3 text-left">ខូច</th>
 
-                    <th className="px-3 py-3 text-left">Claim</th>
+                    <th className="px-3 py-3 text-left">ទាមទារ</th>
 
-                    <th className="px-3 py-3 text-left">Expiry</th>
+                    <th className="px-3 py-3 text-left">ផុតកំណត់</th>
 
-                    <th className="px-3 py-3 text-left">Total</th>
+                    <th className="px-3 py-3 text-left">សរុប</th>
 
-                    <th className="px-3 py-3 text-center">Actions</th>
+                    <th className="px-3 py-3 text-center">សកម្មភាព</th>
 
                   </tr>
 
@@ -245,7 +245,7 @@ export function PurchaseFormModal({
 
                       <td className="px-3 py-3 font-semibold">{formatCurrencyPair(item.lineTotalUsd ?? item.lineTotal, item.lineTotalKhr)}</td>
 
-                      <td className="px-3 py-3"><div className="flex items-center justify-center gap-2"><button type="button" onClick={() => onEditItem(item, index)} className="flex h-8 items-center justify-center gap-1 rounded-lg bg-blue-600 px-2 text-xs font-semibold text-white hover:bg-blue-700"><FiEdit2 size={14} />{isReceiveMode ? "Receive" : "Edit"}</button>{!isReceiveMode && <button type="button" onClick={() => onRemoveItem(index)} className="flex h-8 items-center justify-center gap-1 rounded-lg bg-red-500 px-2 text-xs font-semibold text-white hover:bg-red-600"><FiTrash size={14} />Remove</button>}</div></td>
+                      <td className="px-3 py-3"><div className="flex items-center justify-center gap-2"><button type="button" onClick={() => onEditItem(item, index)} className="flex h-8 items-center justify-center gap-1 rounded-lg bg-blue-600 px-2 text-xs font-semibold text-white hover:bg-blue-700"><FiEdit2 size={14} />{isReceiveMode ? "ទទួល" : "កែ"}</button>{!isReceiveMode && <button type="button" onClick={() => onRemoveItem(index)} className="flex h-8 items-center justify-center gap-1 rounded-lg bg-red-500 px-2 text-xs font-semibold text-white hover:bg-red-600"><FiTrash size={14} />លុប</button>}</div></td>
 
                     </tr>
 
@@ -265,33 +265,33 @@ export function PurchaseFormModal({
 
         {!isReceiveMode && (
 
-          <FormSection title="3. Payment, Delivery & Summary" subtitle="Delivery information, discount, paid amount, balance, and total amount." icon={<FiTruck />} theme={theme}>
+          <FormSection title="៣. ការទូទាត់, ការដឹក & សង្ខេប" subtitle="ព័ត៌មានការដឹក, បញ្ចុះតម្លៃ, ប្រាក់បង់ និងតម្លៃសរុប។" icon={<FiTruck />} theme={theme}>
 
             {isPayAfterCheck && (
               <div className="mb-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm leading-6 text-emerald-700 dark:text-emerald-300">
-                Final payment is not required yet. After goods arrive, enter received, accepted, and damaged quantities; the payable amount will be calculated from accepted quantity only.
+                មិនទាន់ត្រូវការបង់ប្រាក់ទាំងស្រុងទេ។ បន្ទាប់ពីទំនិញមកដល់ ចូរបំពេញចំនួនទទួល, ទទួលយក, ខូចខាត — ចំនួនត្រូវបង់នឹងគណនាពីចំនួនទទួលយកប៉ុណ្ណោះ។
               </div>
             )}
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
-              <Controller control={control} name="deliveryOption" render={({ field }) => <FormSelect label="Delivery Option" value={field.value} onChange={bindField("deliveryOption", field.onChange)} theme={theme} icon={<FiTruck />} options={deliveryOptions} />} />
+              <Controller control={control} name="deliveryOption" render={({ field }) => <FormSelect label="ជម្រើសដឹក" value={field.value} onChange={bindField("deliveryOption", field.onChange)} theme={theme} icon={<FiTruck />} options={deliveryOptions} />} />
 
-              <Controller control={control} name="deliveryPaidBy" render={({ field }) => <FormSelect label="Delivery Paid By" value={field.value} onChange={bindField("deliveryPaidBy", field.onChange)} theme={theme} icon={<FiUser />} options={deliveryPaidByOptions} />} />
+              {form.deliveryOption !== "none" && form.deliveryOption !== "self_pickup" && <Controller control={control} name="deliveryPaidBy" render={({ field }) => <FormSelect label="ការដឹកបង់ដោយ" value={field.value} onChange={bindField("deliveryPaidBy", field.onChange)} theme={theme} icon={<FiUser />} options={deliveryPaidByOptions} />} />}
 
-              <Controller control={control} name="deliveryFeeCurrency" render={({ field }) => <FormSelect label="Delivery Currency" value={field.value} error={fieldError("deliveryFeeCurrency")} onChange={bindField("deliveryFeeCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
+              {form.deliveryOption !== "none" && <Controller control={control} name="deliveryFeeCurrency" render={({ field }) => <FormSelect label="រូបិយប័ណ្ណដឹក" value={field.value} error={fieldError("deliveryFeeCurrency")} onChange={bindField("deliveryFeeCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />}
 
-              <Controller control={control} name="deliveryFee" render={({ field }) => <FormInput label="Delivery Fee" type="number" value={field.value} error={fieldError("deliveryFee")} onChange={bindField("deliveryFee", field.onChange)} theme={theme} icon={form.deliveryFeeCurrency === "KHR" ? <span className="text-base font-bold">KHR</span> : <FiDollarSign />} />} />
+              {form.deliveryOption !== "none" && <Controller control={control} name="deliveryFee" render={({ field }) => <FormInput label="ថ្លៃដឹក" type="number" value={field.value} error={fieldError("deliveryFee")} onChange={bindField("deliveryFee", field.onChange)} theme={theme} icon={form.deliveryFeeCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />} />} />}
 
-              <Controller control={control} name="discountCurrency" render={({ field }) => <FormSelect label="Discount Currency" value={field.value} error={fieldError("discountCurrency")} onChange={bindField("discountCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
+              <Controller control={control} name="discountCurrency" render={({ field }) => <FormSelect label="រូបិយប័ណ្ណបញ្ចុះ" value={field.value} error={fieldError("discountCurrency")} onChange={bindField("discountCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
 
-              <Controller control={control} name="discountTotal" render={({ field }) => <FormInput label="Discount Total" type="number" value={field.value} error={fieldError("discountTotal")} onChange={bindField("discountTotal", field.onChange)} theme={theme} icon={<FiCreditCard />} />} />
+              <Controller control={control} name="discountTotal" render={({ field }) => <FormInput label="ចំនួនបញ្ចុះ" type="number" value={field.value} error={fieldError("discountTotal")} onChange={bindField("discountTotal", field.onChange)} theme={theme} icon={<FiCreditCard />} />} />
 
               {!isPayAfterCheck && (
                 <>
-                  <Controller control={control} name="paidCurrency" render={({ field }) => <FormSelect label="Paid Currency" value={field.value} error={fieldError("paidCurrency")} onChange={bindField("paidCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
+                  <Controller control={control} name="paidCurrency" render={({ field }) => <FormSelect label="រូបិយប័ណ្ណបង់" value={field.value} error={fieldError("paidCurrency")} onChange={bindField("paidCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
 
-                  <Controller control={control} name="paidAmount" render={({ field }) => <FormInput label="Paid Amount" type="number" value={form.paymentStatus === "paid" ? (form.paidCurrency === "KHR" ? currencyPreview.grandTotalKhr : currencyPreview.grandTotalUsd) : field.value} error={fieldError("paidAmount")} onChange={bindField("paidAmount", field.onChange)} theme={theme} icon={form.paidCurrency === "KHR" ? <span className="text-base font-bold">KHR</span> : <FiDollarSign />} />} />
+                  <Controller control={control} name="paidAmount" render={({ field }) => <FormInput label="ចំនួនបង់" type="number" value={form.paymentStatus === "paid" ? (form.paidCurrency === "KHR" ? currencyPreview.grandTotalKhr : currencyPreview.grandTotalUsd) : field.value} error={fieldError("paidAmount")} onChange={bindField("paidAmount", field.onChange)} theme={theme} icon={form.paidCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />} />} />
                 </>
               )}
 
@@ -301,17 +301,17 @@ export function PurchaseFormModal({
 
             <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
 
-              <SummaryMiniBox theme={theme} label="Subtotal" value={formatCurrencyPair(currencyPreview.subtotalUsd, currencyPreview.subtotalKhr)} />
+              <SummaryMiniBox theme={theme} label="តម្លៃមុនបញ្ចុះ" value={formatCurrencyPair(currencyPreview.subtotalUsd, currencyPreview.subtotalKhr)} />
 
-              <SummaryMiniBox theme={theme} label="Discount" value={formatCurrencyPair(currencyPreview.discountUsd, currencyPreview.discountKhr)} />
+              <SummaryMiniBox theme={theme} label="បញ្ចុះតម្លៃ" value={formatCurrencyPair(currencyPreview.discountUsd, currencyPreview.discountKhr)} />
 
-              <SummaryMiniBox theme={theme} label="Delivery Fee" value={formatCurrencyPair(currencyPreview.deliveryUsd, currencyPreview.deliveryKhr)} />
+              <SummaryMiniBox theme={theme} label="ថ្លៃដឹក" value={formatCurrencyPair(currencyPreview.deliveryUsd, currencyPreview.deliveryKhr)} />
 
-              {!isPayAfterCheck && <SummaryMiniBox theme={theme} label="Paid Amount" value={formatCurrencyPair(currencyPreview.paidAmountUsd, currencyPreview.paidAmountKhr)} />}
+              {!isPayAfterCheck && <SummaryMiniBox theme={theme} label="ចំនួនបង់" value={formatCurrencyPair(currencyPreview.paidAmountUsd, currencyPreview.paidAmountKhr)} />}
 
-              {!isPayAfterCheck && <SummaryMiniBox theme={theme} label="Balance" value={formatCurrencyPair(currencyPreview.balanceUsd, currencyPreview.balanceKhr)} strong />}
+              {!isPayAfterCheck && <SummaryMiniBox theme={theme} label="នៅសល់" value={formatCurrencyPair(currencyPreview.balanceUsd, currencyPreview.balanceKhr)} strong />}
 
-              <SummaryMiniBox theme={theme} label={isPayAfterCheck ? "Estimated Payable" : "Grand Total"} value={formatCurrencyPair(currencyPreview.grandTotalUsd, currencyPreview.grandTotalKhr)} strong />
+              <SummaryMiniBox theme={theme} label={isPayAfterCheck ? "ប្រមាណត្រូវបង់" : "តម្លៃសរុប"} value={formatCurrencyPair(currencyPreview.grandTotalUsd, currencyPreview.grandTotalKhr)} strong />
 
             </div>
 
@@ -319,7 +319,7 @@ export function PurchaseFormModal({
 
               <div className="mt-4 rounded-xl bg-red-500/10 p-4 text-sm font-semibold text-red-500">
 
-                Exchange rate is required before saving this purchase.
+                ត្រូវការអត្រាប្ដូររូបិយប័ណ្ណ មុនពេលរក្សាទុកការទិញ។
 
               </div>
 
@@ -344,11 +344,11 @@ export function FlowHelper({ mode, theme }) {
 
   const text = {
 
-    pay_after_check: "Pay After Check flow: Receive goods → exclude damaged quantity → pay accepted quantity → send to Inventory for one-time stock confirmation.",
+    pay_after_check: "លំហូរ បង់ក្រោយពិនិត្យ: ទទួលទំនិញ → ដកចំនួនខូច → បង់តែចំនួនទទួលយក → ផ្ញើទៅ ស្តុក ដើម្បីបញ្ជាក់ស្តុកម្ដង។",
 
-    prepaid: "Prepaid flow: Pay first → receive goods → damaged quantity becomes supplier claim → accepted quantity waits for Inventory confirmation.",
+    prepaid: "លំហូរ បង់ជាមុន: បង់មុន → ទទួលទំនិញ → ចំនួនខូចក្លាយជាការទាមទារ អ្នកផ្គត់ផ្គង់ → ចំនួនទទួលយករង់ចាំ ស្តុក។",
 
-    partial_prepaid: "Partial Prepaid flow: Enter paid quantity carefully. If paid quantity is greater than accepted quantity, claim may be required before Inventory confirmation.",
+    partial_prepaid: "លំហូរ បង់ជាមុនមួយផ្នែក: បំពេញចំនួនបង់ដោយប្រុងប្រយ័ត្ន។ ប្រសិនចំនួនបង់លើសចំនួនទទួលយក ការទាមទារអាចនឹងត្រូវការ។",
 
   };
 
@@ -364,7 +364,7 @@ export function FlowHelper({ mode, theme }) {
 
         <div>
 
-          <p className="text-sm font-bold">Purchase Workflow Guide</p>
+          <p className="text-sm font-bold">ណែនាំការទិញ</p>
 
           <p className={`mt-1 text-sm leading-6 ${theme.muted}`}>{text[mode]}</p>
 
@@ -385,17 +385,17 @@ export function PaymentModeHint({ mode }) {
 
   if (mode === "pay_after_check") {
 
-    return <div className="mt-4 rounded-xl bg-emerald-500/10 p-4 text-sm leading-6 text-emerald-700 dark:text-emerald-400">Pay After Check: do not collect final payment before goods arrive. Payable amount is calculated after receiving from accepted quantity only; damaged goods are excluded from payment and stock.</div>;
+    return <div className="mt-4 rounded-xl bg-emerald-500/10 p-4 text-sm leading-6 text-emerald-700 dark:text-emerald-400">បង់ក្រោយពិនិត្យ: កុំទទួលប្រាក់ទាំងស្រុងមុនទំនិញមកដល់។ ចំនួនត្រូវបង់គណនាពីចំនួនទទួលយកប៉ុណ្ណោះ — ទំនិញខូចដក ចេញពីការបង់និងស្តុក។</div>;
 
   }
 
   if (mode === "prepaid") {
 
-    return <div className="mt-4 rounded-xl bg-red-500/10 p-4 text-sm leading-6 text-red-600 dark:text-red-400">Prepaid: goods are paid before arrival. If goods arrive damaged, claim qty is created for replacement, credit note, or refund.</div>;
+    return <div className="mt-4 rounded-xl bg-red-500/10 p-4 text-sm leading-6 text-red-600 dark:text-red-400">បង់ជាមុន: ទំនិញត្រូវបង់ប្រាក់ជាមុន។ ប្រសិនទំនិញមកដល់ខូច ចំនួនខូចក្លាយជាការទាមទារ អ្នកផ្គត់ផ្គង់ (ជំនួស, ការបញ្ចុះ, ឬប្រាក់សង)។</div>;
 
   }
 
-  return <div className="mt-4 rounded-xl bg-amber-500/10 p-4 text-sm leading-6 text-amber-700 dark:text-amber-400">Partial Prepaid: enter paid qty manually. If paid qty is more than accepted qty, claim qty may be required.</div>;
+  return <div className="mt-4 rounded-xl bg-amber-500/10 p-4 text-sm leading-6 text-amber-700 dark:text-amber-400">បង់ជាមុនមួយផ្នែក: បំពេញចំនួនបង់ដោយខ្លួនឯង។ ប្រសិនចំនួនបង់លើសចំនួនទទួលយក ការទាមទារអាចត្រូវការ។</div>;
 
 }
 

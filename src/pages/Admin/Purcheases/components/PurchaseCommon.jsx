@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FiCheck, FiChevronDown, FiX } from "react-icons/fi";
+import { RETURN_STATUS_LABEL, STATUS_LABEL } from "../utils/purchaseConstants";
 
 const isDarkTheme = (theme) => String(theme?.select || "").includes("bg-[#1b1b1f]");
 const sanitizeNumber = (value, allowDecimal = true) => {
@@ -47,7 +48,7 @@ export function FilterSelect({ value, setValue, theme, icon, options, searchable
 
       <button type="button" onClick={() => setOpen((previous) => !previous)} className={`flex h-12 w-full items-center justify-between rounded-2xl border pl-11 pr-11 text-left text-sm outline-none transition focus:ring-4 ${theme.select}`}>
 
-        <span className="truncate">{selectedOption?.label || "Select"}</span>
+        <span className="truncate">{selectedOption?.label || "ជ្រើស"}</span>
 
       </button>
 
@@ -57,7 +58,7 @@ export function FilterSelect({ value, setValue, theme, icon, options, searchable
         <div className={`absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border ${dropdownClass}`}>
           {searchable && (
             <div className={`border-b p-2 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
-              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search..." className={`h-9 w-full rounded-xl border px-3 text-sm outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-500/20 ${searchInputClass}`} />
+              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ស្វែងរក..." className={`h-9 w-full rounded-xl border px-3 text-sm outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-500/20 ${searchInputClass}`} />
             </div>
           )}
 
@@ -233,8 +234,8 @@ export function FormSection({ title, subtitle, icon, theme, children }) {
 
 
 export function StatusBadge({ status, getStatusClass, getStatusIcon }) {
-
-  return <span className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(status)}`}>{getStatusIcon(status)}{status}</span>;
+  const label = STATUS_LABEL[status] ?? RETURN_STATUS_LABEL[status] ?? status;
+  return <span className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(status)}`}>{getStatusIcon(status)}{label}</span>;
 
 }
 
@@ -343,7 +344,7 @@ export function FormSelect({ label, required = false, value, onChange, options, 
           }}
           className={`flex h-11 w-full items-center justify-between rounded-xl border ${icon ? "pl-10" : "pl-3"} pr-10 text-left text-sm outline-none transition focus:ring-4 disabled:cursor-not-allowed disabled:opacity-70 ${theme.select} ${error ? "border-red-500 focus:border-red-500" : ""}`}
         >
-          <span className="truncate">{selectedOption?.label || "Select"}</span>
+          <span className="truncate">{selectedOption?.label || "ជ្រើស"}</span>
         </button>
 
         <FiChevronDown className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-base transition ${theme.muted} ${open ? "rotate-180" : ""}`} />
@@ -356,7 +357,7 @@ export function FormSelect({ label, required = false, value, onChange, options, 
                   autoFocus
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search..."
+                  placeholder="ស្វែងរក..."
                   className={`h-10 w-full rounded-xl border px-3 text-sm outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-500/20 ${searchInputClass}`}
                 />
               </div>
@@ -364,7 +365,7 @@ export function FormSelect({ label, required = false, value, onChange, options, 
 
             <div className="max-h-60 overflow-y-auto py-1">
               {visibleOptions.length === 0 ? (
-                <div className={`px-4 py-3 text-sm ${theme.muted}`}>No options found</div>
+                <div className={`px-4 py-3 text-sm ${theme.muted}`}>រកមិនឃើញ</div>
               ) : (
                 visibleOptions.map((option) => {
                   const isActive = String(option.value) === String(value);

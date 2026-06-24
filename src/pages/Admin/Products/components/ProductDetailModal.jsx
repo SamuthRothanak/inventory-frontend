@@ -63,7 +63,7 @@ export default function ProductDetailModal({
   return (
     <ModalShell
       title={product.name}
-      subtitle={`Product ID: ${product.id} · ${product.categoryName}`}
+      subtitle={`លេខសម្គាល់: ${product.id} · ${product.categoryName}`}
       theme={theme}
       onClose={onClose}
       footer={
@@ -74,7 +74,7 @@ export default function ProductDetailModal({
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
           >
             <FiEdit2 />
-            Manage Product Setup
+            គ្រប់គ្រងផលិតផល
           </button>
 
           <button
@@ -82,7 +82,7 @@ export default function ProductDetailModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Close
+            បិទ
           </button>
         </>
       }
@@ -102,21 +102,21 @@ export default function ProductDetailModal({
           </div>
 
           <div className="mt-4 space-y-3 text-sm">
-            <InfoLine label="Product ID" value={product.id} />
-            <InfoLine label="Category" value={product.categoryName} />
-            <InfoLine label="Status" value={product.status} />
-            <InfoLine label="Description" value={product.description || "-"} />
+            <InfoLine label="ID" value={product.id} />
+            <InfoLine label="ប្រភេទ" value={product.categoryName} />
+            <InfoLine label="ស្ថានភាព" value={{ active: "ដំណើរការ", inactive: "មិនដំណើរការ" }[product.status] ?? product.status} />
+            <InfoLine label="ការពិពណ៌នា" value={product.description || "-"} />
           </div>
         </div>
 
         <div className="space-y-5">
           <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
             <h3 className="text-base font-bold">
-              Variants ({product.variants.length})
+              មុខទំនិញ ({product.variants.length})
             </h3>
 
             <p className={`mt-1 text-xs ${theme.muted}`}>
-              View product variants, units, and price rules.
+              មើលមុខទំនិញ, ខ្នាត, និងតម្លៃ។
             </p>
           </div>
 
@@ -126,10 +126,10 @@ export default function ProductDetailModal({
             >
               <FiAlertTriangle className="mx-auto text-4xl text-amber-500" />
               <p className="mt-3 text-sm font-semibold">
-                No variants for this product
+                គ្មានមុខទំនិញសម្រាប់ផលិតផលនេះ
               </p>
               <p className={`mt-1 text-xs ${theme.muted}`}>
-                Click Manage Product Setup to add variants.
+                ចុច គ្រប់គ្រងផលិតផល ដើម្បីបន្ថែមមុខទំនិញ។
               </p>
             </div>
           )}
@@ -148,48 +148,48 @@ export default function ProductDetailModal({
                   </h3>
 
                   <p className={`mt-1 text-xs ${theme.muted}`}>
-                    {variant.variantCode || "-"} · Variant ID: {variant.id}
+                    {variant.variantCode || "-"} · ID: {variant.id}
                   </p>
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     <span
                       className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                     >
-                      {variant.packageType || "No Package"}
+                      {variant.packageType || "គ្មានខ្ចប់"}
                     </span>
 
                     <span
                       className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                     >
-                      Size: {variant.sizeValue || "-"} {variant.sizeUnit || ""}
+                      ទំហំ: {variant.sizeValue || "-"} {variant.sizeUnit || ""}
                     </span>
 
                     {variant.color && (
                       <span
                         className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                       >
-                        Color: {variant.color}
+                        ពណ៌: {variant.color}
                       </span>
                     )}
 
                     <span
                       className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                     >
-                      Low stock: {variant.lowStockThreshold}
+                      ស្តុកក្រោម: {variant.lowStockThreshold}
                     </span>
                   </div>
                 </div>
               </div>
 
               <div className="mt-5">
-                <h4 className="text-sm font-semibold">Units</h4>
+                <h4 className="text-sm font-semibold">ខ្នាតទំនិញ</h4>
 
                 <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
                   {variant.units.length === 0 && (
                     <div
                       className={`rounded-xl border p-3 text-sm ${theme.softCard}`}
                     >
-                      <p className="font-semibold">No units configured</p>
+                      <p className="font-semibold">គ្មានខ្នាតទំនិញ</p>
                     </div>
                   )}
 
@@ -203,10 +203,10 @@ export default function ProductDetailModal({
                       </p>
 
                       <p className={`mt-1 text-xs ${theme.muted}`}>
-                        {unit.isBaseUnit ? "Base unit" : "Converted unit"}
-                        {unit.isDefaultSaleUnit ? " · Default sale" : ""}
+                        {unit.isBaseUnit ? "ខ្នាតស្តុក" : "ខ្នាតដូរ"}
+                        {unit.isDefaultSaleUnit ? " · លក់ស្វ័យប្រវត្ដិ" : ""}
                         {unit.isDefaultPurchaseUnit
-                          ? " · Default purchase"
+                          ? " · ទិញស្វ័យប្រវត្ដិ"
                           : ""}
                       </p>
                     </div>
@@ -215,13 +215,13 @@ export default function ProductDetailModal({
               </div>
 
               <div className="mt-5">
-                <h4 className="text-sm font-semibold">Price Rules</h4>
+                <h4 className="text-sm font-semibold">តម្លៃលក់</h4>
 
                 {variant.priceRules.length === 0 ? (
                   <div
                     className={`mt-2 rounded-xl border p-3 text-sm ${theme.softCard}`}
                   >
-                    No price rules configured
+                    គ្មានតម្លៃដែលបានដំឡើង
                   </div>
                 ) : (
                   <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -232,11 +232,11 @@ export default function ProductDetailModal({
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="font-semibold capitalize">
-                              {rule.appliesTo}
+                            <p className="font-semibold">
+                              {({ retail: "លក់រាយ", wholesale: "លក់ដុំ", all: "ទាំងអស់" }[String(rule.appliesTo).toLowerCase()] ?? rule.appliesTo)}
                             </p>
                             <p className={`mt-1 text-xs ${theme.muted}`}>
-                              Unit: {rule.unitName || "-"} · Min Qty:{" "}
+                              ខ្នាតទំនិញ: {rule.unitName || "-"} · ចំនួនយ៉ាងតិច:{" "}
                               {rule.minQty}
                             </p>
                           </div>

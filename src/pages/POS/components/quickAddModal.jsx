@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { ShoppingCart, X, Tag, AlertCircle } from "./posIcons";
 import { usd, khr, cn } from "./posData";
 
@@ -17,6 +17,10 @@ export default function QuickAddModal({
   onClose,
   onAddToCart,
 }) {
+  const [isFresh, setIsFresh] = useState(true);
+
+  useEffect(() => { setIsFresh(true); }, [selectedProduct]);
+
   if (!selectedProduct) return null;
 
   const isOutOfStock = selectedProduct.stockBaseQty <= 0;
@@ -25,16 +29,23 @@ export default function QuickAddModal({
   function handleNumpad(key) {
     if (key === "⌫") {
       setQty((v) => Math.max(1, Math.floor(v / 10)));
+      setIsFresh(false);
       return;
     }
     if (key === "×5") {
       setQty((v) => Math.min(v * 5, 9999));
+      setIsFresh(false);
       return;
     }
-    setQty((v) => {
-      const next = parseInt(`${v === 1 && key !== "0" ? "" : v}${key}`, 10);
-      return isNaN(next) || next < 1 ? 1 : Math.min(next, 9999);
-    });
+    if (isFresh && key !== "0") {
+      setQty(parseInt(key, 10));
+      setIsFresh(false);
+    } else {
+      setQty((v) => {
+        const next = parseInt(`${v}${key}`, 10);
+        return isNaN(next) || next < 1 ? 1 : Math.min(next, 9999);
+      });
+    }
   }
 
   return (
@@ -53,7 +64,7 @@ export default function QuickAddModal({
               <ShoppingCart className="h-4 w-4" />
             </div>
             <div>
-              <p className="font-bold text-slate-900">Add to Cart</p>
+              <p className="font-bold text-slate-900">បន្ថែមទៅ Cart</p>
               <p className="text-xs text-slate-400">{selectedProduct.productName}</p>
             </div>
           </div>
@@ -84,14 +95,14 @@ export default function QuickAddModal({
               )}
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-[10px] text-slate-400">In stock</p>
+              <p className="text-[10px] text-slate-400">មានស្តុក</p>
               <p className="text-lg font-extrabold text-slate-900">{selectedProduct.stockBaseQty}</p>
             </div>
           </div>
 
           {/* Unit selector */}
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Select Unit</p>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">ជ្រើសរើសខ្នាតទំនិញ</p>
             <div className="flex flex-wrap gap-2">
               {selectedProduct.units.map((unit) => (
                 <button
@@ -123,7 +134,7 @@ export default function QuickAddModal({
             <div className="space-y-3">
               {/* Qty display */}
               <div>
-                <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">Quantity</p>
+                <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">បរិមាណ</p>
                 <div className={cn(
                   "flex h-14 items-center justify-center rounded-xl border-2 text-3xl font-extrabold transition",
                   isOverStock
@@ -136,12 +147,12 @@ export default function QuickAddModal({
 
               {/* Available */}
               <div>
-                <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">Available</p>
+                <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">នៅមាន</p>
                 <div className="flex h-10 items-center rounded-xl border border-slate-200 bg-slate-50 px-4">
                   <span className={cn("text-base font-bold", isOverStock ? "text-red-500" : "text-emerald-600")}>
                     {availableUnits}
                   </span>
-                  <span className="ml-1.5 text-xs text-slate-400">units</span>
+                  <span className="ml-1.5 text-xs text-slate-400">ខ្នាតទំនិញ</span>
                 </div>
               </div>
 
@@ -149,24 +160,24 @@ export default function QuickAddModal({
               {appliedRule && (
                 <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
                   <div className="mb-1.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    <Tag className="h-3 w-3" /> Price Rule
+                    <Tag className="h-3 w-3" /> ច្បាប់តម្លៃ
                   </div>
                   <div className="space-y-1 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Rule</span>
+                      <span className="text-slate-500">ច្បាប់</span>
                       <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
                         {appliedRule.label}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Unit price</span>
+                      <span className="text-slate-500">តម្លៃក្នុងមួយ</span>
                       <div className="text-right">
                         <span className="font-semibold text-slate-900">{usd(unitPrice)}</span>
                         <span className="ml-1.5 text-[10px] text-slate-400">{khr(appliedRule.khr)}</span>
                       </div>
                     </div>
                     <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                      <span className="font-bold text-slate-700">Line total</span>
+                      <span className="font-bold text-slate-700">សរុប</span>
                       <span className="text-base font-extrabold text-red-500">{usd(lineTotal)}</span>
                     </div>
                   </div>
@@ -200,7 +211,7 @@ export default function QuickAddModal({
           {isOverStock && (
             <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>Exceeds available stock ({availableUnits} units).</span>
+              <span>លើសស្តុកដែលមាន ({availableUnits} ខ្នាតទំនិញ)</span>
             </div>
           )}
 
@@ -212,7 +223,7 @@ export default function QuickAddModal({
             className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-red-500 to-rose-500 text-sm font-extrabold text-white shadow-md shadow-red-200 transition hover:from-red-600 hover:to-rose-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
           >
             <ShoppingCart className="h-4 w-4" />
-            Add to Cart — {usd(lineTotal)}
+            បន្ថែម — {usd(lineTotal)}
           </button>
         </div>
       </div>

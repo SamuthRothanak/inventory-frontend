@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import {
   FiCheckCircle,
   FiFilter,
@@ -87,7 +88,7 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
-function getErrorMessage(error, fallback = "Something went wrong.") {
+function getErrorMessage(error, fallback = "មានបញ្ហាមួយបានកើតឡើង។") {
   const response = error?.response?.data;
 
   if (response?.message && response?.errors) {
@@ -103,6 +104,7 @@ export default function Supplier() {
   const isDark = outlet?.isDark ?? false;
   const queryClient = useQueryClient();
   const notify = useNotification();
+  const confirm = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -184,13 +186,13 @@ export default function Supplier() {
     mutationFn: createSupplierApi,
     onSuccess: () => {
       invalidateSuppliers();
-      notify.success("Supplier created", "The supplier has been saved.");
+      notify.success("បង្កើតអ្នកផ្គត់ផ្គង់រួចរាល់", "អ្នកផ្គត់ផ្គង់ត្រូវបានរក្សាទុករួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      const message = getErrorMessage(error, "Failed to create supplier.");
+      const message = getErrorMessage(error, "មិនអាចបង្កើតអ្នកផ្គត់ផ្គង់បានទេ។");
       setServerMessage(message);
-      notify.error("Create failed", message);
+      notify.error("បង្កើតបរាជ័យ", message);
     },
   });
 
@@ -198,13 +200,13 @@ export default function Supplier() {
     mutationFn: updateSupplierApi,
     onSuccess: () => {
       invalidateSuppliers();
-      notify.success("Supplier updated", "The supplier has been updated.");
+      notify.success("កែអ្នកផ្គត់ផ្គង់រួចរាល់", "អ្នកផ្គត់ផ្គង់ត្រូវបានធ្វើបច្ចុប្បន្នភាពរួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      const message = getErrorMessage(error, "Failed to update supplier.");
+      const message = getErrorMessage(error, "មិនអាចកែអ្នកផ្គត់ផ្គង់បានទេ។");
       setServerMessage(message);
-      notify.error("Update failed", message);
+      notify.error("កែបរាជ័យ", message);
     },
   });
 
@@ -212,14 +214,14 @@ export default function Supplier() {
     mutationFn: deleteSupplierApi,
     onSuccess: () => {
       invalidateSuppliers();
-      notify.success("Supplier deleted", "The supplier has been deleted.");
+      notify.success("លុបអ្នកផ្គត់ផ្គង់រួចរាល់", "អ្នកផ្គត់ផ្គង់ត្រូវបានលុបចោលរួចហើយ។");
     },
     onError: (error) => {
       notify.error(
-        "Delete failed",
+        "លុបបរាជ័យ",
         getErrorMessage(
           error,
-          "Failed to delete supplier. This supplier may already be used in purchases."
+          "មិនអាចលុបអ្នកផ្គត់ផ្គង់បានទេ។ អ្នកផ្គត់ផ្គង់នេះអាចត្រូវបានប្រើរួចហើយក្នុងការទិញ។"
         )
       );
     },
@@ -232,14 +234,14 @@ export default function Supplier() {
       setBulkSelectMode(false);
       invalidateSuppliers();
       notify.success(
-        "Suppliers deleted",
-        "Selected suppliers have been deleted."
+        "លុបអ្នកផ្គត់ផ្គង់រួចរាល់",
+        "អ្នកផ្គត់ផ្គង់ដែលបានជ្រើសរើសត្រូវបានលុបចោលរួចហើយ។"
       );
     },
     onError: (error) => {
       notify.error(
-        "Bulk delete failed",
-        getErrorMessage(error, "Failed to delete selected suppliers.")
+        "លុបជាក្រុមបរាជ័យ",
+        getErrorMessage(error, "មិនអាចលុបអ្នកផ្គត់ផ្គង់ដែលបានជ្រើសរើសបានទេ។")
       );
     },
   });
@@ -333,9 +335,9 @@ export default function Supplier() {
     });
 
     if (duplicateSupplier) {
-      const message = "This supplier name already exists.";
+      const message = "ឈ្មោះអ្នកផ្គត់ផ្គង់នេះមានរួចហើយ។";
       setServerMessage(message);
-      notify.error("Duplicate supplier", message);
+      notify.error("អ្នកផ្គត់ផ្គង់ស្ទួន", message);
       return;
     }
 
@@ -352,13 +354,9 @@ export default function Supplier() {
     }
   };
 
-  const handleDeleteSupplier = (supplier) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${supplier.name}"?`
-    );
-
-    if (!confirmed) return;
-
+  const handleDeleteSupplier = async (supplier) => {
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុប "${supplier.name}" មែនទេ?`);
+    if (!ok) return;
     deleteMutation.mutate(supplier.id);
   };
 
@@ -392,15 +390,10 @@ export default function Supplier() {
     });
   };
 
-  const handleBulkDeleteSuppliers = () => {
+  const handleBulkDeleteSuppliers = async () => {
     if (selectedSupplierIds.length === 0) return;
-
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${selectedSupplierIds.length} selected supplier${selectedSupplierIds.length > 1 ? "s" : ""}?`
-    );
-
-    if (!confirmed) return;
-
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបអ្នកផ្គត់ផ្គង់ចំនួន ${selectedSupplierIds.length} ដែលបានជ្រើសរើសមែនទេ?`);
+    if (!ok) return;
     bulkDeleteMutation.mutate(selectedSupplierIds);
   };
 
@@ -422,14 +415,14 @@ export default function Supplier() {
   const actionErrorMessage =
     actionError?.response?.data?.message ||
     actionError?.message ||
-          "Something went wrong.";
+          "មានបញ្ហាមួយបានកើតឡើង។";
 
   return (
     <section className="space-y-6">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <SummaryCard
           theme={theme}
-          title="Total Suppliers"
+          title="ចំនួនអ្នកផ្គត់ផ្គង់សរុប"
           value={summary.total}
           icon={<FiTruck className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
@@ -437,7 +430,7 @@ export default function Supplier() {
 
         <SummaryCard
           theme={theme}
-          title="Active Suppliers"
+          title="អ្នកផ្គត់ផ្គង់ដំណើរការ"
           value={summary.active}
           icon={<FiCheckCircle className="text-[44px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
@@ -445,7 +438,7 @@ export default function Supplier() {
 
         <SummaryCard
           theme={theme}
-          title="Inactive Suppliers"
+          title="អ្នកផ្គត់ផ្គង់មិនដំណើរការ"
           value={summary.inactive}
           icon={<FiXCircle className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
@@ -461,7 +454,7 @@ export default function Supplier() {
 
             <input
               type="text"
-              placeholder="Search supplier, contact, phone, address..."
+              placeholder="ស្វែងរកអ្នកផ្គត់ផ្គង់ ទំនាក់ទំនង ទូរស័ព្ទ ឬអាសយដ្ឋាន..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
@@ -474,9 +467,9 @@ export default function Supplier() {
             onChange={setStatusFilter}
             theme={theme}
             options={[
-              { value: "All", label: "All Status" },
-              { value: "Active", label: "Active" },
-              { value: "Inactive", label: "Inactive" },
+              { value: "All", label: "ស្ថានភាពទាំងអស់" },
+              { value: "Active", label: "ដំណើរការ" },
+              { value: "Inactive", label: "មិនដំណើរការ" },
             ]}
           />
 
@@ -487,7 +480,7 @@ export default function Supplier() {
             theme={theme}
             options={[10, 25, 50].map((value) => ({
               value,
-              label: `${value} / page`,
+              label: `${value} / ទំព័រ`,
             }))}
           />
         </div>
@@ -498,14 +491,14 @@ export default function Supplier() {
           className="inline-flex h-12 items-center justify-center gap-4 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
         >
           <FiPlusCircle className="text-lg" />
-          Add Supplier
+          បន្ថែមអ្នកផ្គត់ផ្គង់
         </button>
       </div>
 
       {suppliersQuery.isError && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
           {suppliersQuery.error?.response?.data?.message ||
-            "Failed to load suppliers."}
+            "មិនអាចផ្ទុកអ្នកផ្គត់ផ្គង់បានទេ។"}
         </div>
       )}
 

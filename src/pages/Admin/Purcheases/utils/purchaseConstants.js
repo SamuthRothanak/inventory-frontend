@@ -1,4 +1,4 @@
-export const STATUS = {
+﻿export const STATUS = {
   DRAFT: "Draft",
   PENDING_RECEIVE: "Pending Receive",
   PENDING_STOCK_IN: "Pending Stock In",
@@ -17,28 +17,47 @@ export const RETURN_STATUS = {
   CANCELLED: "Cancelled",
 };
 
+export const STATUS_LABEL = {
+  [STATUS.DRAFT]: "ព្រាង",
+  [STATUS.PENDING_RECEIVE]: "រង់ចាំទទួល",
+  [STATUS.PENDING_STOCK_IN]: "រង់ចាំបញ្ចូលក្នុងស្តុក",
+  [STATUS.PENDING_CLAIM]: "រង់ចាំការទាមទារ",
+  [STATUS.RECEIVED]: "បានទទួល",
+  [STATUS.CANCELLED]: "បានលុបចោល",
+};
+
+export const RETURN_STATUS_LABEL = {
+  [RETURN_STATUS.DRAFT]: "ព្រាង",
+  [RETURN_STATUS.SUBMITTED]: "បានដាក់ស្នើ",
+  [RETURN_STATUS.APPROVED]: "បានអនុម័ត",
+  [RETURN_STATUS.WAITING_REPLACEMENT]: "រង់ចាំជំនួស",
+  [RETURN_STATUS.REJECTED]: "បានបដិសេធ",
+  [RETURN_STATUS.COMPLETED]: "បានបញ្ចប់",
+  [RETURN_STATUS.CANCELLED]: "បានលុបចោល",
+};
+
 export const paymentModeOptions = [
-  { value: "pay_after_check", label: "Pay After Check" },
-  { value: "prepaid", label: "Prepaid" },
-  { value: "partial_prepaid", label: "Partial Prepaid" },
+  { value: "pay_after_check", label: "បង់ប្រាក់ក្រោយពិនិត្យ" },
+  { value: "prepaid", label: "បង់ប្រាក់ជាមុន" },
+  { value: "partial_prepaid", label: "បង់ជាមុនមួយផ្នែក" },
 ];
 
 export const paymentStatusOptions = [
-  { value: "unpaid", label: "Unpaid" },
-  { value: "partial", label: "Partial" },
-  { value: "paid", label: "Paid" },
+  { value: "unpaid", label: "មិនទាន់បង់" },
+  { value: "partial", label: "បង់មួយផ្នែក" },
+  { value: "paid", label: "បានបង់" },
 ];
 
 export const deliveryOptions = [
-  { value: "none", label: "None" },
-  { value: "supplier_delivery", label: "Supplier Delivery" },
-  { value: "self_pickup", label: "Self Pickup" },
-  { value: "third_party", label: "Third Party Delivery" },
+  { value: "none", label: "គ្មាន" },
+  { value: "supplier_delivery", label: "ដឹកដោយ អ្នកផ្គត់ផ្គង់" },
+  { value: "self_pickup", label: "ទៅយកផ្ទាល់" },
+  { value: "third_party", label: "ដឹកដោយភាគីទីបី" },
 ];
 
 export const deliveryPaidByOptions = [
-  { value: "buyer", label: "Buyer" },
-  { value: "supplier", label: "Supplier" },
+  { value: "buyer", label: "អ្នកទិញ" },
+  { value: "supplier", label: "អ្នកផ្គត់ផ្គង់" },
 ];
 
 export const initialSuppliers = [
@@ -150,7 +169,7 @@ export const initialPurchases = [
     grandTotal: 1370,
     paidAmount: 0,
     balanceAmount: 1370,
-    note: "Pay after check. Supplier brought 200 Case, 10 damaged, shop accepts and pays only 190 Case.",
+    note: "Pay after check. អ្នកផ្គត់ផ្គង់ brought 200 Case, 10 damaged, shop accepts and pays only 190 Case.",
     status: STATUS.PENDING_STOCK_IN,
     createdAt: "2026-05-01",
     updatedAt: "2026-05-01",

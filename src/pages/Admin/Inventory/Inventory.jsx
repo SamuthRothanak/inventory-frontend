@@ -1,6 +1,7 @@
   import React, { useEffect, useMemo, useState } from "react";
   import { useOutletContext, useSearchParams } from "react-router-dom";
   import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+  import { useConfirm } from "../../../components/ConfirmDialog";
   import {
     FiBox,
     FiSearch,
@@ -68,7 +69,7 @@
   import StockAdjustmentDetailModal from "./components/StockAdjustmentDetailModal";
   import StockAdjustmentModal from "./components/StockAdjustmentModal";
   import StockAdjustmentTable from "./components/StockAdjustmentTable";
-  import StockMovementTable from "./components/StockMovementTable";
+  import StockMovementTable, { formatMovementTypeKh } from "./components/StockMovementTable";
   import { stockAdjustmentFormSchema } from "./schemas/stockAdjustment.schema";
   import { normalizeStockAdjustment } from "./utils/inventoryNormalizers";
   import {
@@ -85,6 +86,7 @@
     const [searchParams, setSearchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const notify = useNotification();
+    const confirm = useConfirm();
     const stockInPurchaseId = searchParams.get("stockInPurchaseId");
     const stockInPurchaseNo = searchParams.get("purchaseNo");
 
@@ -753,13 +755,17 @@
 
     const serverPendingPurchases = useMemo(() => {
       const purchases = Array.isArray(pendingPurchasesQuery.data) ? pendingPurchasesQuery.data : [];
-      return purchases
-        .map((purchase) =>
-          purchase.stockInMode === "replacement_return"
-            ? purchase
-            : normalizePendingPurchaseForStockIn(purchase)
-        )
-        .filter((purchase) => purchase.items.length > 0);
+
+      const regularGroups = purchases
+        .filter((p) => p.stockInMode !== "replacement_return")
+        .map(normalizePendingPurchaseForStockIn);
+
+      const replacementGroups = purchases.filter((p) => p.stockInMode === "replacement_return");
+
+      return [
+        ...regularGroups.filter((g) => g.items.length > 0),
+        ...replacementGroups.filter((g) => g.items.length > 0),
+      ];
     }, [pendingPurchasesQuery.data]);
 
     const sortedPendingPurchases = useMemo(() => {
@@ -1043,25 +1049,22 @@
     };
 
     const getLowStockThresholdBreakdown = (item) => {
-      const baseText = `${Number(item.lowStockThreshold || 0).toLocaleString()} ${item.baseUnit}`;
+      const threshold = Number(item.lowStockThreshold || 0);
+      const baseText = `${threshold.toLocaleString()} ${item.baseUnit}`;
       const convertedTexts = item.units
         .filter((unit) => Number(unit.conversionQty) > 1)
         .map((unit) => {
-          const convertedQty =
-            Number(item.lowStockThreshold || 0) / Number(unit.conversionQty || 1);
-          const convertedText =
-            convertedQty > 0 && convertedQty < 1
-              ? `Less than 1 ${unit.unitName}`
-              : `≈ ${Number(convertedQty).toLocaleString(undefined, {
-                  maximumFractionDigits: 2,
-                })} ${unit.unitName}`;
-
-          return {
-            unitName: unit.unitName,
-            text: convertedText,
-          };
+          const convQty = Number(unit.conversionQty || 1);
+          const convertedQty = threshold / convQty;
+          const display = Number.isInteger(convertedQty)
+            ? convertedQty
+            : Number(convertedQty.toFixed(2));
+          const text =
+            convertedQty < 1
+              ? `< 1 ${unit.unitName} (${threshold.toLocaleString()} ${item.baseUnit})`
+              : `${display} ${unit.unitName} = ${threshold.toLocaleString()} ${item.baseUnit}`;
+          return { unitName: unit.unitName, text };
         });
-
       return { baseText, convertedTexts };
     };
 
@@ -1195,15 +1198,15 @@
       },
       onSuccess: () => {
         invalidateInventoryQueries();
-        notify.success("Stock in confirmed", "Accepted purchase quantities have been added to inventory.");
+        notify.success("ស្តុកចូលបានបញ្ជាក់", "ចំនួនការទិញដែលទទួលបានត្រូវបានបន្ថែមទៅស្តុករួចហើយ");
         closeModal();
         if (stockInPurchaseId) {
           setSearchParams({}, { replace: true });
         }
       },
       onError: (error) => {
-        const message = error?.response?.data?.message || error?.message || "Stock in confirmation failed.";
-        notify.error("Stock in failed", message);
+        const message = error?.response?.data?.message || error?.message || "ការបញ្ជាក់ស្តុកចូលបរាជ័យ";
+        notify.error("ស្តុកចូលបរាជ័យ", message);
       },
     });
 
@@ -1211,12 +1214,12 @@
       mutationFn: createStockAdjustmentApi,
       onSuccess: () => {
         invalidateInventoryQueries();
-        notify.success("Stock adjustment saved", "Approved adjustment has been applied to inventory.");
+        notify.success("ការកែតម្រូវស្តុករក្សាទុករួច", "ការកែតម្រូវដែលបានអនុម័តត្រូវបានអនុវត្តទៅស្តុករួចហើយ");
         closeModal();
       },
       onError: (error) => {
-        const message = error?.response?.data?.message || error?.message || "Stock adjustment failed.";
-        notify.error("Adjustment failed", message);
+        const message = error?.response?.data?.message || error?.message || "ការកែតម្រូវស្តុកបរាជ័យ";
+        notify.error("ការកែតម្រូវបរាជ័យ", message);
       },
     });
 
@@ -1224,11 +1227,11 @@
       mutationFn: updateStockAdjustmentApi,
       onSuccess: () => {
         invalidateInventoryQueries();
-        notify.success("Stock adjustment updated", "Draft adjustment has been updated.");
+        notify.success("ការកែតម្រូវស្តុកបានកែ", "ការកែតម្រូវសេចក្ដីព្រាងត្រូវបានកែរួចហើយ");
       },
       onError: (error) => {
-        const message = error?.response?.data?.message || error?.message || "Stock adjustment update failed.";
-        notify.error("Adjustment update failed", message);
+        const message = error?.response?.data?.message || error?.message || "ការអាប់ដេតការកែតម្រូវបរាជ័យ";
+        notify.error("ការអាប់ដេតការកែតម្រូវបរាជ័យ", message);
       },
     });
 
@@ -1331,7 +1334,7 @@
       );
 
       if (!item) {
-        nextErrors.inventoryId = "Please select inventory item.";
+        nextErrors.inventoryId = "សូមជ្រើសទំនិញស្តុក";
       }
 
       if (item && adjustmentForm.adjustmentType === "decrease") {
@@ -1345,9 +1348,9 @@
           Number(selectedUnit?.conversionQty || 1);
 
         if (baseQty > Number(item.stockBaseQty || 0)) {
-          nextErrors.qty = `Cannot stock out more than ${Number(
+          nextErrors.qty = `មិនអាចដកចេញច្រើនជាង ${Number(
             item.stockBaseQty || 0
-          ).toLocaleString()} ${item.baseUnit}.`;
+          ).toLocaleString()} ${item.baseUnit} ទេ`;
         }
 
         if (adjustmentForm.inventoryBatchId) {
@@ -1356,9 +1359,9 @@
           );
 
           if (selectedBatch && baseQty > Number(selectedBatch.qtyRemainingBase || 0)) {
-            nextErrors.qty = `Selected batch only has ${Number(
+            nextErrors.qty = `Batch ដែលជ្រើសមានតែ ${Number(
               selectedBatch.qtyRemainingBase || 0
-            ).toLocaleString()} ${item.baseUnit}.`;
+            ).toLocaleString()} ${item.baseUnit} ប៉ុណ្ណោះ`;
           }
         }
       }
@@ -1442,7 +1445,7 @@
           {
             id: adjustmentId + 1,
             stockAdjustmentId: adjustmentId,
-            productVariantId: item.id,
+            productVariantId: item.productVariantId,
             productVariantUnitId: selectedUnit.id || null,
             inventoryBatchId: selectedBatch?.id || null,
             qty: Number(adjustmentForm.qty || 0),
@@ -1502,15 +1505,10 @@
       closeModal();
     };
 
-    const handleCancelAdjustment = (adjustment) => {
+    const handleCancelAdjustment = async (adjustment) => {
       if (!adjustment?.id || adjustment.status !== "draft") return;
-
-      const confirmed = window.confirm(
-        `Cancel ${adjustment.adjustmentNo || "this draft adjustment"}?`
-      );
-
-      if (!confirmed) return;
-
+      const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបការកែតម្រូវ ${adjustment.adjustmentNo || "នេះ"}?`);
+      if (!ok) return;
       updateStockAdjustmentMutation.mutate({
         id: adjustment.id,
         payload: { status: "cancelled" },
@@ -1529,7 +1527,7 @@
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
             theme={theme}
-            title="Total Stock Items"
+            title="ទំនិញក្នុងស្តុក"
             value={totalStockItems}
             icon={<FiBox className="text-[34px] text-red-500" />}
             iconBg="bg-red-500/10"
@@ -1537,7 +1535,7 @@
 
           <SummaryCard
             theme={theme}
-            title="Pending Stock In"
+            title="រង់ចាំទទួលស្តុក"
             value={pendingPurchases.length}
             icon={<FiClipboard className="text-[34px] text-blue-500" />}
             iconBg="bg-blue-500/10"
@@ -1545,7 +1543,7 @@
 
           <SummaryCard
             theme={theme}
-            title="Low Stock Items"
+            title="ស្តុកស្ទើរអស់"
             value={lowStockItems}
             icon={<FiAlertTriangle className="text-[34px] text-amber-500" />}
             iconBg="bg-amber-500/10"
@@ -1553,8 +1551,8 @@
 
           <SummaryCard
             theme={theme}
-            title="Stock Value"
-            value={`$${stockValue.toFixed(2)}`}
+            title="តម្លៃស្តុក"
+            rawValue={stockValue}
             icon={<FiDollarSign className="text-[34px] text-emerald-500" />}
             iconBg="bg-emerald-500/10"
           />
@@ -1562,9 +1560,9 @@
 
         <div className={`flex flex-wrap gap-2 rounded-2xl border p-2 shadow-sm ${theme.card}`}>
           {[
-            { id: "stock", label: "Stock List", count: inventory.length },
-            { id: "adjustments", label: "Adjustments", count: stockAdjustments.length },
-            { id: "movements", label: "Movements", count: serverMovements.length },
+            { id: "stock", label: "បញ្ជីស្តុក", count: inventory.length },
+            { id: "adjustments", label: "ការកែតម្រូវស្តុក", count: stockAdjustments.length },
+            { id: "movements", label: "ចលនាស្តុក", count: serverMovements.length },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1602,7 +1600,7 @@
               <input
                 id="inventory-search"
                 type="text"
-                placeholder="Search inventory, product, variant, code..."
+                placeholder="ស្វែងរកស្តុក ទំនិញ បំពង លេខកូដ..."
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
@@ -1616,10 +1614,10 @@
                 theme={theme}
                 icon={<FiFilter />}
                 options={[
-                  { value: "All", label: "All Status" },
-                  { value: "In Stock", label: "In Stock" },
-                  { value: "Low Stock", label: "Low Stock" },
-                  { value: "Out of Stock", label: "Out of Stock" },
+                  { value: "All", label: "ស្ថានភាពទាំងអស់" },
+                  { value: "In Stock", label: "មានស្តុក" },
+                  { value: "Low Stock", label: "ស្តុកស្ទើរអស់" },
+                  { value: "Out of Stock", label: "អស់ស្តុក" },
                 ]}
                 heightClass="h-12"
                 roundedClass="rounded-2xl"
@@ -1631,7 +1629,7 @@
                 value={perPage}
                 onChange={(value) => setPerPage(Number(value))}
                 theme={theme}
-                options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / page` }))}
+                options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / ទំព័រ` }))}
                 heightClass="h-12"
                 roundedClass="rounded-2xl"
                 fontClass="font-semibold"
@@ -1644,7 +1642,7 @@
               className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
             >
               <FiCheckCircle className="text-lg" />
-              Confirm Stock In
+              បញ្ជាក់ស្តុកចូល
             </button>
           </div>
         </div>
@@ -1653,9 +1651,9 @@
           <ActionCard
             theme={theme}
             icon={<FiTruck className="text-4xl text-emerald-500" />}
-            title="Stock In"
-            subtitle="Confirm received purchases"
-            buttonText="Confirm Stock In"
+            title="ស្តុកចូល"
+            subtitle="បញ្ជាក់ការទិញដែលទទួលបាន"
+            buttonText="បញ្ជាក់ស្តុកចូល"
             buttonClass="bg-emerald-500 hover:bg-emerald-600"
             onClick={openConfirmStockInModal}
           />
@@ -1663,9 +1661,9 @@
           <ActionCard
             theme={theme}
             icon={<FiEdit2 className="text-4xl text-blue-500" />}
-            title="Adjustment In"
-            subtitle="Admin correction only"
-            buttonText="Adjustment In"
+            title="ការកែតម្រូវស្តុក"
+            subtitle="សម្រាប់អ្នកគ្រប់គ្រងប៉ុណ្ណោះ"
+            buttonText="ការកែតម្រូវស្តុក"
             buttonClass="bg-blue-600 hover:bg-blue-700"
             onClick={() => openAdjustmentModal("adjustment_in")}
           />
@@ -1673,9 +1671,9 @@
           <ActionCard
             theme={theme}
             icon={<FiTrendingDown className="text-4xl text-red-500" />}
-            title="Stock Out"
-            subtitle="Damage / expired / internal use"
-            buttonText="Stock Out"
+            title="ស្តុកចេញ"
+            subtitle="ខូចខាត / ផុតកំណត់ / ដកប្រើប្រាស់"
+            buttonText="ស្តុកចេញ"
             buttonClass="bg-red-500 hover:bg-red-600"
             onClick={() => openAdjustmentModal("adjustment_out")}
           />
@@ -1683,9 +1681,9 @@
           <ActionCard
             theme={theme}
             icon={<FiLayers className="text-4xl text-amber-500" />}
-            title="Stock Movements"
-            subtitle="Track every stock in/out"
-            buttonText="View Movements"
+            title="ចលនាស្តុក"
+            subtitle="តាមដានស្តុកចូល/ចេញ"
+            buttonText="មើលចលនា"
             buttonClass="bg-amber-500 hover:bg-amber-600"
             onClick={() => setActiveTab("movements")}
           />
@@ -1701,13 +1699,13 @@
 
             <div>
               <h3 className="text-base font-bold">
-                Pending Purchase Stock In
+                ការទិញរង់ចាំទទួលស្តុក
               </h3>
 
               <p className={`mt-1 text-sm ${theme.muted}`}>
                 {pendingPurchases.length > 0
-                  ? `${pendingPurchases.length} purchase${pendingPurchases.length > 1 ? "s" : ""} waiting for stock confirmation.`
-                  : "No purchase is waiting for stock confirmation right now."}
+                  ? `${pendingPurchases.length} ការទិញរង់ចាំបញ្ជាក់ស្តុក`
+                  : "គ្មានការទិញណាមួយរង់ចាំបញ្ជាក់ស្តុកទេ។"}
               </p>
             </div>
           </div>
@@ -1719,7 +1717,7 @@
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FiCheckCircle />
-            Review & Confirm
+            ពិនិត្យ & បញ្ជាក់
           </button>
         </div>
 
@@ -1733,11 +1731,10 @@
               </div>
 
               <div>
-                <h3 className="text-base font-bold">Low Stock Notification</h3>
+                <h3 className="text-base font-bold">ជូនដំណឹងស្តុកស្ទើរអស់</h3>
 
                 <p className={`mt-1 text-sm ${theme.muted}`}>
-                  {lowStockList.length} item
-                  {lowStockList.length > 1 ? "s" : ""} need attention.
+                  {lowStockList.length} មុខត្រូវការចាត់វិធានការ
                 </p>
               </div>
             </div>
@@ -1748,7 +1745,7 @@
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white hover:bg-amber-600"
             >
               <FiList />
-              View Low Stock
+              មើលស្តុកស្ទើរអស់
             </button>
           </div>
         )}
@@ -1782,7 +1779,7 @@
 
                   <input
                     type="text"
-                    placeholder="Search adjustment, reason, product..."
+                    placeholder="ស្វែងរកការកែតម្រូវ មូលហេតុ ទំនិញ..."
                     value={adjustmentSearchTerm}
                     onChange={(event) => setAdjustmentSearchTerm(event.target.value)}
                     className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
@@ -1796,10 +1793,10 @@
                     theme={theme}
                     icon={<FiFilter />}
                     options={[
-                      { value: "All", label: "All Status" },
-                      { value: "draft", label: "Draft" },
-                      { value: "approved", label: "Approved" },
-                      { value: "cancelled", label: "Cancelled" },
+                      { value: "All", label: "ស្ថានភាពទាំងអស់" },
+                      { value: "draft", label: "សេចក្តីព្រាង" },
+                      { value: "approved", label: "បានអនុម័ត" },
+                      { value: "cancelled", label: "បានបោះបង់" },
                     ]}
                     heightClass="h-12"
                     roundedClass="rounded-2xl"
@@ -1813,9 +1810,9 @@
                     theme={theme}
                     icon={<FiTrendingUp />}
                     options={[
-                      { value: "All", label: "All Type" },
-                      { value: "increase", label: "Increase" },
-                      { value: "decrease", label: "Decrease" },
+                      { value: "All", label: "ប្រភេទទាំងអស់" },
+                      { value: "increase", label: "បន្ថែម" },
+                      { value: "decrease", label: "កាត់" },
                     ]}
                     heightClass="h-12"
                     roundedClass="rounded-2xl"
@@ -1829,7 +1826,7 @@
                     theme={theme}
                     icon={<FiTag />}
                     options={[
-                      { value: "All", label: "All Reason" },
+                      { value: "All", label: "មូលហេតុទាំងអស់" },
                       ...adjustmentReasons.map((reason) => ({ value: reason.value, label: reason.label })),
                     ]}
                     heightClass="h-12"
@@ -1843,7 +1840,7 @@
                   value={adjustmentPerPage}
                   onChange={(value) => setAdjustmentPerPage(Number(value))}
                   theme={theme}
-                  options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / page` }))}
+                  options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / ទំព័រ` }))}
                   heightClass="h-12"
                   roundedClass="rounded-2xl"
                   fontClass="font-semibold"
@@ -1875,7 +1872,7 @@
 
                   <input
                     type="text"
-                    placeholder="Search movement, product, batch, lot..."
+                    placeholder="ស្វែងរកចលនា ទំនិញ បាច់ លេខ..."
                     value={movementSearchTerm}
                     onChange={(event) => setMovementSearchTerm(event.target.value)}
                     className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
@@ -1889,9 +1886,9 @@
                     theme={theme}
                     icon={<FiFilter />}
                     options={[
-                      { value: "All", label: "All Direction" },
-                      { value: "in", label: "Stock In" },
-                      { value: "out", label: "Stock Out" },
+                      { value: "All", label: "ទិសដៅទាំងអស់" },
+                      { value: "in", label: "ស្តុកចូល" },
+                      { value: "out", label: "ស្តុកចេញ" },
                     ]}
                     heightClass="h-12"
                     roundedClass="rounded-2xl"
@@ -1905,10 +1902,10 @@
                     theme={theme}
                     icon={<FiLayers />}
                     options={[
-                      { value: "All", label: "All Movement" },
+                      { value: "All", label: "ចលនាទាំងអស់" },
                       ...[...new Set(serverMovements.map((movement) => movement.type).filter(Boolean))].map((type) => ({
                         value: type,
-                        label: String(type).replaceAll("_", " "),
+                        label: formatMovementTypeKh(type),
                       })),
                     ]}
                     searchable={serverMovements.length > 8}
@@ -1922,7 +1919,7 @@
                     value={movementPerPage}
                     onChange={(value) => setMovementPerPage(Number(value))}
                     theme={theme}
-                    options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / page` }))}
+                    options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / ទំព័រ` }))}
                     heightClass="h-12"
                     roundedClass="rounded-2xl"
                     fontClass="font-semibold"

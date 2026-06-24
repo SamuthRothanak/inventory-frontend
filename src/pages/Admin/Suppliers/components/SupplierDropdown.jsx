@@ -15,7 +15,7 @@ export default function SupplierDropdown({
   value,
   onChange,
   options = [],
-  placeholder = "Select",
+  placeholder = "ជ្រើសរើស",
   searchable = false,
   heightClass = "h-12",
   roundedClass = "rounded-2xl",
@@ -76,7 +76,7 @@ export default function SupplierDropdown({
                   autoFocus
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search..."
+                  placeholder="ស្វែងរក..."
                   className={`h-9 w-full rounded-xl border px-3 text-sm outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-500/20 ${searchInputClass}`}
                 />
               </div>
@@ -84,7 +84,7 @@ export default function SupplierDropdown({
 
             <div className="max-h-60 overflow-y-auto py-1">
               {visibleOptions.length === 0 ? (
-                <div className={`px-4 py-3 text-sm ${theme.muted}`}>No options found</div>
+                <div className={`px-4 py-3 text-sm ${theme.muted}`}>រកមិនឃើញជម្រើស</div>
               ) : (
                 visibleOptions.map((option) => {
                   const isActive = String(option.value) === String(value);

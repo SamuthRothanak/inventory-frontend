@@ -8,17 +8,17 @@ const fileSchema = z
     if (!file) return true;
     if (typeof File === "undefined") return true;
     return file instanceof File;
-  }, "Image must be a valid file.")
+  }, "រូបភាពត្រូវតែជា file ត្រឹមត្រូវ។")
   .refine((file) => {
     if (!file) return true;
     return file.size <= 5 * 1024 * 1024;
-  }, "Image size must be less than 5MB.")
+  }, "ទំហំរូបភាពត្រូវតែតិចជាង 5MB។")
   .refine((file) => {
     if (!file) return true;
     return ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(
       file.type
     );
-  }, "Image must be JPG, PNG, or WEBP.");
+  }, "រូបភាពត្រូវតែជា JPG, PNG, ឬ WEBP។");
 
 export const categorySchema = z.object({
   id: z.union([z.string(), z.number()]).optional(),
@@ -27,19 +27,19 @@ export const categorySchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, "Category name is required.")
-    .max(100, "Category name must be less than 100 characters.")
-    .regex(/^[\p{L}\s]+$/u, "Category name can contain letters and spaces only."),
+    .min(1, "ឈ្មោះប្រភេទចាំបាច់ត្រូវតែបំពេញ។")
+    .max(100, "ឈ្មោះប្រភេទត្រូវតែតិចជាង 100 តួអក្សរ។")
+    .regex(/^[\p{L}\p{M}\s]+$/u, "ឈ្មោះប្រភេទត្រូវតែជាអក្សរ និងដកឃ្លា។"),
 
   description: z
     .string()
     .trim()
-    .max(500, "Description must be less than 500 characters.")
+    .max(500, "ការពិពណ៌នាត្រូវតែតិចជាង 500 តួអក្សរ។")
     .optional()
     .or(z.literal("")),
 
   status: z.enum(["Active", "Inactive"], {
-    message: "Status is required.",
+    message: "ស្ថានភាពចាំបាច់ត្រូវតែជ្រើស។",
   }),
 
   imagePath: z.string().optional().or(z.literal("")),

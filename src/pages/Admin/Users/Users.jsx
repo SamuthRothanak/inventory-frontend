@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -8,7 +9,8 @@ import {
   getUsersApi,
   createUserApi,
   updateUserApi,
-  updateUserStatusApi,
+  deleteUserApi,
+  resetUserPasswordApi,
 } from "../../../services/user.service";
 
 import UserStats from "./components/UserStats";
@@ -42,45 +44,9 @@ function useLockBodyScroll(isOpen) {
   }, [isOpen]);
 }
 
-function getMeta(response) {
-  const data = response?.data;
-  return data?.meta || response?.meta || null;
-}
-
 async function getAllUsersForStats() {
-  const firstResponse = await getUsersApi({
-    page: 1,
-    per_page: 9999,
-  });
-
-  const firstUsers = extractUsers(firstResponse);
-  const meta = getMeta(firstResponse);
-
-  const lastPage = Number(meta?.last_page || meta?.lastPage || 1);
-  const apiPerPage = Number(meta?.per_page || meta?.perPage || 100);
-
-  if (lastPage <= 1) {
-    return firstUsers;
-  }
-
-  const pageRequests = [];
-
-  for (let nextPage = 2; nextPage <= lastPage; nextPage += 1) {
-    pageRequests.push(
-      getUsersApi({
-        page: nextPage,
-        per_page: apiPerPage,
-      })
-    );
-  }
-
-  const otherResponses = await Promise.all(pageRequests);
-
-  const otherUsers = otherResponses.flatMap((response) =>
-    extractUsers(response)
-  );
-
-  return [...firstUsers, ...otherUsers];
+  const response = await getUsersApi({ per_page: 9999 });
+  return extractUsers(response);
 }
 
 function normalizeUser(item) {
@@ -99,6 +65,7 @@ export default function Users() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
 
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -248,6 +215,7 @@ export default function Users() {
       email: user.email,
       phone: user.phone || "",
       role: user.role,
+      status: user.status?.toLowerCase() || "active",
       password: "",
       password_confirmation: "",
     });
@@ -262,7 +230,7 @@ export default function Users() {
     Object.entries(fieldErrors).forEach(([field, messages]) => {
       setError(field, {
         type: "server",
-        message: messages?.[0] || "Invalid value",
+        message: messages?.[0] || "តម្លៃមិនត្រឹមត្រូវ",
       });
     });
 
@@ -281,25 +249,38 @@ export default function Users() {
       invalidateUsers();
       closeModal();
     },
-    onError: (err) => handleServerError(err, "Create user failed."),
+    onError: (err) => handleServerError(err, "មិនអាចបង្កើតអ្នកប្រើប្រាស់បានទេ ។"),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: updateUserApi,
+  const resetPasswordMutation = useMutation({
+    mutationFn: resetUserPasswordApi,
     onSuccess: () => {
       invalidateUsers();
       closeModal();
     },
-    onError: (err) => handleServerError(err, "Update user failed."),
+    onError: (err) => handleServerError(err, "មិនអាចកំណត់លេខសម្ងាត់ឡើងវិញបានទេ ។"),
   });
 
-  const statusMutation = useMutation({
-    mutationFn: updateUserStatusApi,
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }) => updateUserApi({ id, payload }),
+    onSuccess: (_, variables) => {
+      if (variables.newPassword) {
+        resetPasswordMutation.mutate({ id: variables.id, password: variables.newPassword });
+      } else {
+        invalidateUsers();
+        closeModal();
+      }
+    },
+    onError: (err) => handleServerError(err, "មិនអាចកែអ្នកប្រើប្រាស់បានទេ ។"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteUserApi,
     onSuccess: () => {
       invalidateUsers();
     },
     onError: (err) => {
-      alert(err?.response?.data?.message || "Update status failed.");
+      alert(err?.response?.data?.message || "មិនអាចលុបអ្នកប្រើប្រាស់បានទេ ។");
     },
   });
 
@@ -315,7 +296,9 @@ export default function Users() {
           email: values.email,
           phone: values.phone || "",
           role: values.role,
+          status: values.status,
         },
+        newPassword: values.password || null,
       });
 
       return;
@@ -332,20 +315,10 @@ export default function Users() {
     });
   };
 
-  const handleInactive = (user) => {
-    const nextStatus = user.status === "Active" ? "inactive" : "active";
-
-    const confirmText =
-      nextStatus === "inactive"
-        ? `Do you want to set ${user.name} as inactive?`
-        : `Do you want to activate ${user.name}?`;
-
-    if (!window.confirm(confirmText)) return;
-
-    statusMutation.mutate({
-      id: user.id,
-      status: nextStatus,
-    });
+  const handleDelete = async (user) => {
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបអ្នកប្រើប្រាស់ "${user.name}" មែនទេ?`, { confirmLabel: "លុប" });
+    if (!ok) return;
+    deleteMutation.mutate(user.id);
   };
 
   return (
@@ -360,7 +333,7 @@ export default function Users() {
       {statsQuery.isError && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
           {statsQuery.error?.response?.data?.message ||
-            "Failed to load user summary."}
+            "មិនអាចផ្ទុកព័ត៌មានសង្ខេបអ្នកប្រើប្រាស់បានទេ ។"}
         </div>
       )}
 
@@ -377,8 +350,8 @@ export default function Users() {
         isError={isError}
         error={error}
         openEditModal={openEditModal}
-        handleInactive={handleInactive}
-        statusMutation={statusMutation}
+        onDelete={handleDelete}
+        isDeletingId={deleteMutation.isPending ? deleteMutation.variables : null}
         theme={theme}
       />
 
@@ -393,6 +366,7 @@ export default function Users() {
           closeModal={closeModal}
           createMutation={createMutation}
           updateMutation={updateMutation}
+          resetPasswordMutation={resetPasswordMutation}
           theme={theme}
         />
       )}

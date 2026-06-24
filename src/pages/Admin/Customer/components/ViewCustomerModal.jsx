@@ -1,4 +1,4 @@
-import {
+﻿import {
   FiCheckCircle,
   FiEdit2,
   FiFileText,
@@ -17,7 +17,7 @@ export default function ViewCustomerModal({ customer, theme, onClose, onEdit }) 
   return (
     <ModalShell
       title={customer.shopName}
-      subtitle={`${customer.customerCode} · Wholesale / Reseller Customer`}
+      subtitle={`${customer.customerCode} · អតិថិជនសម្រាប់កត់ត្រាការលក់`}
       theme={theme}
       onClose={onClose}
       footer={
@@ -27,7 +27,7 @@ export default function ViewCustomerModal({ customer, theme, onClose, onEdit }) 
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Close
+            បិទ
           </button>
 
           <button
@@ -36,7 +36,7 @@ export default function ViewCustomerModal({ customer, theme, onClose, onEdit }) 
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
           >
             <FiEdit2 />
-            Edit Customer
+            កែអតិថិជន
           </button>
         </>
       }
@@ -44,8 +44,8 @@ export default function ViewCustomerModal({ customer, theme, onClose, onEdit }) 
       <div className="space-y-4">
         <SectionTitle
           icon={<FiInfo />}
-          title="Customer Information"
-          subtitle="Main customer profile and current status."
+          title="ព័ត៌មានអតិថិជន"
+          subtitle="ព័ត៌មានសំខាន់ និងស្ថានភាពបច្ចុប្បន្ន។"
           theme={theme}
         />
 
@@ -53,36 +53,36 @@ export default function ViewCustomerModal({ customer, theme, onClose, onEdit }) 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <InfoBox
               theme={theme}
-              label="Customer Code"
+              label="លេខកូដអតិថិជន"
               value={customer.customerCode}
               icon={<FiHash />}
             />
 
             <InfoBox
               theme={theme}
-              label="Shop Name"
+              label="ឈ្មោះហាង"
               value={customer.shopName}
               icon={<FiShoppingBag />}
             />
 
             <InfoBox
               theme={theme}
-              label="Contact Name"
+              label="ឈ្មោះអ្នកទំនាក់ទំនង"
               value={customer.contactName || "-"}
               icon={<FiUser />}
             />
 
             <InfoBox
               theme={theme}
-              label="Phone"
+              label="លេខទូរស័ព្ទ"
               value={customer.phone || "-"}
               icon={<FiPhone />}
             />
 
             <InfoBox
               theme={theme}
-              label="Status"
-              value={customer.status}
+              label="ស្ថានភាព"
+              value={customer.status === "Active" ? "ដំណើរការ" : "មិនដំណើរការ"}
               icon={
                 customer.status === "Active" ? <FiCheckCircle /> : <FiXCircle />
               }
@@ -90,14 +90,14 @@ export default function ViewCustomerModal({ customer, theme, onClose, onEdit }) 
 
             <InfoBox
               theme={theme}
-              label="Created At"
+              label="បង្កើតនៅ"
               value={customer.createdAt}
               icon={<FiFileText />}
             />
 
             <InfoBox
               theme={theme}
-              label="Updated At"
+              label="បានកែនៅ"
               value={customer.updatedAt}
               icon={<FiFileText />}
             />
@@ -106,15 +106,15 @@ export default function ViewCustomerModal({ customer, theme, onClose, onEdit }) 
 
         <SectionTitle
           icon={<FiMapPin />}
-          title="Address & Note"
-          subtitle="Additional information for delivery or remark."
+          title="អាសយដ្ឋាន និងចំណាំ"
+          subtitle="ព័ត៌មានបន្ថែមសម្រាប់ដឹកជញ្ជូន ឬកត់សម្គាល់។"
           theme={theme}
         />
 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
           <DetailBlock
             theme={theme}
-            label="Address"
+            label="អាសយដ្ឋាន"
             value={customer.address || "-"}
             icon={<FiMapPin />}
           />
@@ -122,7 +122,7 @@ export default function ViewCustomerModal({ customer, theme, onClose, onEdit }) 
           <div className="mt-5">
             <DetailBlock
               theme={theme}
-              label="Note"
+              label="ចំណាំ"
               value={customer.note || "-"}
               icon={<FiFileText />}
             />

@@ -1,5 +1,5 @@
 import { FiClipboard, FiFileText, FiHash, FiInfo, FiLayers, FiPackage, FiSave, FiTag, FiTrendingDown, FiTrendingUp } from "react-icons/fi";
-import { adjustmentReasons } from "../utils/inventoryConstants";
+import { stockInReasons, stockOutReasons } from "../utils/inventoryConstants";
 import { FormInput, FormSelect, FormTextarea, ModalShell, SectionTitle } from "./InventoryCommon";
 export default function StockAdjustmentModal({
     mode,
@@ -14,13 +14,11 @@ export default function StockAdjustmentModal({
     isSaving = false,
   }) {
     const isStockIn = mode === "adjustment_in";
-    const title = isStockIn ? "Manual Adjustment In" : "Stock Out Adjustment";
-    const reasonOptions = isStockIn
-      ? adjustmentReasons.filter((r) => ["stock_count", "correction", "other"].includes(r.value))
-      : adjustmentReasons;
+    const title = isStockIn ? "ការកែតម្រូវស្តុក" : "ស្តុកចេញ";
+    const reasonOptions = isStockIn ? stockInReasons : stockOutReasons;
     const subtitle = isStockIn
-      ? "Use this only for stock count or correction, not normal purchase stock in."
-      : "Use this for damaged, expired, internal use, lost item, or correction.";
+      ? "ប្រើសម្រាប់រាប់ស្តុក ឬការកែតម្រូវ — មិនមែនស្តុកចូលពីការទិញទេ។"
+      : "ប្រើសម្រាប់ទំនិញខូច, ផុតកំណត់, ដកប្រើប្រាស់ខ្លួនឯង, បាត់ ឬការកែតម្រូវ។";
 
     const activeItem =
       selectedItem ||
@@ -39,8 +37,84 @@ export default function StockAdjustmentModal({
       if (parts.length <= 4) return batchNo;
       return `${parts.slice(0, 3).join("-")}-…${parts[parts.length - 1]}`;
     };
+    const REASON_EXAMPLE = {
+      stock_count: {
+        title: "រាប់ស្តុកពិតប្រាកដ — របៀបប្រើ",
+        desc: "ចូលឃ្លាំង រាប់ចំនួនដោយដៃ ហើយប្រៀបជាមួយប្រព័ន្ធ។",
+        steps: [
+          "① ប្រព័ន្ធបង្ហាញ: 2,699 កំប៉ុង",
+          "② រាប់ឃ្លាំងពិតប្រាកដ: 2,650 កំប៉ុង",
+          "③ ប្រព័ន្ធលើស 49 → បញ្ចូល −49",
+        ],
+      },
+      correction: {
+        title: "ការកែតម្រូវ — របៀបប្រើ",
+        desc: "ប្រើពេលការបញ្ចូលក្នុងប្រព័ន្ធខុស ហើយចង់កែត្រឡប់ឲត្រូវ។",
+        steps: [
+          "① ការទិញបញ្ចូល +1,000 ខុស (គួរជា +100)",
+          "② ស្តុកលើស 900 → កែ −900",
+          "③ មូលហេតុ: ការកែតម្រូវ + កំណត់ចំណាំ: ពន្យល់ការបញ្ចូលខុស",
+        ],
+      },
+      damaged: {
+        title: "ខូចខាត — របៀបប្រើ",
+        desc: "ប្រើពេលទំនិញខូច ឬប្រើប្រាស់មិនបាន ត្រូវដកចេញពីស្តុក។",
+        steps: [
+          "① ដប 10 ធ្លាក់ខូចពីការដឹកជញ្ជូន",
+          "② បញ្ចូល −10 + មូលហេតុ: ខូចខាត",
+          "③ កំណត់ចំណាំ: ដប 10 ខូច — ដឹកជញ្ជូន 23/06/2026",
+        ],
+      },
+      expired: {
+        title: "ផុតកំណត់ — របៀបប្រើ",
+        desc: "ប្រើពេលបាច់ណាមួយផុតកំណត់ ហើយត្រូវដកចេញពីស្តុក។",
+        steps: [
+          "① បាច់ B2024 ផុតថ្ងៃ 01/01/2025 — មាន 50 ដប",
+          "② ជ្រើសបាច់ត្រឹមត្រូវ → បញ្ចូល −50",
+          "③ កំណត់ចំណាំ: បាច់ B2024 ផុតកំណត់",
+        ],
+      },
+      internal_use: {
+        title: "ដកប្រើប្រាស់ខ្លួនឯង — របៀបប្រើ",
+        desc: "ប្រើពេលក្រុមហ៊ុនដកទំនិញប្រើប្រាស់ខ្លួនឯង (មិនមែនលក់)។",
+        steps: [
+          "① ប្រជុំ — ដកស្រា 10 ដបប្រើក្នុងការិយាល័យ",
+          "② បញ្ចូល −10 + មូលហេតុ: ដកប្រើប្រាស់ខ្លួនឯង",
+          "③ កំណត់ចំណាំ: ប្រើក្នុងប្រជុំ ថ្ងៃ 23/06/2026",
+        ],
+      },
+      lost: {
+        title: "បាត់ — របៀបប្រើ",
+        desc: "ប្រើពេលទំនិញបាត់ក្នុងឃ្លាំង ឬកំឡុងការដឹក ស្វែងរកមិនឃើញ។",
+        steps: [
+          "① ត្រួតពិនិត្យឃ្លាំង — ស្រា 5 ដបបាត់",
+          "② បញ្ចូល −5 + មូលហេតុ: បាត់",
+          "③ កំណត់ចំណាំ: ត្រួតពិនិត្យ កាមេរ៉ាសុវត្ថិភាព + របាយការណ៍ធ្វើហើយ",
+        ],
+      },
+      other: {
+        title: "ផ្សេងទៀត — របៀបប្រើ",
+        desc: "ប្រើពេលហេតុផលខុសពីប្រភេទទាំងអស់ខាងលើ។",
+        steps: [
+          "① ពន្យល់ច្បាស់ក្នុងប្រអប់ កំណត់ចំណាំ",
+          "② អ្នកគ្រប់គ្រងនឹងពិនិត្យ ហើយអនុម័ត",
+        ],
+      },
+    };
+
+    const NOTE_PLACEHOLDER = {
+      stock_count: "ឧ. រាប់ស្តុកថ្ងៃទី 23/06/2026 — ឃើញ 2,650 កំប៉ុង តែប្រព័ន្ធបង្ហាញ 2,699",
+      correction: "ឧ. កែការបញ្ចូលខុស — បានបញ្ចូលចំនួន 100 ខុស គួរជា 10",
+      damaged: "ឧ. ទំនិញខូចខាតពីការដឹកជញ្ជូន — ធ្លាក់ 10 ដប",
+      expired: "ឧ. ផុតកំណត់ប្រើប្រាស់ — បាច់ B2024 ផុតថ្ងៃ 01/01/2025",
+      internal_use: "ឧ. ដកប្រើប្រាស់ក្នុងការិយាល័យ — ប្រជុំថ្ងៃទី 20 មិថុនា",
+      lost: "ឧ. ទំនិញបាត់ក្នុងឃ្លាំង — ត្រួតពិនិត្យ កាមេរ៉ាសុវត្ថិភាព រួចហើយ",
+      other: "ឧ. ពន្យល់ពីហេតុផលនៃការកែតម្រូវ...",
+    };
+    const notePlaceholder = NOTE_PLACEHOLDER[form.reason] || "មូលហេតុ ឬកំណត់ចំណាំ...";
+
     const batchOptions = [
-      { value: "", label: "No batch selected" },
+      { value: "", label: "គ្មានបាច់" },
       ...(activeItem?.batches || [])
         .filter((batch) => Number(batch.qtyRemainingBase || 0) > 0)
         .map((batch) => ({
@@ -63,7 +137,7 @@ export default function StockAdjustmentModal({
               onClick={onClose}
               className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
             >
-              Cancel
+              បោះបង់
             </button>
 
             <button
@@ -77,7 +151,7 @@ export default function StockAdjustmentModal({
               } disabled:cursor-not-allowed disabled:opacity-60`}
             >
               <FiSave />
-              {isSaving ? "Saving..." : "Save Adjustment"}
+              {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុក"}
             </button>
           </>
         }
@@ -85,15 +159,15 @@ export default function StockAdjustmentModal({
         <div className="space-y-4">
           <SectionTitle
             icon={isStockIn ? <FiTrendingUp /> : <FiTrendingDown />}
-            title="Adjustment Information"
-            subtitle="This creates stock_adjustments, stock_adjustment_items, and stock_movements."
+            title="ព័ត៌មានការកែតម្រូវ"
+            subtitle="បង្កើតការកែតម្រូវស្តុក និងចលនាស្តុកដោយស្វ័យប្រវត្តិ។"
             theme={theme}
           />
 
           <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormSelect
-                label="Inventory Item"
+                label="ទំនិញស្តុក"
                 value={form.inventoryId}
                 error={errors.inventoryId}
                 onChange={(value) => {
@@ -108,7 +182,7 @@ export default function StockAdjustmentModal({
                 theme={theme}
                 icon={<FiPackage />}
                 options={[
-                  { value: "", label: "Select inventory item" },
+                  { value: "", label: "ជ្រើសទំនិញ" },
                   ...inventory.map((item) => ({
                     value: item.id,
                     label: item.variantName,
@@ -119,7 +193,7 @@ export default function StockAdjustmentModal({
               />
 
               <FormSelect
-                label="Reason"
+                label="មូលហេតុ"
                 value={form.reason}
                 error={errors.reason}
                 onChange={(value) => onChange("reason", value)}
@@ -130,7 +204,7 @@ export default function StockAdjustmentModal({
               />
 
               <FormSelect
-                label="Unit"
+                label="ខ្នាតទំនិញ"
                 value={form.unitName}
                 error={errors.unitName}
                 onChange={(value) => onChange("unitName", value)}
@@ -142,24 +216,24 @@ export default function StockAdjustmentModal({
                         value: unit.unitName,
                         label: unit.unitName,
                       }))
-                    : [{ value: "", label: "Select unit" }]
+                    : [{ value: "", label: "ជ្រើសខ្នាតទំនិញ" }]
                 }
                 searchable={Number(activeItem?.units?.length || 0) > 6}
               />
 
               <FormInput
-                label="Quantity"
+                label="ចំនួន"
                 type="number"
                 value={form.qty}
                 error={errors.qty}
                 onChange={(value) => onChange("qty", value)}
                 theme={theme}
-                placeholder="Enter qty"
+                placeholder="បញ្ចូលចំនួន"
                 icon={<FiHash />}
               />
 
               <FormSelect
-                label="Batch / Lot"
+                label="បាច់ / លេខបាច់"
                 value={form.inventoryBatchId}
                 onChange={(value) => onChange("inventoryBatchId", value)}
                 theme={theme}
@@ -170,32 +244,57 @@ export default function StockAdjustmentModal({
 
               <div className={`rounded-xl border p-3 text-sm ${theme.softCard}`}>
                 <p className={`text-xs font-semibold ${theme.muted}`}>
-                  Base Qty Preview
+                  ចំនួនគណនាជាមូលដ្ឋាន
                 </p>
                 <p className="mt-1 text-lg font-bold">
-                  {Number(previewBaseQty || 0).toLocaleString()} {activeItem?.baseUnit || "base units"}
+                  {Number(previewBaseQty || 0).toLocaleString()} {activeItem?.baseUnit || "មូលដ្ឋាន"}
                 </p>
               </div>
             </div>
 
             <div className="mt-4">
               <FormTextarea
-                label="Note"
+                label="កំណត់ចំណាំ"
                 value={form.note}
                 onChange={(value) => onChange("note", value)}
                 theme={theme}
-                placeholder="Reason or note..."
+                placeholder={notePlaceholder}
                 icon={<FiFileText />}
               />
             </div>
           </div>
 
+          {form.reason && REASON_EXAMPLE[form.reason] && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/5">
+              <div className="flex gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
+                  <FiInfo size={15} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-amber-700 dark:text-amber-400">
+                    {REASON_EXAMPLE[form.reason].title}
+                  </p>
+                  <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-300">
+                    {REASON_EXAMPLE[form.reason].desc}
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {REASON_EXAMPLE[form.reason].steps.map((step, i) => (
+                      <li key={i} className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                        {step}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeItem && (
             <>
               <SectionTitle
                 icon={<FiInfo />}
-                title="Current Stock Preview"
-                subtitle="Preview before saving this adjustment."
+                title="មើលស្តុកបច្ចុប្បន្ន"
+                subtitle="ពិនិត្យស្តុកមុនពេលរក្សាទុក។"
                 theme={theme}
               />
 
@@ -207,7 +306,7 @@ export default function StockAdjustmentModal({
                 </p>
 
                 <p className={`mt-1 text-xs ${theme.muted}`}>
-                  Current status: {activeItem.status}
+                  ស្ថានភាពបច្ចុប្បន្ន: {activeItem.status}
                 </p>
               </div>
             </>

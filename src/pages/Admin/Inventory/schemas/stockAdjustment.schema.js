@@ -2,8 +2,8 @@ import { z } from "zod";
 
 export const stockAdjustmentFormSchema = z.object({
   inventoryId: z.union([
-    z.string().trim().min(1, "Please select inventory item."),
-    z.coerce.number().positive("Please select inventory item."),
+    z.string().trim().min(1, "សូមជ្រើសទំនិញស្តុក"),
+    z.coerce.number().positive("សូមជ្រើសទំនិញស្តុក"),
   ]),
   adjustmentType: z.enum(["increase", "decrease"]),
   reason: z.enum([
@@ -15,8 +15,8 @@ export const stockAdjustmentFormSchema = z.object({
     "correction",
     "other",
   ]),
-  qty: z.coerce.number().positive("Quantity must be greater than 0."),
-  unitName: z.string().trim().min(1, "Please select unit."),
+  qty: z.coerce.number().positive("ចំនួនត្រូវតែធំជាង 0"),
+  unitName: z.string().trim().min(1, "សូមជ្រើសខ្នាត"),
   inventoryBatchId: z.union([z.string(), z.number()]).optional(),
   note: z.string().optional(),
 });

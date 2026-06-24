@@ -4,6 +4,7 @@ import {
   FiEdit2,
   FiImage,
   FiPlus,
+  FiSettings,
   FiTrash2,
 } from "react-icons/fi";
 
@@ -139,6 +140,11 @@ export default function ProductManageModal({
   onUpdateUnit,
   onDeleteUnit,
 }) {
+  const [variantTabs, setVariantTabs] = useState({});
+  const getVariantTab = (id) => variantTabs[id] ?? "units";
+  const setVariantTab = (id, tab) =>
+    setVariantTabs((prev) => ({ ...prev, [id]: tab }));
+
   const [quickUnitOpen, setQuickUnitOpen] = useState(false);
   const [quickUnit, setQuickUnit] = useState({
     unit_code: "",
@@ -150,8 +156,8 @@ export default function ProductManageModal({
 
   return (
     <ModalShell
-      title={`Manage Product Setup: ${product.name}`}
-      subtitle={`Product ID: ${product.id} · ${product.categoryName}`}
+      title={`គ្រប់គ្រងផលិតផល: ${product.name}`}
+      subtitle={`${product.categoryName || "គ្មានប្រភេទ"} · ${product.variants?.length || 0} មុខទំនិញ`}
       theme={theme}
       onClose={onClose}
       width="max-w-7xl"
@@ -163,7 +169,7 @@ export default function ProductManageModal({
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
           >
             <FiEdit2 />
-            Edit Product Info
+            កែព័ត៌មានផលិតផល
           </button>
 
           <button
@@ -171,7 +177,7 @@ export default function ProductManageModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Close
+            បិទ
           </button>
         </>
       }
@@ -191,10 +197,9 @@ export default function ProductManageModal({
           </div>
 
           <div className="mt-4 space-y-3 text-sm">
-            <InfoLine label="Product ID" value={product.id} />
-            <InfoLine label="Category" value={product.categoryName} />
-            <InfoLine label="Status" value={product.status} />
-            <InfoLine label="Description" value={product.description || "-"} />
+            <InfoLine label="ប្រភេទ" value={product.categoryName} />
+            <InfoLine label="ស្ថានភាព" value={product.status} />
+            <InfoLine label="ការពិពណ៌នា" value={product.description || "-"} />
           </div>
         </div>
 
@@ -203,11 +208,11 @@ export default function ProductManageModal({
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h3 className="text-base font-bold">
-                  Variants ({product.variants.length})
+                  មុខទំនិញ ({product.variants.length})
                 </h3>
 
                 <p className={`mt-1 text-xs ${theme.muted}`}>
-                  Manage variants, unit rows, and price rules here.
+                  គ្រប់គ្រងមុខទំនិញ, ខ្នាតទំនិញ, និងតម្លៃនៅទីនេះ ។
                 </p>
               </div>
 
@@ -216,7 +221,7 @@ export default function ProductManageModal({
                 onClick={() => onAddVariant?.(product)}
               >
                 <FiPlus />
-                Add Variant
+                បន្ថែមមុខទំនិញ
               </SmallActionButton>
             </div>
           </div>
@@ -227,10 +232,10 @@ export default function ProductManageModal({
             >
               <FiAlertTriangle className="mx-auto text-4xl text-amber-500" />
               <p className="mt-3 text-sm font-semibold">
-                No variants for this product
+                គ្មានមុខទំនិញសម្រាប់ផលិតផលនេះ
               </p>
               <p className={`mt-1 text-xs ${theme.muted}`}>
-                Add variants such as Can, Bottle, Case, or Box.
+                បន្ថែមមុខទំនិញដូចជា Can, Bottle, Case, ឬ Box។
               </p>
 
               <div className="mt-4">
@@ -239,7 +244,7 @@ export default function ProductManageModal({
                   onClick={() => onAddVariant?.(product)}
                 >
                   <FiPlus />
-                  Add First Variant
+                  បន្ថែមមុខទំនិញដំបូង
                 </SmallActionButton>
               </div>
             </div>
@@ -260,20 +265,20 @@ export default function ProductManageModal({
                     </h3>
 
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      {variant.variantCode || "-"} · Variant ID: {variant.id}
+                      {variant.variantCode || "-"}
                     </p>
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span
                         className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                       >
-                        {variant.packageType || "No Package"}
+                        {variant.packageType || "គ្មានខ្ចប់"}
                       </span>
 
                       <span
                         className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                       >
-                        Size: {variant.sizeValue || "-"}{" "}
+                        ទំហំ: {variant.sizeValue || "-"}{" "}
                         {variant.sizeUnit || ""}
                       </span>
 
@@ -281,14 +286,14 @@ export default function ProductManageModal({
                         <span
                           className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                         >
-                          Color: {variant.color}
+                          ពណ៌: {variant.color}
                         </span>
                       )}
 
                       <span
                         className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                       >
-                        Low stock: {variant.lowStockThreshold}
+                        ស្តុកក្រោម: {variant.lowStockThreshold}
                       </span>
                     </div>
 
@@ -298,7 +303,7 @@ export default function ProductManageModal({
                         onClick={() => onEditVariant?.(product, variant)}
                       >
                         <FiEdit2 />
-                        Edit Variant
+                        កែមុខទំនិញ
                       </SmallActionButton>
 
                       <SmallActionButton
@@ -306,276 +311,199 @@ export default function ProductManageModal({
                         onClick={() => onDeleteVariant?.(variant)}
                       >
                         <FiTrash2 />
-                        Delete Variant
+                        លុបមុខទំនិញ
                       </SmallActionButton>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-5">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h4 className="text-sm font-semibold">Units</h4>
-                    <p className={`mt-1 text-xs ${theme.muted}`}>
-                      Define base unit, sale unit, purchase unit and conversion.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <SmallActionButton
-                      variant="blue"
-                      onClick={() => setQuickUnitOpen((value) => !value)}
+              {/* ── Tab bar ── */}
+              <div className="mt-5 flex items-center gap-1 border-b border-zinc-200 dark:border-white/10">
+                {["units", "prices"].map((tab) => {
+                  const label = tab === "units"
+                    ? `ខ្នាតទំនិញ (${variant.units.length})`
+                    : `តម្លៃ (${variant.priceRules.length})`;
+                  const active = getVariantTab(variant.id) === tab;
+                  return (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setVariantTab(variant.id, tab)}
+                      className={`rounded-t-lg px-4 py-2 text-xs font-bold transition -mb-px border-b-2 ${
+                        active
+                          ? "border-red-500 text-red-500"
+                          : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                      }`}
                     >
-                      <FiPlus />
-                      Manage Units
-                    </SmallActionButton>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
 
+              {/* ── Units tab ── */}
+              {getVariantTab(variant.id) === "units" && (
+                <div className="mt-4">
+                  <div className="flex flex-wrap justify-end gap-2 mb-3">
+                    <SmallActionButton
+                      variant="amber"
+                      onClick={() => setQuickUnitOpen((v) => !v)}
+                    >
+                      <FiSettings />
+                      ប្រភេទខ្នាតទំនិញ
+                    </SmallActionButton>
                     <SmallActionButton
                       variant="green"
                       onClick={() => onAddVariantUnit?.(variant)}
                     >
                       <FiPlus />
-                      Add Unit Row
+                      បន្ថែមខ្នាតទំនិញ
                     </SmallActionButton>
                   </div>
-                </div>
 
-                {quickUnitOpen && (
-                  <div className="mt-3">
-                    <QuickCreateUnitBox
-                      theme={theme}
-                      units={units}
-                      quickUnit={quickUnit}
-                      setQuickUnit={setQuickUnit}
-                      isCreatingUnit={isCreatingUnit}
-                      isUpdatingUnit={isUpdatingUnit}
-                      isDeletingUnit={isDeletingUnit}
-                      onCreateUnit={onCreateUnit}
-                      onUpdateUnit={onUpdateUnit}
-                      onDeleteUnit={onDeleteUnit}
-                      onClose={() => setQuickUnitOpen(false)}
-                      onCreated={() => {
-                        setQuickUnit({
-                          unit_code: "",
-                          unit_name: "",
-                          unit_type: "piece",
-                          allow_decimal: false,
-                          status: "active",
-                        });
-                      }}
-                    />
-                  </div>
-                )}
-
-                <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {variant.units.length === 0 && (
-                    <div
-                      className={`rounded-xl border p-3 text-sm ${theme.softCard}`}
-                    >
-                      <p className="font-semibold">No units configured</p>
-                      <p className={`mt-1 text-xs ${theme.muted}`}>
-                        Add at least one unit row before adding price rules.
-                      </p>
+                  {quickUnitOpen && (
+                    <div className="mb-3">
+                      <QuickCreateUnitBox
+                        theme={theme}
+                        units={units}
+                        quickUnit={quickUnit}
+                        setQuickUnit={setQuickUnit}
+                        isCreatingUnit={isCreatingUnit}
+                        isUpdatingUnit={isUpdatingUnit}
+                        isDeletingUnit={isDeletingUnit}
+                        onCreateUnit={onCreateUnit}
+                        onUpdateUnit={onUpdateUnit}
+                        onDeleteUnit={onDeleteUnit}
+                        onClose={() => setQuickUnitOpen(false)}
+                        onCreated={() => setQuickUnit({
+                          unit_code: "", unit_name: "", unit_type: "piece",
+                          allow_decimal: false, status: "active",
+                        })}
+                      />
                     </div>
                   )}
 
-                  {variant.units.map((unit) => {
-                    const unitId = getVariantUnitId(unit);
-
-                    return (
-                      <div
-                        key={unitId || unit.id}
-                        className={`rounded-xl border p-3 text-sm ${theme.softCard}`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold">
-                              {unit.unitName} = {unit.conversionQty}
-                            </p>
-
-                            <p className={`mt-1 text-xs ${theme.muted}`}>
-                              {unit.isBaseUnit ? "Base unit" : "Converted unit"}
-                              {unit.isDefaultSaleUnit ? " · Default sale" : ""}
-                              {unit.isDefaultPurchaseUnit
-                                ? " · Default purchase"
-                                : ""}
-                            </p>
-                          </div>
-
-                          <div className="flex shrink-0 gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onEditVariantUnit?.(variant, {
-                                  ...unit,
-                                  id: unitId,
-                                })
-                              }
-                              className="rounded-lg bg-blue-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-blue-700"
-                            >
-                              Edit
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onDeleteVariantUnit?.({
-                                  ...unit,
-                                  id: unitId,
-                                })
-                              }
-                              className="rounded-lg bg-red-500 px-2 py-1 text-xs font-semibold text-white transition hover:bg-red-600"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="mt-3">
-                          <SmallActionButton
-                            variant="green"
-                            disabled={!unitId}
-                            onClick={() => {
-                              if (!unitId) {
-                                alert("Product variant unit id is missing.");
-                                return;
-                              }
-
-                              onAddPriceRule?.(variant, {
-                                ...unit,
-                                id: unitId,
-                              });
-                            }}
-                          >
-                            <FiPlus />
-                            Add Price
-                          </SmallActionButton>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <h4 className="text-sm font-semibold">Price Rules</h4>
-
-                <p className={`mt-1 text-xs ${theme.muted}`}>
-                  Each price rule belongs to one variant unit.
-                </p>
-
-                <div className="mt-2 overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
-                  <table className="w-full min-w-[900px] text-sm">
-                    <thead className="bg-red-600 text-white">
-                      <tr>
-                        <th className="px-3 py-3 text-left">Applies To</th>
-                        <th className="px-3 py-3 text-left">Unit</th>
-                        <th className="px-3 py-3 text-left">Min Qty</th>
-                        <th className="px-3 py-3 text-left">USD</th>
-                        <th className="px-3 py-3 text-left">KHR</th>
-                        <th className="px-3 py-3 text-left">Input</th>
-                        <th className="px-3 py-3 text-center">Actions</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {variant.priceRules.length === 0 && (
-                        <tr>
-                          <td colSpan="7" className="px-3 py-6 text-center">
-                            No price rules configured
-                          </td>
-                        </tr>
-                      )}
-
-                      {variant.priceRules.map((rule) => {
-                        const ruleUnitId = getRuleVariantUnitId(rule);
-
-                        const relatedUnit = variant.units.find((unit) => {
-                          const unitId = getVariantUnitId(unit);
-                          return Number(unitId) === Number(ruleUnitId);
-                        });
-
-                        const safeRelatedUnit = relatedUnit
-                          ? {
-                              ...relatedUnit,
-                              id: getVariantUnitId(relatedUnit),
-                            }
-                          : null;
-
+                  {variant.units.length === 0 ? (
+                    <div className={`rounded-xl border p-4 text-sm ${theme.softCard}`}>
+                      <p className="font-semibold">គ្មានខ្នាតទំនិញ</p>
+                      <p className={`mt-1 text-xs ${theme.muted}`}>
+                        បន្ថែមខ្នាតទំនិញ យ៉ាងតិច ១ មុនពេលបន្ថែមតម្លៃ ។
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      {variant.units.map((unit) => {
+                        const unitId = getVariantUnitId(unit);
                         return (
-                          <tr
-                            key={rule.id}
-                            className="border-t border-zinc-200 dark:border-white/10"
-                          >
-                            <td className="px-3 py-3 capitalize">
-                              {rule.appliesTo}
-                            </td>
-
-                            <td className="px-3 py-3">
-                              {rule.unitName || safeRelatedUnit?.unitName || "-"}
-                            </td>
-
-                            <td className="px-3 py-3">{rule.minQty}</td>
-
-                            <td className="px-3 py-3">
-                              ${Number(rule.usd || 0).toFixed(2)}
-                            </td>
-
-                            <td className="px-3 py-3">
-                              {Number(rule.khr || 0).toLocaleString()}៛
-                            </td>
-
-                            <td className="px-3 py-3">
-                              {formatInputPrice(rule)}
-                            </td>
-
-                            <td className="px-3 py-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  type="button"
-                                  disabled={!safeRelatedUnit}
-                                  onClick={() => {
-                                    if (!safeRelatedUnit) {
-                                      alert(
-                                        "Cannot find related unit for this price rule."
-                                      );
-                                      return;
-                                    }
-
-                                    onEditPriceRule?.(
-                                      variant,
-                                      safeRelatedUnit,
-                                      rule
-                                    );
-                                  }}
-                                  className="rounded-lg bg-blue-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Edit
+                          <div key={unitId || unit.id}
+                            className={`rounded-xl border p-3 text-sm ${theme.softCard}`}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-semibold">{unit.unitName} = {unit.conversionQty}</p>
+                                <p className={`mt-1 text-xs ${theme.muted}`}>
+                                  {unit.isBaseUnit ? "ខ្នាតស្តុក" : "ខ្នាតដូរ"}
+                                  {unit.isDefaultSaleUnit ? " · លក់ក្នុង POS" : ""}
+                                  {unit.isDefaultPurchaseUnit ? " · ទិញពីអ្នកលក់" : ""}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 gap-1">
+                                <button type="button"
+                                  onClick={() => onEditVariantUnit?.(variant, { ...unit, id: unitId })}
+                                  className="rounded-lg bg-blue-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-blue-700">
+                                  កែ
                                 </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => onDeletePriceRule?.(rule)}
-                                  className="rounded-lg bg-red-500 px-2 py-1 text-xs font-semibold text-white transition hover:bg-red-600"
-                                >
-                                  Delete
+                                <button type="button"
+                                  onClick={() => onDeleteVariantUnit?.({ ...unit, id: unitId })}
+                                  className="rounded-lg bg-red-500 px-2 py-1 text-xs font-semibold text-white transition hover:bg-red-600">
+                                  លុប
                                 </button>
                               </div>
-                            </td>
-                          </tr>
+                            </div>
+                            <div className="mt-3">
+                              <SmallActionButton variant="green" disabled={!unitId}
+                                onClick={() => unitId && onAddPriceRule?.(variant, { ...unit, id: unitId })}>
+                                <FiPlus /> បន្ថែមតម្លៃ
+                              </SmallActionButton>
+                            </div>
+                          </div>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </div>
+                  )}
                 </div>
+              )}
 
-                {variant.units.length === 0 && (
-                  <p className="mt-2 text-xs text-amber-500">
-                    Add a unit first before adding price rules.
-                  </p>
-                )}
-              </div>
+              {/* ── Price Rules tab ── */}
+              {getVariantTab(variant.id) === "prices" && (
+                <div className="mt-4">
+                  {variant.units.length === 0 && (
+                    <p className="mb-2 text-xs text-amber-500">
+                      បន្ថែមខ្នាតទំនិញ មុនពេលបន្ថែមតម្លៃ ។
+                    </p>
+                  )}
+                  <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
+                    <table className="w-full min-w-225 text-sm">
+                      <thead className="bg-red-600 text-white">
+                        <tr>
+                          <th className="px-3 py-3 text-left">ប្រភេទតម្លៃ</th>
+                          <th className="px-3 py-3 text-left">ខ្នាតទំនិញ</th>
+                          <th className="px-3 py-3 text-left">ចំនួនយ៉ាងតិច</th>
+                          <th className="px-3 py-3 text-left">USD</th>
+                          <th className="px-3 py-3 text-left">KHR</th>
+                          <th className="px-3 py-3 text-center">សកម្មភាព</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {variant.priceRules.length === 0 && (
+                          <tr>
+                            <td colSpan="6" className="px-3 py-6 text-center">
+                              គ្មានតម្លៃដែលបានដំឡើង
+                            </td>
+                          </tr>
+                        )}
+                        {variant.priceRules.map((rule) => {
+                          const ruleUnitId = getRuleVariantUnitId(rule);
+                          const relatedUnit = variant.units.find((u) =>
+                            Number(getVariantUnitId(u)) === Number(ruleUnitId)
+                          );
+                          const safeRelatedUnit = relatedUnit
+                            ? { ...relatedUnit, id: getVariantUnitId(relatedUnit) }
+                            : null;
+                          return (
+                            <tr key={rule.id} className="border-t border-zinc-200 dark:border-white/10">
+                              <td className="px-3 py-3">
+                                {rule.appliesTo === "retail" ? "លក់រាយ"
+                                  : rule.appliesTo === "wholesale" ? "លក់ដុំ"
+                                  : rule.appliesTo === "both" ? "ទាំងពីរ"
+                                  : rule.appliesTo}
+                              </td>
+                              <td className="px-3 py-3">{rule.unitName || safeRelatedUnit?.unitName || "-"}</td>
+                              <td className="px-3 py-3">{rule.minQty}</td>
+                              <td className="px-3 py-3">${Number(rule.usd || 0).toFixed(2)}</td>
+                              <td className="px-3 py-3">{Number(rule.khr || 0).toLocaleString()}៛</td>
+                              <td className="px-3 py-3">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button type="button" disabled={!safeRelatedUnit}
+                                    onClick={() => safeRelatedUnit && onEditPriceRule?.(variant, safeRelatedUnit, rule)}
+                                    className="rounded-lg bg-blue-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+                                    កែ
+                                  </button>
+                                  <button type="button"
+                                    onClick={() => onDeletePriceRule?.(rule)}
+                                    className="rounded-lg bg-red-500 px-2 py-1 text-xs font-semibold text-white transition hover:bg-red-600">
+                                    លុប
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

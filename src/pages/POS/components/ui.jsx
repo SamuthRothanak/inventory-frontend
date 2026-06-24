@@ -44,17 +44,17 @@ export function PaymentRow({ label, currency, received, applied, change }) {
       <p className="mb-2 font-semibold text-slate-800">{label}</p>
       <div className="space-y-1.5 text-slate-600">
         <div className="flex justify-between">
-          <span>Received</span>
+          <span>ទទួល</span>
           <span className="font-medium text-slate-900">
             {currency === "KHR" ? khr(received) : usd(received)}
           </span>
         </div>
         <div className="flex justify-between">
-          <span>Applied (USD)</span>
+          <span>ដាក់ (USD)</span>
           <span className="font-medium text-slate-900">{usd(applied)}</span>
         </div>
         <div className="flex justify-between border-t border-slate-200 pt-1.5">
-          <span>Change</span>
+          <span>អាប់</span>
           <span className={cn("font-semibold", change > 0 ? "text-emerald-600" : "text-slate-900")}>
             {currency === "KHR" ? khr(change) : usd(change)}
           </span>

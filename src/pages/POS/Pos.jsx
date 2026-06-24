@@ -4,18 +4,17 @@ import { useAuthStore } from "../../store/authStore";
 
 import ProductBrowser   from "./components/productBrowser";
 import CurrentSalePanel from "./components/currentSalePanel";
-import QuickAddModal    from "./components/quickAddModal";
-import PaymentModal     from "./components/paymentModal";
+import QuickAddModal       from "./components/quickAddModal";
+import PaymentModal        from "./components/paymentModal";
+import SalesReturnsModal   from "./components/salesReturnsModal";
 
 import {
-  ScanLine, LogOut, User, Users, X,
+  ScanLine, LogOut, X,
   Layers, ClipboardList, Maximize, Minimize,
-  ShoppingCart, Clock, Receipt,
+  ShoppingCart, Package2, Clock, Receipt, RotateCcw,
 } from "./components/posIcons";
-import {
-  EXCHANGE_RATE, customers, categories, products,
-  getAppliedRule, usd, khr,
-} from "./components/posData";
+import { getAppliedRule, usd } from "./components/posData";
+import { usePosData } from "./usePosData";
 
 // ─── Held Orders Modal ────────────────────────────────────────────
 function HeldOrdersModal({ heldOrders, onResume, onDelete, onClose }) {
@@ -29,8 +28,8 @@ function HeldOrdersModal({ heldOrders, onResume, onDelete, onClose }) {
               <Layers className="h-4 w-4" />
             </div>
             <div>
-              <p className="font-bold text-slate-900">Held Orders</p>
-              <p className="text-[10px] text-slate-400">Click to resume a paused sale</p>
+              <p className="font-bold text-slate-900">ការបញ្ជាទិញដែលផ្អាក</p>
+              <p className="text-[10px] text-slate-400">ចុចដើម្បីបន្តការលក់ដែលផ្អាក</p>
             </div>
           </div>
           {heldOrders.length > 0 && (
@@ -52,8 +51,8 @@ function HeldOrdersModal({ heldOrders, onResume, onDelete, onClose }) {
                 <Layers className="h-6 w-6" />
               </div>
               <div>
-                <p className="font-semibold text-slate-600">No held orders</p>
-                <p className="mt-0.5 text-xs text-slate-400">Press Hold in the cart to pause a sale.</p>
+                <p className="font-semibold text-slate-600">គ្មានការបញ្ជាទិញដែលផ្អាក</p>
+                <p className="mt-0.5 text-xs text-slate-400">ចុច "ផ្អាក" ក្នុង cart ដើម្បីផ្អាកការលក់</p>
               </div>
             </div>
           ) : (
@@ -67,7 +66,7 @@ function HeldOrdersModal({ heldOrders, onResume, onDelete, onClose }) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-slate-900">{order.customerName}</p>
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                      <span>{order.itemCount} item{order.itemCount !== 1 ? "s" : ""}</span>
+                      <span>{order.itemCount} មុខ</span>
                       <span>·</span>
                       <span className="font-semibold text-slate-700">{usd(order.total)}</span>
                       <span>·</span>
@@ -79,7 +78,7 @@ function HeldOrdersModal({ heldOrders, onResume, onDelete, onClose }) {
                   <div className="flex shrink-0 gap-1.5">
                     <button type="button" onClick={() => onResume(order)}
                       className="flex h-8 items-center gap-1 rounded-lg bg-amber-500 px-3 text-xs font-bold text-white shadow-sm transition hover:bg-amber-600">
-                      <Receipt className="h-3.5 w-3.5" /> Resume
+                      <Receipt className="h-3.5 w-3.5" /> បន្ត
                     </button>
                     <button type="button" onClick={() => onDelete(order.id)}
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500">
@@ -110,8 +109,8 @@ function TodaySalesModal({ completedSales, onClose }) {
               <ClipboardList className="h-4 w-4" />
             </div>
             <div>
-              <p className="font-bold text-slate-900">Today's Sales</p>
-              <p className="text-[10px] text-slate-400">{completedSales.length} transactions this session</p>
+              <p className="font-bold text-slate-900">ការលក់ថ្ងៃនេះ</p>
+              <p className="text-[10px] text-slate-400">{completedSales.length} ប្រតិបត្តិការ</p>
             </div>
           </div>
           <button type="button" onClick={onClose}
@@ -124,12 +123,12 @@ function TodaySalesModal({ completedSales, onClose }) {
         {completedSales.length > 0 && (
           <div className="flex items-center gap-4 border-b border-slate-100 bg-emerald-50 px-5 py-3">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Total Revenue</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">ចំណូលសរុប</p>
               <p className="text-xl font-extrabold text-emerald-600">{usd(totalRevenue)}</p>
             </div>
             <div className="h-8 w-px bg-emerald-200" />
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Transactions</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">ប្រតិបត្តិការ</p>
               <p className="text-xl font-extrabold text-emerald-600">{completedSales.length}</p>
             </div>
           </div>
@@ -143,8 +142,8 @@ function TodaySalesModal({ completedSales, onClose }) {
                 <ShoppingCart className="h-6 w-6" />
               </div>
               <div>
-                <p className="font-semibold text-slate-600">No sales yet</p>
-                <p className="mt-0.5 text-xs text-slate-400">Completed sales will appear here.</p>
+                <p className="font-semibold text-slate-600">មិនទាន់មានការលក់</p>
+                <p className="mt-0.5 text-xs text-slate-400">ការលក់ដែលបានបញ្ចប់នឹងបង្ហាញទីនេះ</p>
               </div>
             </div>
           ) : (
@@ -155,8 +154,8 @@ function TodaySalesModal({ completedSales, onClose }) {
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-slate-900">{sale.invoiceNo}</p>
                     <p className="mt-0.5 text-xs text-slate-500">
-                      {sale.customerName} · {sale.items?.length ?? 0} item{(sale.items?.length ?? 0) !== 1 ? "s" : ""}
-                      {sale.discountAmount > 0 && ` · -${usd(sale.discountAmount)} disc.`}
+                      {sale.customerName} · {sale.items?.length ?? 0} មុខ
+                      {sale.discountAmount > 0 && ` · -${usd(sale.discountAmount)} បញ្ចុះ`}
                     </p>
                   </div>
                   <div className="ml-3 shrink-0 text-right">
@@ -176,27 +175,53 @@ function TodaySalesModal({ completedSales, onClose }) {
 }
 
 // ─── Icon Button ──────────────────────────────────────────────────
-function IconBtn({ onClick, title, badge, children, active }) {
+const ICON_BTN_COLORS = {
+  amber:   "border-amber-200 bg-amber-50   text-amber-500   hover:bg-amber-100   hover:border-amber-300   hover:text-amber-700",
+  emerald: "border-emerald-200 bg-emerald-50 text-emerald-500 hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-700",
+  red:     "border-red-200   bg-red-50     text-red-500     hover:bg-red-100     hover:border-red-300     hover:text-red-600",
+  slate:   "border-slate-200 bg-white      text-slate-500   hover:border-slate-300 hover:bg-slate-50     hover:text-slate-800",
+};
+
+function IconBtn({ onClick, title, badge, children, active, color = "slate" }) {
+  const base = "relative flex h-8 w-8 items-center justify-center rounded-lg border transition";
+  const cls  = active
+    ? "border-red-300 bg-red-100 text-red-600"
+    : (ICON_BTN_COLORS[color] ?? ICON_BTN_COLORS.slate);
+
   return (
-    <button type="button" onClick={onClick} title={title}
-      className={`relative flex h-8 w-8 items-center justify-center rounded-lg border transition
-        ${active
-          ? "border-red-200 bg-red-50 text-red-500"
-          : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
-        }`}>
-      {children}
-      {badge > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-bold text-white leading-none">
-          {badge}
+    <div className="relative inline-flex group">
+      <button type="button" onClick={onClick} className={`${base} ${cls}`}>
+        {children}
+        {badge > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-bold text-white leading-none">
+            {badge}
+          </span>
+        )}
+      </button>
+      {title && (
+        <span className="pointer-events-none absolute top-full left-1/2 z-50 mt-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-zinc-700">
+          {title}
+          <span className="absolute left-1/2 bottom-full -translate-x-1/2 border-4 border-transparent border-b-zinc-800 dark:border-b-zinc-700" />
         </span>
       )}
-    </button>
+    </div>
   );
 }
 
 // ─── Main Component ───────────────────────────────────────────────
 export default function Pos() {
   const navigate = useNavigate();
+
+  const {
+    exchangeRate,
+    khrRounding,
+    customers,
+    categories,
+    products,
+    isLoading,
+    isError,
+    refetchStock,
+  } = usePosData();
 
   const [saleMode,           setSaleMode]           = useState("walk-in");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -220,10 +245,35 @@ export default function Pos() {
   const [completedSales, setCompletedSales] = useState([]);
   const [showHeld,       setShowHeld]       = useState(false);
   const [showSales,      setShowSales]      = useState(false);
+  const [showReturns,    setShowReturns]    = useState(false);
   const [isFullscreen,   setIsFullscreen]   = useState(false);
+  const [saleNote,       setSaleNote]       = useState("");
 
+  const currentUser      = useAuthStore((s) => s.user);
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null;
   const appliesTo = saleMode === "wholesale" && selectedCustomer ? "customer" : "public";
+
+  // Reprice all cart items whenever pricing mode changes
+  useEffect(() => {
+    setCart((prev) => {
+      if (prev.length === 0) return prev;
+      return prev.map((item) => {
+        const product = products.find((p) => p.id === item.productId);
+        if (!product) return item;
+        const unit = product.units.find((u) => u.id === item.unitId);
+        if (!unit) return item;
+        const newRule = getAppliedRule(unit, item.qty, appliesTo);
+        if (!newRule) return item;
+        return {
+          ...item,
+          unitPrice:        newRule.usd,
+          lineTotal:        item.qty * newRule.usd,
+          appliedRuleId:    newRule.id,
+          appliedRuleLabel: newRule.label,
+        };
+      });
+    });
+  }, [appliesTo, products]);
 
   const filteredProducts = useMemo(() => {
     const kw = search.toLowerCase().trim();
@@ -236,7 +286,7 @@ export default function Pos() {
         || (item.code && item.code.toLowerCase().includes(kw));
       return matchCat && matchSearch;
     });
-  }, [category, search]);
+  }, [category, search, products]);
 
   const unitOptions    = selectedProduct?.units || [];
   const selectedUnit   = unitOptions.find((u) => u.id === selectedUnitId) || unitOptions[0] || null;
@@ -252,14 +302,15 @@ export default function Pos() {
   const discountAmount = useMemo(() => {
     if (discountType === "percent") return subtotal * (Math.min(parseFloat(discountValue || 0), 100) / 100);
     if (discountType === "amount")  return Math.min(parseFloat(discountValue || 0), subtotal);
+    if (discountType === "khr")     return Math.min((parseFloat(discountValue || 0) / exchangeRate), subtotal);
     return 0;
-  }, [discountType, discountValue, subtotal]);
+  }, [discountType, discountValue, subtotal, exchangeRate]);
 
   const deliveryFeeUsd = useMemo(() => {
     if (!deliveryRequired) return 0;
     const fee = parseFloat(deliveryFee || 0);
-    return deliveryFeeCurrency === "KHR" ? fee / EXCHANGE_RATE : fee;
-  }, [deliveryRequired, deliveryFee, deliveryFeeCurrency]);
+    return deliveryFeeCurrency === "KHR" ? fee / exchangeRate : fee;
+  }, [deliveryRequired, deliveryFee, deliveryFeeCurrency, exchangeRate]);
 
   const grandTotal = Math.max(0, subtotal - discountAmount + deliveryFeeUsd);
 
@@ -287,21 +338,43 @@ export default function Pos() {
 
   function addToCart() {
     if (!selectedProduct || !selectedUnit || !appliedRule) return;
-    setCart((prev) => [...prev, {
-      id:               crypto.randomUUID(),
-      productId:        selectedProduct.id,
-      productName:      selectedProduct.productName,
-      variantName:      selectedProduct.variantName,
-      image:            selectedProduct.image,
-      unitId:           selectedUnit.id,
-      unitName:         selectedUnit.name,
-      qty,
-      baseQty:          qty * selectedUnit.conversionQty,
-      unitPrice,
-      lineTotal,
-      appliedRuleId:    appliedRule.id,
-      appliedRuleLabel: appliedRule.label,
-    }]);
+    setCart((prev) => {
+      const existingIdx = prev.findIndex(
+        (item) => item.productId === selectedProduct.id && item.unitId === selectedUnit.id
+      );
+      if (existingIdx !== -1) {
+        return prev.map((item, i) => {
+          if (i !== existingIdx) return item;
+          const newQty   = item.qty + qty;
+          const newRule  = getAppliedRule(selectedUnit, newQty, appliesTo);
+          const newPrice = newRule?.usd ?? item.unitPrice;
+          return {
+            ...item,
+            qty:              newQty,
+            baseQty:          newQty * selectedUnit.conversionQty,
+            unitPrice:        newPrice,
+            lineTotal:        newQty * newPrice,
+            appliedRuleId:    newRule?.id    ?? item.appliedRuleId,
+            appliedRuleLabel: newRule?.label ?? item.appliedRuleLabel,
+          };
+        });
+      }
+      return [...prev, {
+        id: crypto.randomUUID(),
+        productId:    selectedProduct.id,
+        productName:  selectedProduct.productName,
+        variantName:  selectedProduct.variantName,
+        image:        selectedProduct.image,
+        unitId:       selectedUnit.id,
+        unitName:     selectedUnit.name,
+        qty,
+        baseQty:          qty * selectedUnit.conversionQty,
+        unitPrice,
+        lineTotal,
+        appliedRuleId:    appliedRule.id,
+        appliedRuleLabel: appliedRule.label,
+      }];
+    });
     closeQuickAdd();
   }
 
@@ -321,26 +394,39 @@ export default function Pos() {
     setDiscountValue("");
     setDeliveryRequired(false);
     setDeliveryFee("");
+    setSaleNote("");
   }
 
   // ── Hold Order ──
   function holdOrder() {
     if (cart.length === 0) return;
     setHeldOrders((prev) => [...prev, {
-      id:           crypto.randomUUID(),
-      heldAt:       new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      customerName: selectedCustomer?.shopName ?? "Walk-in",
+      id:                  crypto.randomUUID(),
+      heldAt:              new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+      customerName:        selectedCustomer?.shopName ?? "អតិថិជនទូទៅ",
       saleMode,
-      items:        [...cart],
+      items:               [...cart],
       subtotal,
-      total:        grandTotal,
-      itemCount:    totalItems,
+      total:               grandTotal,
+      itemCount:           totalItems,
+      discountType,
+      discountValue,
+      deliveryRequired,
+      deliveryOption,
+      deliveryFee,
+      deliveryFeeCurrency,
     }]);
     clearCart();
   }
 
   function resumeOrder(order) {
     setCart(order.items);
+    setDiscountType(order.discountType   ?? "none");
+    setDiscountValue(order.discountValue ?? "");
+    setDeliveryRequired(order.deliveryRequired   ?? false);
+    setDeliveryOption(order.deliveryOption       ?? "customer_pickup");
+    setDeliveryFee(order.deliveryFee             ?? "");
+    setDeliveryFeeCurrency(order.deliveryFeeCurrency ?? "USD");
     setHeldOrders((prev) => prev.filter((o) => o.id !== order.id));
     setShowHeld(false);
   }
@@ -355,6 +441,8 @@ export default function Pos() {
       { ...receiptData, id: crypto.randomUUID() },
       ...prev.slice(0, 49),
     ]);
+    clearCart();
+    refetchStock();
   }
 
   // ── Fullscreen ──
@@ -386,20 +474,42 @@ export default function Pos() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-100">
+        <div className="text-center">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-red-500 border-t-transparent" />
+          <p className="text-sm font-semibold text-slate-600">រង់ចាំបន្តិច...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-100">
+        <div className="text-center">
+          <p className="text-sm font-semibold text-red-500">មិនអាចផ្ទុកទិន្ន័យ POS។</p>
+          <p className="mt-1 text-xs text-slate-500">សូម refresh ទំព័រ។</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-100 p-3 gap-3">
 
       {/* ── Top bar ── */}
-      <div className="flex shrink-0 items-center gap-0 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="flex shrink-0 items-center gap-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
 
         {/* Group A: Logo */}
-        <div className="flex shrink-0 items-center gap-2.5 border-r border-slate-100 bg-slate-50 px-4 py-3">
+        <div className="flex shrink-0 items-center gap-2.5 border-r border-slate-100 bg-slate-50 px-4 py-3 rounded-l-2xl">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm shadow-red-200">
             <ScanLine className="h-4 w-4" />
           </div>
           <div className="leading-none">
             <p className="text-sm font-extrabold tracking-tight text-slate-900">POS</p>
-            <p className="text-[10px] text-slate-400">Point of Sale</p>
+            <p className="text-[10px] text-slate-400">ចំណុចលក់</p>
           </div>
         </div>
 
@@ -407,18 +517,18 @@ export default function Pos() {
         <div className="flex flex-1 items-center gap-3 px-4 py-2.5">
           <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 shrink-0">
             <button type="button"
-              onClick={() => { setSaleMode("walk-in"); setSelectedCustomerId(""); }}
+              onClick={() => { setSaleMode("walk-in"); setSelectedCustomerId(""); setSaleChannel("pos"); }}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                 saleMode === "walk-in" ? "bg-red-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
               }`}>
-              <User className="h-3.5 w-3.5" /> Walk-in
+              <ShoppingCart className="h-3.5 w-3.5" /> លក់រាយ
             </button>
             <button type="button"
               onClick={() => setSaleMode("wholesale")}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                 saleMode === "wholesale" ? "bg-red-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
               }`}>
-              <Users className="h-3.5 w-3.5" /> Wholesale
+              <Package2 className="h-3.5 w-3.5" /> លក់ដុំ
             </button>
           </div>
 
@@ -427,11 +537,11 @@ export default function Pos() {
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <select
               value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
+              onChange={(e) => { setSelectedCustomerId(e.target.value); if (!e.target.value) setSaleChannel("pos"); }}
               disabled={saleMode !== "wholesale"}
               className="h-9 w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 focus:border-red-300"
             >
-              <option value="">Select customer…</option>
+              <option value="">ជ្រើសរើសអតិថិជន...</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>{c.shopName} ({c.code})</option>
               ))}
@@ -445,34 +555,23 @@ export default function Pos() {
         </div>
 
         {/* Group C: Function buttons + Exchange rate + Logout */}
-        <div className="flex shrink-0 items-center gap-2 border-l border-slate-100 bg-slate-50 px-4 py-2.5">
+        <div className="flex shrink-0 items-center gap-2 border-l border-slate-100 bg-slate-50 px-4 py-2.5 rounded-r-2xl">
 
           {/* ── Function buttons ── */}
-          <IconBtn
-            title="Held Orders"
-            badge={heldOrders.length}
-            onClick={() => setShowHeld(true)}
-          >
+          <IconBtn color="amber"   title="ការបញ្ជាទិញដែលផ្អាក"   badge={heldOrders.length}    onClick={() => setShowHeld(true)}>
             <Layers className="h-3.5 w-3.5" />
           </IconBtn>
 
-          <IconBtn
-            title="Today's Sales"
-            badge={completedSales.length}
-            onClick={() => setShowSales(true)}
-          >
+          <IconBtn color="emerald" title="ការលក់ថ្ងៃនេះ" badge={completedSales.length} onClick={() => setShowSales(true)}>
             <ClipboardList className="h-3.5 w-3.5" />
           </IconBtn>
 
-          <IconBtn
-            title={isFullscreen ? "Exit Full Screen" : "Full Screen"}
-            active={isFullscreen}
-            onClick={toggleFullscreen}
-          >
-            {isFullscreen
-              ? <Minimize className="h-3.5 w-3.5" />
-              : <Maximize className="h-3.5 w-3.5" />
-            }
+          <IconBtn color="red"     title="ត្រឡប់ការលក់"                               onClick={() => setShowReturns(true)}>
+            <RotateCcw className="h-3.5 w-3.5" />
+          </IconBtn>
+
+          <IconBtn color="slate"   title={isFullscreen ? "ចេញពី Full Screen" : "Full Screen"} active={isFullscreen} onClick={toggleFullscreen}>
+            {isFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}
           </IconBtn>
 
           <div className="h-6 w-px bg-slate-200" />
@@ -480,13 +579,13 @@ export default function Pos() {
           {/* Exchange rate */}
           <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 h-8">
             <span className="text-[11px] text-slate-500">1 USD =</span>
-            <span className="text-xs font-extrabold text-slate-900">{EXCHANGE_RATE.toLocaleString()} KHR</span>
+            <span className="text-xs font-extrabold text-slate-900">{exchangeRate.toLocaleString()} KHR</span>
           </div>
 
           {/* Logout */}
           <button type="button" onClick={handleLogout}
             className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600">
-            <LogOut className="h-3.5 w-3.5" /> Logout
+            <LogOut className="h-3.5 w-3.5" /> ចេញ
           </button>
         </div>
       </div>
@@ -532,6 +631,10 @@ export default function Pos() {
             onClear={clearCart}
             onHold={holdOrder}
             onOpenPayment={() => setPaymentOpen(true)}
+            requiresCustomer={saleMode === "wholesale" && !selectedCustomer}
+            exchangeRate={exchangeRate}
+            note={saleNote}
+            onNoteChange={setSaleNote}
           />
         </div>
       </div>
@@ -562,6 +665,14 @@ export default function Pos() {
         subtotal={subtotal}
         discountAmount={discountAmount}
         deliveryFeeUsd={deliveryFeeUsd}
+        exchangeRate={exchangeRate}
+        khrRounding={khrRounding}
+        cashierName={currentUser?.name || "Cashier"}
+        note={saleNote}
+        deliveryRequired={deliveryRequired}
+        deliveryOption={deliveryOption}
+        deliveryFee={deliveryFee}
+        deliveryFeeCurrency={deliveryFeeCurrency}
         onCompleteSale={handleCompleteSale}
       />
 
@@ -579,6 +690,10 @@ export default function Pos() {
           completedSales={completedSales}
           onClose={() => setShowSales(false)}
         />
+      )}
+
+      {showReturns && (
+        <SalesReturnsModal onClose={() => setShowReturns(false)} />
       )}
     </div>
   );

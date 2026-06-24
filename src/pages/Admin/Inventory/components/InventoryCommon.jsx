@@ -26,6 +26,13 @@ const isDarkTheme = (theme) => {
     themeText.includes("text-white")
   );
 };
+const formatStockValue = (raw) => {
+  const n = Number(raw) || 0;
+  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}B`;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
 const sanitizeNumber = (value, allowDecimal = true) => {
   let nextValue = String(value || "").replace(/-/g, "");
   if (!allowDecimal) return nextValue.replace(/[^0-9]/g, "");
@@ -34,17 +41,19 @@ const sanitizeNumber = (value, allowDecimal = true) => {
   return parts.length > 2 ? `${parts[0]}.${parts.slice(1).join("")}` : nextValue;
 };
 
-export function SummaryCard({ theme, title, value, icon, iconBg }) {
+export function SummaryCard({ theme, title, value, icon, iconBg, rawValue }) {
+  const display = rawValue !== undefined ? formatStockValue(rawValue) : value;
+  const isLong = String(display).length > 10;
   return (
     <div className={`rounded-2xl border px-5 py-5 shadow-sm ${theme.card}`}>
       <div className="flex items-center gap-4">
-        <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${iconBg}`}>
+        <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${iconBg}`}>
           {icon}
         </div>
 
-        <div>
+        <div className="min-w-0">
           <p className={`text-sm font-medium ${theme.muted}`}>{title}</p>
-          <h3 className="mt-1 text-3xl font-bold leading-none">{value}</h3>
+          <h3 className={`mt-1 font-bold leading-none truncate ${isLong ? "text-xl" : "text-3xl"}`}>{display}</h3>
         </div>
       </div>
     </div>
@@ -162,11 +171,17 @@ export function SectionTitle({ icon, title, subtitle, theme }) {
   );
 }
 
+const STOCK_STATUS_KH = {
+  "In Stock": "មានស្តុក",
+  "Low Stock": "ស្តុកស្ទើរអស់",
+  "Out of Stock": "អស់ស្តុក",
+};
+
 export function StockStatusBadge({ status, getStatusClass }) {
   return (
     <span className={`inline-flex w-fit items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(status)}`}>
       {status === "In Stock" ? <FiCheckCircle /> : status === "Low Stock" ? <FiAlertTriangle /> : <FiXCircle />}
-      {status}
+      {STOCK_STATUS_KH[status] || status}
     </span>
   );
 }
@@ -274,14 +289,14 @@ export function InventoryDropdown({
                 autoFocus
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search..."
+                placeholder="ស្វែងរក..."
                 className={`h-9 w-full rounded-lg border px-3 text-sm outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-500/20 ${searchInputClass}`}
               />
             </div>
           )}
           <div className="max-h-56 overflow-y-auto py-1">
             {visibleOptions.length === 0 && (
-              <p className={`px-4 py-3 text-center text-xs ${theme.muted}`}>No results</p>
+              <p className={`px-4 py-3 text-center text-xs ${theme.muted}`}>រកមិនឃើញ</p>
             )}
             {visibleOptions.map((option) => {
               const isActive = String(option.value) === String(value);

@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import {
   FiAlertTriangle,
   FiCalendar,
@@ -17,30 +17,30 @@ import { formatCurrencyPair, formatPaymentMode, formatSnake } from "../utils/pur
 import { EmptyState, FormInput, FormSection, FormSelect, FormTextarea, ModalShell, SummaryMiniBox } from "./PurchaseCommon";
 
 const conditionOptions = [
-  { value: "damaged", label: "Damaged" },
-  { value: "expired", label: "Expired" },
-  { value: "wrong_item", label: "Wrong Item" },
-  { value: "good", label: "Good" },
-  { value: "other", label: "Other" },
+  { value: "damaged", label: "ខូចខាត" },
+  { value: "expired", label: "ផុតកំណត់" },
+  { value: "wrong_item", label: "ទំនិញខុស" },
+  { value: "good", label: "ល្អ" },
+  { value: "other", label: "ផ្សេងទៀត" },
 ];
 
 const returnReasonOptions = [
-  { value: "damaged", label: "Damaged" },
-  { value: "expired", label: "Expired" },
-  { value: "wrong_item", label: "Wrong Item" },
-  { value: "over_supplied", label: "Over Supplied" },
-  { value: "quality_issue", label: "Quality Issue" },
-  { value: "other", label: "Other" },
+  { value: "damaged", label: "ខូចខាត" },
+  { value: "expired", label: "ផុតកំណត់" },
+  { value: "wrong_item", label: "ទំនិញខុស" },
+  { value: "over_supplied", label: "ដឹកលើស" },
+  { value: "quality_issue", label: "បញ្ហាគុណភាព" },
+  { value: "other", label: "ផ្សេងទៀត" },
 ];
 
 function getResolutionDetail(item, resolutionType) {
   if (resolutionType === "refund") {
-    return `Supplier refunds ${formatCurrencyPair(item.refundAmountUsd, item.refundAmountKhr)}`;
+    return `អ្នកផ្គត់ផ្គង់ សង ${formatCurrencyPair(item.refundAmountUsd, item.refundAmountKhr)}`;
   }
   if (resolutionType === "credit" || resolutionType === "credit_note") {
-    return `Supplier gives credit ${formatCurrencyPair(item.creditAmountUsd, item.creditAmountKhr)}`;
+    return `អ្នកផ្គត់ផ្គង់ ឲ Credit ${formatCurrencyPair(item.creditAmountUsd, item.creditAmountKhr)}`;
   }
-  return `Supplier replaces ${item.replacementQty || item.qtyReturned || 0} ${item.unitName}; received ${item.replacementReceivedQty || 0}`;
+  return `អ្នកផ្គត់ផ្គង់ ជំនួស ${item.replacementQty || item.qtyReturned || 0} ${item.unitName}; ទទួល ${item.replacementReceivedQty || 0}`;
 }
 
 export function PurchaseReturnModal({
@@ -71,8 +71,8 @@ export function PurchaseReturnModal({
 
   return (
     <ModalShell
-      title="Supplier Claim / Purchase Return"
-      subtitle={`Create the supplier resolution for damaged goods from ${purchase.purchaseNo}.`}
+      title="ការទាមទារ អ្នកផ្គត់ផ្គង់ / ត្រឡប់ទំនិញ"
+      subtitle={`បង្កើតដំណោះស្រាយ អ្នកផ្គត់ផ្គង់ សម្រាប់ទំនិញខូចពី ${purchase.purchaseNo}។`}
       theme={theme}
       onClose={onClose}
       width="max-w-7xl"
@@ -83,14 +83,14 @@ export function PurchaseReturnModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Cancel
+            បោះបង់
           </button>
           <button
             type="button"
             onClick={onSave}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700"
           >
-            <FiSave /> Save Supplier Claim
+            <FiSave /> រក្សាទុកការទាមទារ
           </button>
         </>
       }
@@ -99,25 +99,25 @@ export function PurchaseReturnModal({
         <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-bold">What this does</p>
+              <p className="text-sm font-bold">មុខងារ</p>
               <p className={`mt-1 text-xs leading-5 ${theme.muted}`}>
-                This does not add stock. It records the damaged quantity and how the supplier will solve it: replacement, refund, or credit.
+                មិនបន្ថែមស្តុកទេ — វាកត់ចំនួនខូច និងរបៀបដែល អ្នកផ្គត់ផ្គង់ នឹងដោះស្រាយ: ជំនួស, សង, ឬ Credit។
               </p>
             </div>
             <div className="rounded-xl bg-purple-500/10 px-4 py-3 text-sm font-semibold text-purple-600 dark:text-purple-300">
-              Current claim value: {formatCurrencyPair(subtotalUsd, subtotalKhr)}
+              តម្លៃទាមទារបច្ចុប្បន្ន: {formatCurrencyPair(subtotalUsd, subtotalKhr)}
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <FormSection title="Supplier Resolution" subtitle="Choose how the supplier will solve this damaged quantity." icon={<FiRotateCcw />} theme={theme}>
+          <FormSection title="ដំណោះស្រាយ អ្នកផ្គត់ផ្គង់" subtitle="ជ្រើសរបៀបដែល អ្នកផ្គត់ផ្គង់ នឹងដោះស្រាយចំនួនខូច។" icon={<FiRotateCcw />} theme={theme}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <FormInput label="Claim No" required value={form.purchaseReturnNo} error={errors.purchaseReturnNo} onChange={(value) => onChange("purchaseReturnNo", value)} theme={theme} icon={<FiHash />} />
-              <FormInput label="Return Date" required type="date" value={form.returnDate} error={errors.returnDate} onChange={(value) => onChange("returnDate", value)} theme={theme} icon={<FiCalendar />} />
-              <FormSelect label="Return Reason" value={form.returnReason} onChange={(value) => onChange("returnReason", value)} theme={theme} icon={<FiAlertTriangle />} options={returnReasonOptions} />
+              <FormInput label="លេខការទាមទារ" required value={form.purchaseReturnNo} error={errors.purchaseReturnNo} onChange={(value) => onChange("purchaseReturnNo", value)} theme={theme} icon={<FiHash />} />
+              <FormInput label="កាលបរិច្ឆេទត្រឡប់" required type="date" value={form.returnDate} error={errors.returnDate} onChange={(value) => onChange("returnDate", value)} theme={theme} icon={<FiCalendar />} />
+              <FormSelect label="មូលហេតុត្រឡប់" value={form.returnReason} onChange={(value) => onChange("returnReason", value)} theme={theme} icon={<FiAlertTriangle />} options={returnReasonOptions} />
               <FormSelect
-                label="Resolution Type"
+                label="ប្រភេទដំណោះស្រាយ"
                 required
                 value={form.resolutionType}
                 error={errors.resolutionType}
@@ -125,56 +125,56 @@ export function PurchaseReturnModal({
                 theme={theme}
                 icon={<FiCheckCircle />}
                 options={[
-                  { value: "replacement", label: "Replacement" },
-                  { value: "refund", label: "Refund" },
+                  { value: "replacement", label: "ជំនួស" },
+                  { value: "refund", label: "ការសង" },
                   { value: "credit_note", label: "Credit Note" },
-                  { value: "none", label: "None" },
+                  { value: "none", label: "គ្មាន" },
                 ]}
               />
               <FormSelect
-                label="Resolution Status"
+                label="ស្ថានភាពដំណោះស្រាយ"
                 value={form.resolutionStatus}
                 onChange={(value) => onChange("resolutionStatus", value)}
                 theme={theme}
                 icon={<FiClock />}
                 options={[
-                  { value: "submitted", label: "Submitted" },
-                  { value: "approved", label: "Approved" },
-                  { value: "resolved", label: "Resolved / Completed" },
-                  { value: "rejected", label: "Rejected" },
-                  { value: "cancelled", label: "Cancelled" },
+                  { value: "submitted", label: "បានដាក់ស្នើ" },
+                  { value: "approved", label: "បានអនុម័ត" },
+                  { value: "resolved", label: "បានដោះស្រាយ" },
+                  { value: "rejected", label: "បានបដិសេធ" },
+                  { value: "cancelled", label: "បានលុបចោល" },
                 ]}
               />
             </div>
             <div className="mt-4">
-              <FormTextarea label="Note" value={form.note} onChange={(value) => onChange("note", value)} theme={theme} placeholder="Describe the supplier claim..." icon={<FiFileText />} />
+              <FormTextarea label="កំណត់ចំណាំ" value={form.note} onChange={(value) => onChange("note", value)} theme={theme} placeholder="ពិពណ៌នាការទាមទារ អ្នកផ្គត់ផ្គង់..." icon={<FiFileText />} />
             </div>
           </FormSection>
 
-          <FormSection title="Source Purchase" subtitle="Read-only purchase information for this claim." icon={<FiShoppingCart />} theme={theme}>
+          <FormSection title="ព័ត៌មានការទិញ" subtitle="ព័ត៌មានអានតែ — ការទិញដើម។" icon={<FiShoppingCart />} theme={theme}>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <SummaryMiniBox theme={theme} label="Purchase No" value={purchase.purchaseNo} />
-              <SummaryMiniBox theme={theme} label="Supplier" value={purchase.supplierName} />
-              <SummaryMiniBox theme={theme} label="Payment Mode" value={formatPaymentMode(purchase.paymentMode)} />
-              <SummaryMiniBox theme={theme} label="Claim Value" value={formatCurrencyPair(subtotalUsd, subtotalKhr)} strong />
+              <SummaryMiniBox theme={theme} label="លេខការទិញ" value={purchase.purchaseNo} />
+              <SummaryMiniBox theme={theme} label="អ្នកផ្គត់ផ្គង់" value={purchase.supplierName} />
+              <SummaryMiniBox theme={theme} label="របៀបទូទាត់" value={formatPaymentMode(purchase.paymentMode)} />
+              <SummaryMiniBox theme={theme} label="តម្លៃទាមទារ" value={formatCurrencyPair(subtotalUsd, subtotalKhr)} strong />
             </div>
           </FormSection>
         </div>
 
         <FormSection
-          title={availableItems.length > 0 ? "Add Another Damaged Item" : "Damaged Items Ready"}
-          subtitle={availableItems.length > 0 ? "Only add more lines if this claim contains another damaged item." : "The damaged quantity from this purchase is already prepared below."}
+          title={availableItems.length > 0 ? "បន្ថែមទំនិញខូចផ្សេងទៀត" : "ទំនិញខូចរួចរាល់"}
+          subtitle={availableItems.length > 0 ? "បន្ថែមបន្ទាត់ថ្មីតែបើការទាមទារនេះមានទំនិញខូចផ្សេងទៀត។" : "ចំនួនខូចពីការទិញនេះត្រូវបានរៀបចំខាងក្រោម។"}
           icon={<FiPackage />}
           theme={theme}
         >
           {availableItems.length === 0 ? (
             <div className={`rounded-2xl border p-4 text-sm ${theme.softCard}`}>
-              {hasPreparedItems ? "No more damaged quantity is available to add. Review the item below and save the supplier claim." : "There is no damaged or claim quantity for this purchase."}
+              {hasPreparedItems ? "គ្មានចំនួនខូចទៀតដែលអាចបន្ថែម។ ពិនិត្យទំនិញខាងក្រោម ហើយរក្សាទុកការទាមទារ អ្នកផ្គត់ផ្គង់។" : "គ្មានចំនួនខូចឬទាមទារសម្រាប់ការទិញនេះ។"}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr_1fr_1.4fr_auto]">
               <FormSelect
-                label="Purchase Item"
+                label="ទំនិញការទិញ"
                 required
                 value={itemForm.purchaseItemId}
                 error={itemErrors.purchaseItemId}
@@ -182,20 +182,20 @@ export function PurchaseReturnModal({
                 theme={theme}
                 icon={<FiPackage />}
                 options={[
-                  { value: "", label: "Select item" },
+                  { value: "", label: "ជ្រើសទំនិញ" },
                   ...availableItems.map((item) => ({
                     value: item.id,
-                    label: `${item.variantName} - available ${item.availableQty} ${item.unitName}`,
+                    label: `${item.variantName} - នៅ ${item.availableQty} ${item.unitName}`,
                   })),
                 ]}
                 searchable
               />
-              <FormInput label="Claim Qty" required type="number" value={itemForm.qtyReturned} error={itemErrors.qtyReturned} onChange={(value) => onItemChange("qtyReturned", value)} theme={theme} icon={<FiHash />} />
-              <FormSelect label="Condition" required value={itemForm.condition} error={itemErrors.condition} onChange={(value) => onItemChange("condition", value)} theme={theme} icon={<FiAlertTriangle />} options={conditionOptions} />
-              <FormInput label="Reason" required value={itemForm.reason} error={itemErrors.reason} onChange={(value) => onItemChange("reason", value)} theme={theme} icon={<FiFileText />} />
+              <FormInput label="ចំនួនទាមទារ" required type="number" value={itemForm.qtyReturned} error={itemErrors.qtyReturned} onChange={(value) => onItemChange("qtyReturned", value)} theme={theme} icon={<FiHash />} />
+              <FormSelect label="លក្ខខណ្ឌ" required value={itemForm.condition} error={itemErrors.condition} onChange={(value) => onItemChange("condition", value)} theme={theme} icon={<FiAlertTriangle />} options={conditionOptions} />
+              <FormInput label="មូលហេតុ" required value={itemForm.reason} error={itemErrors.reason} onChange={(value) => onItemChange("reason", value)} theme={theme} icon={<FiFileText />} />
               <div className="flex items-end">
                 <button type="button" onClick={onAddItem} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600">
-                  <FiPlus /> Add
+                  <FiPlus /> បន្ថែម
                 </button>
               </div>
             </div>
@@ -204,21 +204,21 @@ export function PurchaseReturnModal({
           {errors.items && <div className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{errors.items}</div>}
         </FormSection>
 
-        <FormSection title="Items Sent To Supplier" subtitle="These are the damaged quantities included in this supplier claim." icon={<FiFileText />} theme={theme}>
+        <FormSection title="ទំនិញបានផ្ញើ អ្នកផ្គត់ផ្គង់" subtitle="ចំនួនខូចដែលរួមបញ្ចូលក្នុងការទាមទារ អ្នកផ្គត់ផ្គង់ នេះ។" icon={<FiFileText />} theme={theme}>
           {items.length === 0 ? (
-            <EmptyState theme={theme} icon={<FiPackage />} title="No claim items" description="Add at least one problem item before saving supplier claim." />
+            <EmptyState theme={theme} icon={<FiPackage />} title="គ្មានទំនិញទាមទារ" description="បន្ថែមទំនិញយ៉ាងហោចណាស់មួយ មុនពេលរក្សាទុកការទាមទារ អ្នកផ្គត់ផ្គង់។" />
           ) : (
             <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-white/10">
               <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-red-600 text-white">
                   <tr>
-                    <th className="px-3 py-3 text-left">Product</th>
-                    <th className="px-3 py-3 text-left">Damaged Qty</th>
-                    <th className="px-3 py-3 text-left">Inventory Qty</th>
-                    <th className="px-3 py-3 text-left">Condition</th>
-                    <th className="px-3 py-3 text-left">Supplier Action</th>
-                    <th className="px-3 py-3 text-left">Claim Value</th>
-                    <th className="px-3 py-3 text-center">Action</th>
+                    <th className="px-3 py-3 text-left">ផលិតផល</th>
+                    <th className="px-3 py-3 text-left">ចំនួនខូច</th>
+                    <th className="px-3 py-3 text-left">ចំនួនស្តុក</th>
+                    <th className="px-3 py-3 text-left">លក្ខខណ្ឌ</th>
+                    <th className="px-3 py-3 text-left">សកម្មភាព អ្នកផ្គត់ផ្គង់</th>
+                    <th className="px-3 py-3 text-left">តម្លៃទាមទារ</th>
+                    <th className="px-3 py-3 text-center">សកម្មភាព</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -235,7 +235,7 @@ export function PurchaseReturnModal({
                       <td className="px-3 py-3 font-semibold">{formatCurrencyPair(item.lineTotalUsd ?? item.lineTotal, item.lineTotalKhr)}</td>
                       <td className="px-3 py-3 text-center">
                         <button type="button" onClick={() => onRemoveItem(index)} className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-red-500 px-2 text-xs font-semibold text-white hover:bg-red-600">
-                          <FiTrash size={15} /> Remove
+                          <FiTrash size={15} /> លុប
                         </button>
                       </td>
                     </tr>

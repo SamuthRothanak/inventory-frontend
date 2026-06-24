@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FiCheckCircle,
@@ -148,6 +149,7 @@ export default function Category() {
 
   const queryClient = useQueryClient();
   const notify = useNotification();
+  const confirm = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -288,13 +290,13 @@ export default function Category() {
     mutationFn: createCategoryApi,
     onSuccess: () => {
       invalidateCategories();
-      notify.success("Category created", "The category has been saved.");
+      notify.success("ប្រភេទត្រូវបានបង្កើត", "ប្រភេទត្រូវបានរក្សាទុករួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      const message = getErrorMessage(error, "Create category failed.");
+      const message = getErrorMessage(error, "មិនអាចបង្កើតប្រភេទ។");
       setServerMessage(message);
-      notify.error("Create failed", message);
+      notify.error("បង្កើតបរាជ័យ", message);
     },
   });
 
@@ -302,13 +304,13 @@ export default function Category() {
     mutationFn: updateCategoryApi,
     onSuccess: () => {
       invalidateCategories();
-      notify.success("Category updated", "The category has been updated.");
+      notify.success("ប្រភេទត្រូវបានធ្វើបច្ចុប្បន្នភាព", "ប្រភេទត្រូវបានធ្វើបច្ចុប្បន្នភាពរួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      const message = getErrorMessage(error, "Update category failed.");
+      const message = getErrorMessage(error, "មិនអាចធ្វើបច្ចុប្បន្នភាពប្រភេទ។");
       setServerMessage(message);
-      notify.error("Update failed", message);
+      notify.error("ធ្វើបច្ចុប្បន្នភាពបរាជ័យ", message);
     },
   });
 
@@ -316,12 +318,12 @@ export default function Category() {
     mutationFn: deleteCategoryApi,
     onSuccess: () => {
       invalidateCategories();
-      notify.success("Category deleted", "The category has been deleted.");
+      notify.success("ប្រភេទត្រូវបានលុប", "ប្រភេទត្រូវបានលុបចោលរួចហើយ។");
     },
     onError: (error) => {
       notify.error(
-        "Delete failed",
-        getErrorMessage(error, "Failed to delete category.")
+        "លុបបរាជ័យ",
+        getErrorMessage(error, "មិនអាចលុបប្រភេទ។")
       );
     },
   });
@@ -333,14 +335,14 @@ export default function Category() {
       setBulkSelectMode(false);
       invalidateCategories();
       notify.success(
-        "Categories deleted",
-        "Selected categories have been deleted."
+        "ប្រភេទត្រូវបានលុប",
+        "ប្រភេទដែលបានជ្រើសរើសត្រូវបានលុបចោលរួចហើយ។"
       );
     },
     onError: (error) => {
       notify.error(
-        "Bulk delete failed",
-        getErrorMessage(error, "Failed to delete selected categories.")
+        "លុបជាក្រុមបរាជ័យ",
+        getErrorMessage(error, "មិនអាចលុបប្រភេទដែលបានជ្រើសរើស។")
       );
     },
   });
@@ -393,9 +395,9 @@ export default function Category() {
     });
 
     if (duplicateCategory) {
-      const message = "This category name already exists.";
+      const message = "ឈ្មោះប្រភេទនេះមានរួចហើយ។";
       setServerMessage(message);
-      notify.error("Duplicate category", message);
+      notify.error("ប្រភេទស្ទួន", message);
       return;
     }
 
@@ -410,13 +412,9 @@ export default function Category() {
     createCategoryMutation.mutate(values);
   };
 
-  const handleDeleteCategory = (categoryId) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this category?"
-    );
-
-    if (!confirmed) return;
-
+  const handleDeleteCategory = async (categoryId) => {
+    const ok = await confirm("តើអ្នកប្រាកដថាចង់លុបប្រភេទនេះ?");
+    if (!ok) return;
     deleteCategoryMutation.mutate(categoryId);
   };
 
@@ -450,15 +448,10 @@ export default function Category() {
     });
   };
 
-  const handleBulkDeleteCategories = () => {
+  const handleBulkDeleteCategories = async () => {
     if (selectedCategoryIds.length === 0) return;
-
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${selectedCategoryIds.length} selected categor${selectedCategoryIds.length > 1 ? "ies" : "y"}?`
-    );
-
-    if (!confirmed) return;
-
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបប្រភេទចំនួន ${selectedCategoryIds.length} ដែលបានជ្រើសរើស?`);
+    if (!ok) return;
     bulkDeleteCategoryMutation.mutate(selectedCategoryIds);
   };
 
@@ -481,7 +474,7 @@ export default function Category() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <CategorySummaryCard
           theme={theme}
-          title="Total Categories"
+          title="ប្រភេទទាំងអស់"
           value={summary.total}
           icon={<FiGrid className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
@@ -489,7 +482,7 @@ export default function Category() {
 
         <CategorySummaryCard
           theme={theme}
-          title="Active Categories"
+          title="ប្រភេទដំណើរការ"
           value={summary.active}
           icon={<FiCheckCircle className="text-[44px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
@@ -497,7 +490,7 @@ export default function Category() {
 
         <CategorySummaryCard
           theme={theme}
-          title="Inactive Categories"
+          title="ប្រភេទមិនដំណើរការ"
           value={summary.inactive}
           icon={<FiXCircle className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
@@ -507,7 +500,7 @@ export default function Category() {
       {statsQuery.isError && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
           {statsQuery.error?.response?.data?.message ||
-            "Failed to load category summary."}
+            "មិនអាចផ្ទុកសង្ខេបប្រភេទ។"}
         </div>
       )}
 
@@ -520,7 +513,7 @@ export default function Category() {
 
             <input
               type="text"
-              placeholder="Search categories..."
+              placeholder="ស្វែងរកប្រភេទ..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
@@ -533,9 +526,9 @@ export default function Category() {
             onChange={setStatusFilter}
             theme={theme}
             options={[
-              { value: "All", label: "All Status" },
-              { value: "Active", label: "Active" },
-              { value: "Inactive", label: "Inactive" },
+              { value: "All", label: "ស្ថានភាពទាំងអស់" },
+              { value: "Active", label: "ដំណើរការ" },
+              { value: "Inactive", label: "មិនដំណើរការ" },
             ]}
           />
 
@@ -546,7 +539,7 @@ export default function Category() {
             theme={theme}
             options={[10, 25, 50].map((value) => ({
               value,
-              label: `${value} / page`,
+              label: `${value} / ទំព័រ`,
             }))}
           />
         </div>
@@ -557,7 +550,7 @@ export default function Category() {
           className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
         >
           <FiPlusCircle className="text-lg" />
-          Add Category
+          បន្ថែមប្រភេទ
         </button>
       </div>
 

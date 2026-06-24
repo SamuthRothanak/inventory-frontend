@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  FiAlertTriangle,
   FiBox,
   FiCheckCircle,
   FiDollarSign,
@@ -12,15 +11,45 @@ import {
   FiLayers,
   FiPlusCircle,
   FiSearch,
+  FiXCircle,
 } from "react-icons/fi";
+
+// ── Confirm Modal ──────────────────────────────────────────────
+function ConfirmModal({ open, title, body, onConfirm, onCancel, theme }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className={`w-full max-w-sm overflow-hidden rounded-2xl border shadow-2xl ${theme.modal}`}>
+        <div className={`border-b px-5 py-4 ${theme.modalHeader}`}>
+          <p className={`text-base font-bold ${theme.pageTitle}`}>{title}</p>
+        </div>
+        <div className="px-5 py-5">
+          <p className={`text-sm leading-relaxed ${theme.muted}`}>{body}</p>
+        </div>
+        <div className={`flex justify-end gap-3 border-t px-5 py-4 ${theme.modalHeader}`}>
+          <button type="button" onClick={onCancel}
+            className="h-10 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+            បោះបង់
+          </button>
+          <button type="button" onClick={() => { onConfirm?.(); onCancel(); }}
+            className="h-10 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600">
+            បញ្ជាក់
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 import { getAllCategoriesApi } from "../../../services/category.service";
 
 import {
+  bulkDeleteProductsApi,
   deleteProductApi,
   getProductByIdApi,
   getProductStatsApi,
   getProductsApi,
+  toggleProductStatusApi,
   updateProductApi,
 } from "../../../services/product.service";
 
@@ -94,6 +123,9 @@ export default function Products() {
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [manageProductId, setManageProductId] = useState(null);
 
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState([]);
+
   const [setupModalOpen, setSetupModalOpen] = useState(false);
 
   const [formMode, setFormMode] = useState(null);
@@ -125,6 +157,14 @@ export default function Products() {
     variantUnit: null,
     priceRule: null,
   });
+
+  const [confirmState, setConfirmState] = useState({
+    open: false, title: "", body: "", onConfirm: null,
+  });
+  const openConfirm = (title, body, onConfirm) =>
+    setConfirmState({ open: true, title, body, onConfirm });
+  const closeConfirm = () =>
+    setConfirmState({ open: false, title: "", body: "", onConfirm: null });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -224,6 +264,13 @@ export default function Products() {
     keepPreviousData: true,
   });
 
+  const productNameValidationQuery = useQuery({
+    queryKey: ["products", "name-validation"],
+    queryFn: () => getProductsApi({ per_page: 1000 }),
+    enabled: setupModalOpen || formMode === "edit",
+    staleTime: 1000 * 60,
+  });
+
   const productStatsQuery = useQuery({
     queryKey: ["products", "stats"],
     queryFn: getProductStatsApi,
@@ -274,8 +321,8 @@ export default function Products() {
     if (Number(activeExchangeRate || 0) > 0) return true;
 
     notify.error(
-      "No active exchange rate",
-      "Please create and activate an exchange rate before saving product prices."
+      "គ្មានអត្រាប្តូរប្រាក់",
+      "សូមបង្កើត និងដំណើរការអត្រាប្តូរប្រាក់មុនពេលរក្សាទុកតម្លៃ។"
     );
 
     return false;
@@ -301,6 +348,13 @@ export default function Products() {
 
     return productItems.map((product) => normalizeProduct(product, categories));
   }, [productsQuery.data, categories]);
+
+  const productsForNameValidation = useMemo(() => {
+    const productItems = extractApiData(productNameValidationQuery.data);
+    const normalizedProducts = productItems.map((product) => normalizeProduct(product, categories));
+
+    return normalizedProducts.length > 0 ? normalizedProducts : products;
+  }, [productNameValidationQuery.data, products, categories]);
 
   const pagination = useMemo(() => {
     return getPaginationMeta(productsQuery.data, products.length);
@@ -457,7 +511,7 @@ export default function Products() {
     },
     onError: (error) => {
       invalidateProductQueries();
-      notify.error("Create product failed", getApiErrorMessage(error));
+      notify.error("បង្កើតផលិតផលបរាជ័យ", getApiErrorMessage(error));
     },
   });
 
@@ -474,7 +528,73 @@ export default function Products() {
     onSuccess: () => {
       invalidateProductQueries();
     },
+    onError: (error) => {
+      notify.error("លុបផលិតផលបរាជ័យ", getApiErrorMessage(error, "មិនអាចលុបផលិតផលបានទេ។"));
+    },
   });
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: toggleProductStatusApi,
+    onSuccess: () => {
+      invalidateProductQueries();
+    },
+    onError: (error) => {
+      notify.error("ផ្លាស់ប្ដូរស្ថានភាពបរាជ័យ", getApiErrorMessage(error));
+    },
+  });
+
+  const handleToggleStatus = (product) => {
+    const newStatus = String(product.status ?? "").toLowerCase() === "active" ? "inactive" : "active";
+    toggleStatusMutation.mutate({ id: product.id, status: newStatus });
+  };
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: bulkDeleteProductsApi,
+    onSuccess: () => {
+      setSelectedProductIds([]);
+      setBulkSelectMode(false);
+      invalidateProductQueries();
+      notify.success("លុបផលិតផលរួចរាល់", "ផលិតផលដែលបានជ្រើសរើសត្រូវបានលុបចោលរួចហើយ។");
+    },
+    onError: (error) => {
+      notify.error("លុបជាក្រុមបរាជ័យ", getApiErrorMessage(error, "មិនអាចលុបផលិតផលដែលបានជ្រើសរើសបានទេ។"));
+    },
+  });
+
+  const openBulkSelectMode = () => setBulkSelectMode(true);
+  const closeBulkSelectMode = () => {
+    setBulkSelectMode(false);
+    setSelectedProductIds([]);
+  };
+
+  const handleToggleProduct = (productId) => {
+    if (!bulkSelectMode) return;
+    setSelectedProductIds((prev) => {
+      const id = Number(productId);
+      return prev.some((item) => Number(item) === id)
+        ? prev.filter((item) => Number(item) !== id)
+        : [...prev, id];
+    });
+  };
+
+  const handleToggleAllProducts = () => {
+    if (!bulkSelectMode) return;
+    const pageIds = products.map((p) => Number(p.id));
+    const allSelected = pageIds.every((id) => selectedProductIds.some((sid) => Number(sid) === id));
+    setSelectedProductIds((prev) => {
+      if (allSelected) return prev.filter((id) => !pageIds.includes(Number(id)));
+      return [...new Set([...prev.map(Number), ...pageIds])];
+    });
+  };
+
+  const handleBulkDeleteProducts = () => {
+    if (selectedProductIds.length === 0) return;
+    openConfirm(
+      "លុបផលិតផលជាក្រុម",
+      `តើអ្នកប្រាកដថាចង់លុបផលិតផលចំនួន ${selectedProductIds.length} ដែលបានជ្រើសរើសមែនទេ? សកម្មភាពនេះមិនអាចប្ដូរវិញបាន។`,
+      () => bulkDeleteMutation.mutate(selectedProductIds)
+    );
+  };
 
   const createVariantMutation = useMutation({
     mutationFn: createProductVariantApi,
@@ -506,7 +626,7 @@ export default function Products() {
       closeVariantUnitForm();
     },
     onError: (error) => {
-      notify.error("Save variant unit failed", getApiErrorMessage(error));
+      notify.error("រក្សាទុក unit បរាជ័យ", getApiErrorMessage(error));
     },
   });
 
@@ -517,7 +637,7 @@ export default function Products() {
       closeVariantUnitForm();
     },
     onError: (error) => {
-      notify.error("Update variant unit failed", getApiErrorMessage(error));
+      notify.error("ធ្វើបច្ចុប្បន្នភាព unit បរាជ័យ", getApiErrorMessage(error));
     },
   });
 
@@ -535,7 +655,7 @@ export default function Products() {
       closePriceRuleForm();
     },
     onError: (error) => {
-      notify.error("Save price failed", getApiErrorMessage(error));
+      notify.error("រក្សាទុកតម្លៃបរាជ័យ", getApiErrorMessage(error));
     },
   });
 
@@ -546,7 +666,7 @@ export default function Products() {
       closePriceRuleForm();
     },
     onError: (error) => {
-      notify.error("Update price failed", getApiErrorMessage(error));
+      notify.error("ធ្វើបច្ចុប្បន្នភាពតម្លៃបរាជ័យ", getApiErrorMessage(error));
     },
   });
 
@@ -579,7 +699,7 @@ export default function Products() {
   });
 
   const categoryOptions = [
-    { value: "All", label: "All Categories" },
+    { value: "All", label: "ប្រភេទទាំងអស់" },
     ...activeCategories.map((category) => ({
       value: String(category.id),
       label: category.name,
@@ -598,6 +718,13 @@ export default function Products() {
   const handleSaveProductSetup = (values) => {
     if (!requireActiveExchangeRate()) return;
 
+    const newName = (values.product?.name || "").trim().toLowerCase();
+    const isDuplicate = productsForNameValidation.some((p) => (p.name || "").trim().toLowerCase() === newName);
+    if (isDuplicate) {
+      notify.error("ឈ្មោះផលិតផលស្ទួន", `ផលិតផលឈ្មោះ "${values.product?.name}" មានរួចហើយ។`);
+      return;
+    }
+
     createProductSetupMutation.mutate({
       ...values,
       exchangeRate: activeExchangeRate,
@@ -613,6 +740,15 @@ export default function Products() {
   const handleSaveProduct = (values) => {
     if (!editingProduct) return;
 
+    const newName = (values.name || "").trim().toLowerCase();
+    const isDuplicate = productsForNameValidation.some(
+      (p) => (p.name || "").trim().toLowerCase() === newName && Number(p.id) !== Number(editingProduct.id)
+    );
+    if (isDuplicate) {
+      notify.error("ឈ្មោះផលិតផលស្ទួន", `ផលិតផលឈ្មោះ "${values.name}" មានរួចហើយ។`);
+      return;
+    }
+
     updateProductMutation.mutate({
       id: editingProduct.id,
       payload: values,
@@ -620,21 +756,15 @@ export default function Products() {
   };
 
   const handleDeleteProduct = (product) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${product.name}"?`
+    openConfirm(
+      "លុបផលិតផល",
+      `តើអ្នកប្រាកដថាចង់លុប "${product.name}"? សកម្មភាពនេះមិនអាចប្ដូរវិញបាន។`,
+      () => {
+        deleteProductMutation.mutate(product.id);
+        if (Number(selectedProductId) === Number(product.id)) setSelectedProductId(null);
+        if (Number(manageProductId) === Number(product.id)) setManageProductId(null);
+      }
     );
-
-    if (!confirmed) return;
-
-    deleteProductMutation.mutate(product.id);
-
-    if (Number(selectedProductId) === Number(product.id)) {
-      setSelectedProductId(null);
-    }
-
-    if (Number(manageProductId) === Number(product.id)) {
-      setManageProductId(null);
-    }
   };
 
   const openAddVariantSetupForm = (product) => {
@@ -660,7 +790,7 @@ export default function Products() {
       const variantId = getCreatedId(variantResponse);
 
       if (!variantId) {
-        alert("Variant created, but variant id was not found in response.");
+        alert("Variant ត្រូវបានបង្កើត ប៉ុន្តែ id រកមិនឃើញ។");
         return;
       }
 
@@ -679,7 +809,7 @@ export default function Products() {
 
         if (!variantUnitId) {
           alert(
-            "Variant unit created, but variant unit id was not found in response."
+            "Variant unit ត្រូវបានបង្កើត ប៉ុន្តែ id រកមិនឃើញ។"
           );
           return;
         }
@@ -719,7 +849,7 @@ export default function Products() {
       console.error("Create variant setup failed:", error);
 
       notify.error(
-        "Create variant failed",
+        "បង្កើត variant បរាជ័យ",
         getApiErrorMessage(error, "Create variant setup failed.")
       );
     }
@@ -756,13 +886,11 @@ export default function Products() {
   };
 
   const handleDeleteVariant = (variant) => {
-    const confirmed = window.confirm(
-      `Delete variant "${variant.variantName}"?`
+    openConfirm(
+      "លុប Variant",
+      `លុប variant "${variant.variantName}"? unit និងតម្លៃទាំងអស់នឹងត្រូវបានលុបផងដែរ។`,
+      () => deleteVariantMutation.mutate(variant.id)
     );
-
-    if (!confirmed) return;
-
-    deleteVariantMutation.mutate(variant.id);
   };
 
   const openAddVariantUnitForm = (variant) => {
@@ -809,11 +937,11 @@ export default function Products() {
   };
 
   const handleDeleteVariantUnit = (variantUnit) => {
-    const confirmed = window.confirm(`Delete unit "${variantUnit.unitName}"?`);
-
-    if (!confirmed) return;
-
-    deleteVariantUnitMutation.mutate(variantUnit.id);
+    openConfirm(
+      "លុប Unit",
+      `លុប unit "${variantUnit.unitName}"? តម្លៃដែលភ្ជាប់នឹង unit នេះនឹងត្រូវបានលុបផងដែរ។`,
+      () => deleteVariantUnitMutation.mutate(variantUnit.id)
+    );
   };
 
   const openAddPriceRuleForm = (variant, variantUnit) => {
@@ -823,12 +951,12 @@ export default function Products() {
       variantUnit?.product_variant_unit_id;
 
     if (!variant) {
-      alert("Cannot find variant for this price rule.");
+      alert("រកមិនឃើញ variant សម្រាប់តម្លៃនេះ។");
       return;
     }
 
     if (!variantUnit || !unitId) {
-      alert("Please add or select a variant unit first before adding price.");
+      alert("សូមបន្ថែម variant unit មុនពេលបញ្ចូលតម្លៃ។");
       return;
     }
 
@@ -851,12 +979,12 @@ export default function Products() {
       variantUnit?.product_variant_unit_id;
 
     if (!variant) {
-      alert("Cannot find variant for this price rule.");
+      alert("រកមិនឃើញ variant សម្រាប់តម្លៃនេះ។");
       return;
     }
 
     if (!variantUnit || !unitId) {
-      alert("Cannot find related unit for this price rule.");
+      alert("រកមិនឃើញ unit ដែលទាក់ទង។");
       return;
     }
 
@@ -881,7 +1009,7 @@ export default function Products() {
       priceRuleFormState.variantUnit?.product_variant_unit_id;
 
     if (!productVariantUnitId) {
-      alert("Product variant unit id is missing.");
+      alert("Product variant unit id បាត់។");
       return;
     }
 
@@ -903,11 +1031,11 @@ export default function Products() {
   };
 
   const handleDeletePriceRule = (priceRule) => {
-    const confirmed = window.confirm("Delete this price rule?");
-
-    if (!confirmed) return;
-
-    deletePriceRuleMutation.mutate(priceRule.id);
+    openConfirm(
+      "លុបតម្លៃ",
+      "តើអ្នកប្រាកដថាចង់លុបតម្លៃនេះ?",
+      () => deletePriceRuleMutation.mutate(priceRule.id)
+    );
   };
 
   const handleRefresh = () => {
@@ -980,11 +1108,11 @@ export default function Products() {
 
   return (
     <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           theme={theme}
           icon={<FiBox className="text-[34px] text-red-500" />}
-          title="Products"
+          title="ផលិតផល"
           value={productStats.total}
           iconBg="bg-red-500/10"
         />
@@ -992,7 +1120,7 @@ export default function Products() {
         <SummaryCard
           theme={theme}
           icon={<FiCheckCircle className="text-[34px] text-emerald-500" />}
-          title="Active"
+          title="ដំណើរការ"
           value={productStats.active}
           iconBg="bg-emerald-500/10"
         />
@@ -1000,7 +1128,7 @@ export default function Products() {
         <SummaryCard
           theme={theme}
           icon={<FiLayers className="text-[34px] text-blue-500" />}
-          title="Variants"
+          title="មុខទំនិញ"
           value={productStats.variants}
           iconBg="bg-blue-500/10"
         />
@@ -1008,24 +1136,17 @@ export default function Products() {
         <SummaryCard
           theme={theme}
           icon={<FiDollarSign className="text-[34px] text-emerald-500" />}
-          title="Prices"
+          title="ចំនួនកំណត់តម្លៃលក់"
           value={productStats.priceRules}
           iconBg="bg-emerald-500/10"
         />
 
-        <SummaryCard
-          theme={theme}
-          icon={<FiAlertTriangle className="text-[34px] text-amber-500" />}
-          title="No Variant"
-          value={productStats.noVariant}
-          iconBg="bg-amber-500/10"
-        />
       </div>
 
       {productStatsQuery.isError && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
           {productStatsQuery.error?.response?.data?.message ||
-            "Failed to load product stats."}
+            "មិនអាចផ្ទុកស្ថិតិផលិតផល។"}
         </div>
       )}
 
@@ -1038,7 +1159,7 @@ export default function Products() {
 
             <input
               type="text"
-              placeholder="Search product or category..."
+              placeholder="ស្វែងរកផលិតផល ឬប្រភេទ..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
@@ -1060,9 +1181,9 @@ export default function Products() {
             onChange={setStatusFilter}
             theme={theme}
             options={[
-              { value: "All", label: "All Status" },
-              { value: "Active", label: "Active" },
-              { value: "Inactive", label: "Inactive" },
+              { value: "All", label: "ស្ថានភាពទាំងអស់" },
+              { value: "Active", label: "ដំណើរការ" },
+              { value: "Inactive", label: "មិនដំណើរការ" },
             ]}
           />
 
@@ -1073,7 +1194,7 @@ export default function Products() {
             theme={theme}
             options={[10, 20, 25, 50].map((value) => ({
               value,
-              label: `${value} / page`,
+              label: `${value} / ទំព័រ`,
             }))}
           />
         </div>
@@ -1085,15 +1206,14 @@ export default function Products() {
             className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
           >
             <FiPlusCircle className="text-lg" />
-            Add Product
+            បន្ថែមផលិតផល
           </button>
         </div>
       </div>
 
       {isError && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-500">
-          Something went wrong while loading products. Please check your API,
-          token, or service path.
+          មានបញ្ហាក្នុងការផ្ទុកផលិតផល។ សូមពិនិត្យ API ឬ token។
         </div>
       )}
 
@@ -1114,9 +1234,18 @@ export default function Products() {
         isLoading={isLoading}
         isError={isError}
         isDeleting={deleteProductMutation.isPending}
+        bulkSelectMode={bulkSelectMode}
+        selectedProductIds={selectedProductIds}
+        bulkDeleteIsPending={bulkDeleteMutation.isPending}
         onViewProduct={openViewProduct}
         onEditProduct={openManageProduct}
         onDeleteProduct={handleDeleteProduct}
+        onToggleStatus={handleToggleStatus}
+        onOpenBulkSelect={openBulkSelectMode}
+        onCancelBulkSelect={closeBulkSelectMode}
+        onToggleSelect={handleToggleProduct}
+        onToggleSelectAll={handleToggleAllProducts}
+        onBulkDelete={handleBulkDeleteProducts}
       />
 
       {selectedProduct && (
@@ -1268,6 +1397,15 @@ export default function Products() {
           onSave={handleSavePriceRule}
         />
       )}
+
+      <ConfirmModal
+        open={confirmState.open}
+        title={confirmState.title}
+        body={confirmState.body}
+        onConfirm={confirmState.onConfirm}
+        onCancel={closeConfirm}
+        theme={theme}
+      />
     </section>
   );
 }

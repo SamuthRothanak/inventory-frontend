@@ -1,16 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import {
-  FiCalendar,
   FiEye,
   FiPrinter,
   FiRotateCcw,
@@ -20,355 +11,144 @@ import {
   FiShoppingCart,
   FiRefreshCcw,
   FiFilter,
-  FiChevronDown,
   FiCreditCard,
   FiCheckCircle,
   FiXCircle,
   FiUser,
   FiHash,
   FiClock,
-  FiPackage,
-  FiX,
-  FiSave,
-  FiAlertTriangle,
-  FiMapPin,
   FiFileText,
-  FiInfo,
 } from "react-icons/fi";
 
-const initialSales = [
-  {
-    id: 1,
-    saleNo: "INV-001",
-    customerId: null,
-    customerName: "Walk-in",
-    cashierName: "Sokha",
-    saleType: "retail",
-    saleChannel: "pos",
-    invoiceCurrency: "USD",
-    exchangeRateKhrPerUsd: 4000,
-    saleDate: "2026-05-01",
-    displayDate: "01 May 2026",
-    subtotal: 12.5,
-    discountTotal: 0,
-    deliveryRequired: false,
-    deliveryOption: "customer_pickup",
-    deliveryFee: 0,
-    deliveryFeeCurrency: "USD",
-    deliveryAddress: "",
-    deliveryStatus: "none",
-    grandTotal: 12.5,
-    saleStatus: "completed",
-    paymentStatus: "paid",
-    isPrinted: true,
-    printedAt: "2026-05-01 10:15",
-    note: "Walk-in retail sale.",
-    items: [
-      {
-        id: 101,
-        productNameSnapshot: "Coca-Cola",
-        variantNameSnapshot: "Coca-Cola Can 330ml",
-        unitNameSnapshot: "Can",
-        qty: 5,
-        baseQty: 5,
-        unitPrice: 0.5,
-        discountType: "none",
-        discountValue: 0,
-        discountAmount: 0,
-        lineSubtotal: 2.5,
-        lineTotal: 2.5,
-      },
-      {
-        id: 102,
-        productNameSnapshot: "Face Mask",
-        variantNameSnapshot: "Face Mask Box",
-        unitNameSnapshot: "Box",
-        qty: 2,
-        baseQty: 2,
-        unitPrice: 5,
-        discountType: "none",
-        discountValue: 0,
-        discountAmount: 0,
-        lineSubtotal: 10,
-        lineTotal: 10,
-      },
-    ],
-    payments: [
-      {
-        id: 1001,
-        paymentMethod: "cash",
-        providerName: "Cash",
-        currencyCode: "USD",
-        amountReceived: 12.5,
-        exchangeRateUsed: 4000,
-        amountAppliedInvoiceCurrency: 12.5,
-        changeAmount: 0,
-        changeCurrency: "USD",
-        referenceNo: "",
-        paidAt: "2026-05-01 10:15",
-      },
-    ],
+import SalesActivityChart from "./components/SalesActivityChart";
+import SummaryCard from "./components/SummaryCard";
+import FilterSelect from "./components/FilterSelect";
+import StatusBadge from "./components/StatusBadge";
+import { RecordPaymentModal } from "./components/RecordPaymentModal";
+import { ReturnSaleModal } from "./components/ReturnSaleModal";
+import { ViewSaleModal } from "./components/ViewSaleModal";
+import SalePrintModal from "./components/SalePrintModal";
+import TableLoading from "../../../components/TableLoading";
+import { defaultReturnForm, validateSaleReturn } from "./schemas/saleReturnSchema";
+import { useLockBodyScroll } from "./utils/useLockBodyScroll";
+import { getSalesApi, recordSalePaymentApi } from "../../../services/sale.service";
+import { createSalesReturnApi } from "../../../services/salesReturn.service";
+
+function transformSale(s) {
+  const soldAt = new Date(s.sold_at || s.created_at);
+  return {
+    id: s.id,
+    saleNo: s.sale_no,
+    customerId: s.customer_id,
+    customerName: s.customer_name_snapshot || s.customer?.name || "ភ្ញៀវដើរចូល",
+    cashierName: s.creator?.name || "—",
+    saleType: s.sale_type,
+    saleChannel: s.sale_channel,
+    invoiceCurrency: s.invoice_currency,
+    exchangeRateKhrPerUsd: s.exchange_rate_khr_per_usd,
+    saleDate: soldAt.toISOString().slice(0, 10),
+    displayDate: soldAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+    subtotal: s.subtotal_usd,
+    discountTotal: s.discount_total_usd,
+    deliveryRequired: Boolean(s.delivery_option && s.delivery_option !== "customer_pickup" && s.delivery_option !== "none"),
+    deliveryOption: s.delivery_option,
+    deliveryFee: s.delivery_fee_input,
+    deliveryFeeCurrency: s.delivery_fee_currency,
+    deliveryAddress: s.delivery_address,
+    deliveryStatus: s.delivery_status,
+    grandTotal: s.grand_total_usd,
+    paidTotal: s.paid_total_usd || 0,
+    balanceTotal: s.balance_total_usd ?? s.grand_total_usd ?? 0,
+    saleStatus: s.sale_status,
+    paymentStatus: s.payment_status,
+    isPrinted: s.is_printed,
+    printedAt: s.printed_at,
+    note: s.note,
+    items: (s.items || []).map((item) => ({
+      id: item.id,
+      productVariantUnitId: item.product_variant_unit_id,
+      productNameSnapshot: item.product_name_snapshot,
+      variantNameSnapshot: item.variant_name_snapshot,
+      unitNameSnapshot: item.unit_name_snapshot,
+      qty: item.qty,
+      baseQty: item.base_qty,
+      unitPrice: item.unit_price_usd ?? item.unit_price,
+      discountType: item.discount_type,
+      discountValue: item.discount_value,
+      discountAmount: item.discount_amount_usd,
+      lineSubtotal: item.line_subtotal_usd,
+      lineTotal: item.line_total_usd,
+    })),
+    payments: (s.payments || []).map((p) => ({
+      id: p.id,
+      paymentMethod: p.payment_method,
+      providerName: p.provider_name,
+      currencyCode: p.currency_code,
+      amountReceived: p.amount_received,
+      exchangeRateUsed: p.exchange_rate_used,
+      amountAppliedInvoiceCurrency: p.amount_applied_invoice_currency,
+      changeAmount: p.change_amount,
+      changeCurrency: p.change_currency,
+      referenceNo: p.reference_no,
+      paidAt: p.paid_at,
+    })),
+    returnsCount:    s.sales_returns_count ?? 0,
+    returnsTotalUsd: s.sales_returns_total_usd ?? 0,
+    isFullyReturned: (s.sales_returns_count ?? 0) > 0 &&
+      Number(s.sales_returns_total_usd ?? 0) >= Number(s.grand_total_usd ?? 0) - 0.001,
     returns: [],
-  },
-  {
-    id: 2,
-    saleNo: "INV-002",
-    customerId: 1,
-    customerName: "Dara Mini Mart",
-    cashierName: "Nita",
-    saleType: "wholesale",
-    saleChannel: "phone_order",
-    invoiceCurrency: "USD",
-    exchangeRateKhrPerUsd: 4000,
-    saleDate: "2026-05-01",
-    displayDate: "01 May 2026",
-    subtotal: 140,
-    discountTotal: 5,
-    deliveryRequired: true,
-    deliveryOption: "shop_delivery",
-    deliveryFee: 2,
-    deliveryFeeCurrency: "USD",
-    deliveryAddress: "Kandal province",
-    deliveryStatus: "delivered",
-    grandTotal: 137,
-    saleStatus: "completed",
-    paymentStatus: "paid",
-    isPrinted: true,
-    printedAt: "2026-05-01 14:20",
-    note: "Wholesale customer. Delivered by shop.",
-    items: [
-      {
-        id: 201,
-        productNameSnapshot: "Coca-Cola",
-        variantNameSnapshot: "Coca-Cola Can 330ml",
-        unitNameSnapshot: "Case",
-        qty: 20,
-        baseQty: 480,
-        unitPrice: 7,
-        discountType: "amount",
-        discountValue: 5,
-        discountAmount: 5,
-        lineSubtotal: 140,
-        lineTotal: 135,
-      },
-    ],
-    payments: [
-      {
-        id: 2001,
-        paymentMethod: "mobile_payment",
-        providerName: "ABA",
-        currencyCode: "USD",
-        amountReceived: 100,
-        exchangeRateUsed: 4000,
-        amountAppliedInvoiceCurrency: 100,
-        changeAmount: 0,
-        changeCurrency: "USD",
-        referenceNo: "ABA-29302",
-        paidAt: "2026-05-01 14:20",
-      },
-      {
-        id: 2002,
-        paymentMethod: "cash",
-        providerName: "Cash",
-        currencyCode: "KHR",
-        amountReceived: 148000,
-        exchangeRateUsed: 4000,
-        amountAppliedInvoiceCurrency: 37,
-        changeAmount: 0,
-        changeCurrency: "KHR",
-        referenceNo: "",
-        paidAt: "2026-05-01 14:20",
-      },
-    ],
-    returns: [],
-  },
-  {
-    id: 3,
-    saleNo: "INV-003",
-    customerId: null,
-    customerName: "Walk-in",
-    cashierName: "Sokha",
-    saleType: "retail",
-    saleChannel: "pos",
-    invoiceCurrency: "USD",
-    exchangeRateKhrPerUsd: 4000,
-    saleDate: "2026-05-02",
-    displayDate: "02 May 2026",
-    subtotal: 9.75,
-    discountTotal: 0,
-    deliveryRequired: false,
-    deliveryOption: "customer_pickup",
-    deliveryFee: 0,
-    deliveryFeeCurrency: "USD",
-    deliveryAddress: "",
-    deliveryStatus: "none",
-    grandTotal: 9.75,
-    saleStatus: "completed",
-    paymentStatus: "refunded",
-    isPrinted: true,
-    printedAt: "2026-05-02 09:30",
-    note: "Refunded because customer returned damaged item.",
-    items: [
-      {
-        id: 301,
-        productNameSnapshot: "Dove Shampoo",
-        variantNameSnapshot: "Dove Shampoo 250ml",
-        unitNameSnapshot: "Bottle",
-        qty: 3,
-        baseQty: 3,
-        unitPrice: 3.25,
-        discountType: "none",
-        discountValue: 0,
-        discountAmount: 0,
-        lineSubtotal: 9.75,
-        lineTotal: 9.75,
-      },
-    ],
-    payments: [
-      {
-        id: 3001,
-        paymentMethod: "cash",
-        providerName: "Cash",
-        currencyCode: "USD",
-        amountReceived: 9.75,
-        exchangeRateUsed: 4000,
-        amountAppliedInvoiceCurrency: 9.75,
-        changeAmount: 0,
-        changeCurrency: "USD",
-        referenceNo: "",
-        paidAt: "2026-05-02 09:30",
-      },
-    ],
-    returns: [
-      {
-        id: 1,
-        salesReturnNo: "SR-001",
-        returnType: "full_return",
-        resolutionType: "refund",
-        totalAmount: 9.75,
-        reason: "Damaged product",
-        status: "completed",
-        createdAt: "2026-05-02",
-      },
-    ],
-  },
-  {
-    id: 4,
-    saleNo: "INV-004",
-    customerId: 2,
-    customerName: "Sokha Mart",
-    cashierName: "Admin",
-    saleType: "wholesale",
-    saleChannel: "online",
-    invoiceCurrency: "USD",
-    exchangeRateKhrPerUsd: 4000,
-    saleDate: "2026-05-03",
-    displayDate: "03 May 2026",
-    subtotal: 80,
-    discountTotal: 0,
-    deliveryRequired: true,
-    deliveryOption: "third_party_delivery",
-    deliveryFee: 3,
-    deliveryFeeCurrency: "USD",
-    deliveryAddress: "Phnom Penh",
-    deliveryStatus: "pending",
-    grandTotal: 83,
-    saleStatus: "confirmed",
-    paymentStatus: "partial",
-    isPrinted: false,
-    printedAt: "",
-    note: "Partial payment. Waiting delivery.",
-    items: [
-      {
-        id: 401,
-        productNameSnapshot: "Face Mask",
-        variantNameSnapshot: "Face Mask Box",
-        unitNameSnapshot: "Set",
-        qty: 20,
-        baseQty: 120,
-        unitPrice: 4,
-        discountType: "none",
-        discountValue: 0,
-        discountAmount: 0,
-        lineSubtotal: 80,
-        lineTotal: 80,
-      },
-    ],
-    payments: [
-      {
-        id: 4001,
-        paymentMethod: "mobile_payment",
-        providerName: "ABA",
-        currencyCode: "USD",
-        amountReceived: 50,
-        exchangeRateUsed: 4000,
-        amountAppliedInvoiceCurrency: 50,
-        changeAmount: 0,
-        changeCurrency: "USD",
-        referenceNo: "ABA-33211",
-        paidAt: "2026-05-03 11:00",
-      },
-    ],
-    returns: [],
-  },
-];
-
-const weeklyChartData = [
-  { day: "SUN", amount: 2800 },
-  { day: "MON", amount: 1200 },
-  { day: "TUE", amount: 1500 },
-  { day: "WED", amount: 1800 },
-  { day: "THU", amount: 900 },
-  { day: "FRI", amount: 3400 },
-  { day: "SAT", amount: 200 },
-];
-
-const emptyReturnForm = {
-  returnType: "partial_return",
-  resolutionType: "refund",
-  reason: "",
-  totalAmount: "",
-  status: "pending",
-};
-
-function useLockBodyScroll(isOpen) {
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const originalOverflow = document.body.style.overflow;
-    const originalPaddingRight = document.body.style.paddingRight;
-
-    const scrollbarWidth =
-      window.innerWidth - document.documentElement.clientWidth;
-
-    document.body.style.overflow = "hidden";
-
-    if (scrollbarWidth > 0) {
-      document.body.style.paddingRight = `${scrollbarWidth}px`;
-    }
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      document.body.style.paddingRight = originalPaddingRight;
-    };
-  }, [isOpen]);
+  };
 }
 
 export default function Sale() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
 
-  const [sales, setSales] = useState(initialSales);
+  const salesQuery = useQuery({
+    queryKey: ["admin-sales"],
+    queryFn: () => getSalesApi({ per_page: 200 }),
+  });
+
+  const [sales, setSales] = useState([]);
+
+  useEffect(() => {
+    if (salesQuery.data?.data) {
+      setSales(salesQuery.data.data.map(transformSale));
+    }
+  }, [salesQuery.data]);
+
+  const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
   const [saleTypeFilter, setSaleTypeFilter] = useState("All");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("All");
   const [saleStatusFilter, setSaleStatusFilter] = useState("All");
+  const [perPage, setPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedSale, setSelectedSale] = useState(null);
-  const [returnForm, setReturnForm] = useState(emptyReturnForm);
+  const [returnForm, setReturnForm] = useState(defaultReturnForm);
   const [returnErrors, setReturnErrors] = useState({});
+  const [returnItems, setReturnItems] = useState([]);
+  const [rpForm, setRpForm] = useState({
+    payment_method: "cash",
+    provider_name: "",
+    currency_code: "USD",
+    amount_received: "",
+    exchange_rate_used: "",
+    reference_no: "",
+    paid_at: "",
+    note: "",
+  });
+
+  const queryClient = useQueryClient();
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useLockBodyScroll(Boolean(modalMode));
 
@@ -429,6 +209,12 @@ export default function Sale() {
         .join(" ")
         .toLowerCase();
 
+      const matchesTab =
+        activeTab === "all" ||
+        (activeTab === "pending" &&
+          (sale.paymentStatus === "unpaid" || sale.paymentStatus === "partial")) ||
+        (activeTab === "refunded" && (sale.paymentStatus === "refunded" || sale.returnsCount > 0));
+
       const matchesSearch =
         !keyword ||
         sale.saleNo.toLowerCase().includes(keyword) ||
@@ -443,12 +229,13 @@ export default function Sale() {
             item.variantNameSnapshot.toLowerCase().includes(keyword)
         );
 
-      const matchesDate = !startDate || sale.saleDate >= startDate;
+      const matchesDate = !startDate || sale.saleDate === startDate;
 
       const matchesSaleType =
         saleTypeFilter === "All" || sale.saleType === saleTypeFilter;
 
       const matchesPaymentStatus =
+        activeTab !== "all" ||
         paymentStatusFilter === "All" ||
         sale.paymentStatus === paymentStatusFilter;
 
@@ -456,6 +243,7 @@ export default function Sale() {
         saleStatusFilter === "All" || sale.saleStatus === saleStatusFilter;
 
       return (
+        matchesTab &&
         matchesSearch &&
         matchesDate &&
         matchesSaleType &&
@@ -465,6 +253,7 @@ export default function Sale() {
     });
   }, [
     sales,
+    activeTab,
     searchTerm,
     startDate,
     saleTypeFilter,
@@ -472,13 +261,98 @@ export default function Sale() {
     saleStatusFilter,
   ]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    activeTab,
+    searchTerm,
+    startDate,
+    saleTypeFilter,
+    paymentStatusFilter,
+    saleStatusFilter,
+    perPage,
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSales.length / perPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginationStart = filteredSales.length === 0 ? 0 : (safeCurrentPage - 1) * perPage + 1;
+  const paginationEnd = Math.min(safeCurrentPage * perPage, filteredSales.length);
+
+  const paginatedSales = useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * perPage;
+    return filteredSales.slice(startIndex, startIndex + perPage);
+  }, [filteredSales, safeCurrentPage, perPage]);
+
+  const pageNumbers = useMemo(() => {
+    const maxButtons = 5;
+    const half = Math.floor(maxButtons / 2);
+    let start = Math.max(1, safeCurrentPage - half);
+    let end = Math.min(totalPages, start + maxButtons - 1);
+
+    if (end - start + 1 < maxButtons) {
+      start = Math.max(1, end - maxButtons + 1);
+    }
+
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [safeCurrentPage, totalPages]);
+
   const completedSales = sales.filter((sale) => sale.saleStatus === "completed");
 
   const totalSalesAmount = completedSales
     .filter((sale) => sale.paymentStatus !== "refunded")
-    .reduce((total, sale) => total + Number(sale.grandTotal || 0), 0);
+    .reduce((total, sale) => total + Number(sale.grandTotal || 0) - Number(sale.returnsTotalUsd || 0), 0);
 
-  const today = "2026-05-01";
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [chartPeriod, setChartPeriod] = useState("សប្តាហ៍");
+
+  const weeklyChartData = useMemo(() => {
+    const DAYS = ["អាទិត្យ", "ច័ន្ទ", "អង្គារ", "ពុធ", "ព្រ.ហ", "សុក្រ", "សៅរ៏"];
+    const totals = Object.fromEntries(DAYS.map((d) => [d, 0]));
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    for (const sale of sales) {
+      const d = new Date(sale.saleDate);
+      if (d >= weekStart && sale.saleStatus === "completed" && sale.paymentStatus !== "refunded") {
+        totals[DAYS[d.getDay()]] += Number(sale.grandTotal || 0);
+      }
+    }
+    return DAYS.map((day) => ({ day, amount: totals[day] }));
+  }, [sales]);
+
+  const monthlyChartData = useMemo(() => {
+    const MONTHS = ["មករា", "កុម្ភៈ", "មីនា", "មេសា", "ឧសភា", "មិថុនា", "កក្កដា", "សីហា", "កញ្ញា", "តុលា", "វិច្ឆិកា", "ធ្នូ"];
+    const totals = Object.fromEntries(MONTHS.map((m) => [m, 0]));
+    const year = new Date().getFullYear();
+    for (const sale of sales) {
+      const d = new Date(sale.saleDate);
+      if (d.getFullYear() === year && sale.saleStatus === "completed" && sale.paymentStatus !== "refunded") {
+        totals[MONTHS[d.getMonth()]] += Number(sale.grandTotal || 0);
+      }
+    }
+    return MONTHS.map((day) => ({ day, amount: totals[day] }));
+  }, [sales]);
+
+  const yearlyChartData = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const START_YEAR = 2026;
+    const years = Array.from({ length: currentYear - START_YEAR + 1 }, (_, i) => START_YEAR + i);
+    const totals = Object.fromEntries(years.map((y) => [String(y), 0]));
+    for (const sale of sales) {
+      const y = String(new Date(sale.saleDate).getFullYear());
+      if (totals[y] !== undefined && sale.saleStatus === "completed" && sale.paymentStatus !== "refunded") {
+        totals[y] += Number(sale.grandTotal || 0);
+      }
+    }
+    return years.map((y) => ({ day: String(y), amount: totals[String(y)] }));
+  }, [sales]);
+
+  const activeChartData =
+    chartPeriod === "ខែ" ? monthlyChartData :
+    chartPeriod === "ឆ្នាំ" ? yearlyChartData :
+    weeklyChartData;
 
   const todaySalesAmount = sales
     .filter(
@@ -487,11 +361,10 @@ export default function Sale() {
         sale.saleStatus === "completed" &&
         sale.paymentStatus !== "refunded"
     )
-    .reduce((total, sale) => total + Number(sale.grandTotal || 0), 0);
+    .reduce((total, sale) => total + Number(sale.grandTotal || 0) - Number(sale.returnsTotalUsd || 0), 0);
 
   const refundedAmount = sales
-    .filter((sale) => sale.paymentStatus === "refunded")
-    .reduce((total, sale) => total + Number(sale.grandTotal || 0), 0);
+    .reduce((total, sale) => total + Number(sale.returnsTotalUsd || 0), 0);
 
   const pendingPaymentAmount = sales
     .filter(
@@ -500,13 +373,28 @@ export default function Sale() {
     )
     .reduce((total, sale) => total + Number(sale.grandTotal || 0), 0);
 
+  const displayRate = sales.length > 0 ? Number(sales[0].exchangeRateKhrPerUsd) || 4100 : 4100;
+
+  const fmtUsd = (n) =>
+    "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtKhr = (n) =>
+    Number(n) > 0
+      ? "≈ " + Math.round(Number(n) * displayRate).toLocaleString() + " ៛"
+      : null;
+
+  const METHOD_LABEL = { cash: "សាច់ប្រាក់", bank_transfer: "ផ្ទេរ", qr: "QR", card: "កាត", other: "ផ្សេងៗ" };
+
+  const PAYMENT_STATUS_LABEL = { paid: "បានទូទាត់", partial: "បង់មួយចំណែក", unpaid: "មិនទាន់បង់", refunded: "ត្រឡប់ប្រាក់" };
+  const SALE_STATUS_LABEL    = { completed: "បញ្ចប់ហើយ", confirmed: "បញ្ជាក់ហើយ", draft: "ព្រាង", cancelled: "បោះបង់ហើយ" };
+  const SALE_TYPE_LABEL      = { retail: "លក់រាយ", wholesale: "លក់ដុំ" };
+  const DELIVERY_OPTION_KH  = { delivery: "ដឹកជញ្ជូន", customer_pickup: "ទៅយកផ្ទាល់" };
+  const DELIVERY_STATUS_KH  = { none: "—", pending: "រង់ចាំ", shipped: "កំពុងដឹក", delivered: "ដឹកដល់", cancelled: "បោះបង់" };
+
   const getPaymentSummary = (sale) => {
-    if (!sale.payments.length) return "Unpaid";
+    if (!sale.payments.length) return "—";
 
-    const providers = sale.payments.map((payment) => payment.providerName);
-    const uniqueProviders = [...new Set(providers)];
-
-    return uniqueProviders.join(" + ");
+    const labels = sale.payments.map((p) => p.providerName || METHOD_LABEL[p.paymentMethod] || p.paymentMethod);
+    return [...new Set(labels)].join(" + ");
   };
 
   const getItemsCount = (sale) => {
@@ -565,17 +453,75 @@ export default function Sale() {
     setSelectedSale(sale);
     setReturnErrors({});
     setReturnForm({
-      ...emptyReturnForm,
+      ...defaultReturnForm,
       totalAmount: sale.grandTotal,
     });
+    setReturnItems(
+      sale.items.map((item) => ({
+        id: item.id,
+        productVariantUnitId: item.productVariantUnitId,
+        productNameSnapshot: item.productNameSnapshot,
+        variantNameSnapshot: item.variantNameSnapshot,
+        unitNameSnapshot: item.unitNameSnapshot,
+        maxQty: item.qty,
+        selected: true,
+        qty: item.qty,
+        baseQty: item.baseQty,
+        condition: "good",
+      }))
+    );
     setModalMode("return");
   };
 
   const closeModal = () => {
     setModalMode(null);
     setSelectedSale(null);
-    setReturnForm(emptyReturnForm);
+    setReturnForm(defaultReturnForm);
     setReturnErrors({});
+    setReturnItems([]);
+  };
+
+  const openRecordPaymentModal = (sale) => {
+    setSelectedSale(sale);
+    setRpForm({
+      payment_method: "cash",
+      provider_name: "",
+      currency_code: "USD",
+      amount_received: Number(sale.balanceTotal).toFixed(2),
+      exchange_rate_used: "",
+      reference_no: "",
+      paid_at: new Date().toISOString().slice(0, 10),
+      note: "",
+    });
+    setModalMode("record-payment");
+  };
+
+  const handleRpFormChange = (field, value) => {
+    setRpForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const recordPaymentMutation = useMutation({
+    mutationFn: ({ id, payload }) => recordSalePaymentApi(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-sales"] });
+      closeModal();
+    },
+  });
+
+  const handleRecordPayment = () => {
+    if (!selectedSale) return;
+    if (!rpForm.amount_received || Number(rpForm.amount_received) <= 0) return;
+    const payload = {
+      payment_method: rpForm.payment_method,
+      currency_code: rpForm.currency_code,
+      amount_received: Number(rpForm.amount_received),
+      ...(rpForm.provider_name && { provider_name: rpForm.provider_name }),
+      ...(rpForm.exchange_rate_used && { exchange_rate_used: Number(rpForm.exchange_rate_used) }),
+      ...(rpForm.reference_no && { reference_no: rpForm.reference_no }),
+      ...(rpForm.paid_at && { paid_at: rpForm.paid_at }),
+      ...(rpForm.note && { note: rpForm.note }),
+    };
+    recordPaymentMutation.mutate({ id: selectedSale.id, payload });
   };
 
   const handleReturnFormChange = (field, value) => {
@@ -590,78 +536,102 @@ export default function Sale() {
     }));
   };
 
+  const handleReturnItemChange = (itemId, field, value) => {
+    setReturnItems((previous) =>
+      previous.map((item) =>
+        item.id === itemId ? { ...item, [field]: value } : item
+      )
+    );
+    setReturnErrors((previous) => ({ ...previous, items: "" }));
+  };
+
   const handlePrint = (sale) => {
+    setSelectedSale(sale);
+    setModalMode("print");
     setSales((previous) =>
       previous.map((item) =>
         item.id === sale.id
-          ? {
-              ...item,
-              isPrinted: true,
-              printedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
-            }
+          ? { ...item, isPrinted: true, printedAt: new Date().toISOString().slice(0, 16).replace("T", " ") }
           : item
       )
     );
-
-    alert(`Receipt ${sale.saleNo} is ready to print.`);
   };
 
   const validateReturnForm = () => {
-    const nextErrors = {};
+    const nextErrors = validateSaleReturn(returnForm, selectedSale?.grandTotal);
 
-    if (!returnForm.reason.trim()) {
-      nextErrors.reason = "Return reason is required.";
-    }
-
-    if (!returnForm.totalAmount || Number(returnForm.totalAmount) <= 0) {
-      nextErrors.totalAmount = "Return amount must be greater than 0.";
-    }
-
-    if (Number(returnForm.totalAmount || 0) > Number(selectedSale?.grandTotal || 0)) {
-      nextErrors.totalAmount = "Return amount cannot exceed sale total.";
+    const selected = returnItems.filter((item) => item.selected);
+    if (selected.length === 0) {
+      nextErrors.items = "សូមជ្រើសរើសទំនិញយ៉ាងតិច ១ ដើម្បីត្រឡប់ ។";
+    } else {
+      for (const item of selected) {
+        const qty = Number(item.qty);
+        if (!qty || qty <= 0) {
+          nextErrors.items = "ចំនួនត្រឡប់ ត្រូវ > 0 សម្រាប់ទំនិញដែលបានជ្រើស ។";
+          break;
+        }
+        if (qty > item.maxQty) {
+          nextErrors.items = `ចំនួនត្រឡប់ មិនអាចលើស ចំនួនដើម (ច្រើនបំផុត: ${item.maxQty}) ។`;
+          break;
+        }
+      }
     }
 
     setReturnErrors(nextErrors);
-
     return Object.keys(nextErrors).length === 0;
   };
+
+  const STOCK_ACTION = {
+    good:      "restock",
+    damaged:   "damaged_write_off",
+    defective: "damaged_write_off",
+    expired:   "discard",
+  };
+
+  const returnMutation = useMutation({
+    mutationFn: (payload) => createSalesReturnApi(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-sales"] });
+      closeModal();
+      showToast("បង្កើតការត្រឡប់ដោយជោគជ័យ!");
+    },
+    onError: (err) => {
+      const msg =
+        err?.response?.data?.message ||
+        (err?.response?.data?.errors
+          ? Object.values(err.response.data.errors).flat().join(" ")
+          : null) ||
+        err?.message ||
+        "Failed to create return. Please try again.";
+      alert(msg);
+    },
+  });
 
   const handleSaveReturn = () => {
     if (!selectedSale) return;
     if (!validateReturnForm()) return;
 
-    const now = new Date().toISOString().slice(0, 10);
+    const payload = {
+      sale_id:             selectedSale.id,
+      verification_type:   "system_lookup",
+      return_type:         returnForm.returnType,
+      resolution_type:     returnForm.resolutionType,
+      reason:              returnForm.reason.trim(),
+      status:              returnForm.status,
+      refund_amount_input: returnForm.totalAmount ? Number(returnForm.totalAmount) : undefined,
+      items: returnItems
+        .filter((item) => item.selected)
+        .map((item) => ({
+          sale_item_id:            item.id,
+          product_variant_unit_id: item.productVariantUnitId,
+          qty:                     Number(item.qty),
+          base_qty:                item.baseQty ? Number(item.baseQty) : undefined,
+          item_condition:          item.condition,
+          stock_action:            STOCK_ACTION[item.condition] ?? "restock",
+        })),
+    };
 
-    setSales((previous) =>
-      previous.map((sale) => {
-        if (sale.id !== selectedSale.id) return sale;
-
-        const nextReturn = {
-          id: Date.now(),
-          salesReturnNo: `SR-${String(sale.returns.length + 1).padStart(3, "0")}`,
-          returnType: returnForm.returnType,
-          resolutionType: returnForm.resolutionType,
-          totalAmount: Number(returnForm.totalAmount || 0),
-          reason: returnForm.reason.trim(),
-          status: "completed",
-          createdAt: now,
-        };
-
-        return {
-          ...sale,
-          paymentStatus:
-            Number(returnForm.totalAmount) >= Number(sale.grandTotal)
-              ? "refunded"
-              : "partial",
-          returns: [nextReturn, ...sale.returns],
-          note: sale.note
-            ? `${sale.note} Return: ${returnForm.reason}`
-            : `Return: ${returnForm.reason}`,
-        };
-      })
-    );
-
-    closeModal();
+    returnMutation.mutate(payload);
   };
 
   return (
@@ -670,32 +640,36 @@ export default function Sale() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           theme={theme}
-          title="Total Sales"
-          value={`$${totalSalesAmount.toFixed(2)}`}
+          title="ការលក់សរុប"
+          value={fmtUsd(totalSalesAmount)}
+          subValue={fmtKhr(totalSalesAmount)}
           icon={<FiDollarSign className="text-[34px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
         />
 
         <SummaryCard
           theme={theme}
-          title="Today Sales"
-          value={`$${todaySalesAmount.toFixed(2)}`}
+          title="ការលក់ថ្ងៃនេះ"
+          value={fmtUsd(todaySalesAmount)}
+          subValue={fmtKhr(todaySalesAmount)}
           icon={<FiShoppingCart className="text-[34px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
 
         <SummaryCard
           theme={theme}
-          title="Pending Payment"
-          value={`$${pendingPaymentAmount.toFixed(2)}`}
+          title="ប្រាក់ជំពាក់"
+          value={fmtUsd(pendingPaymentAmount)}
+          subValue={fmtKhr(pendingPaymentAmount)}
           icon={<FiClock className="text-[34px] text-amber-500" />}
           iconBg="bg-amber-500/10"
         />
 
         <SummaryCard
           theme={theme}
-          title="Refunded"
-          value={`$${refundedAmount.toFixed(2)}`}
+          title="ប្រាក់សងត្រឡប់"
+          value={fmtUsd(refundedAmount)}
+          subValue={fmtKhr(refundedAmount)}
           icon={<FiRefreshCcw className="text-[34px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
@@ -704,136 +678,165 @@ export default function Sale() {
       <SalesActivityChart
         theme={theme}
         isDark={isDark}
-        data={weeklyChartData}
+        data={activeChartData}
+        period={chartPeriod}
+        onPeriodChange={setChartPeriod}
       />
-
-      {/* Filters: Open POS moved here, Reset removed */}
-      <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1.7fr_180px_180px_190px_190px_170px]">
-        <div className="relative">
-          <FiSearch
-            className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-          />
-
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search invoice, customer, cashier, product..."
-            className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
-          />
-        </div>
-
-        <div className="relative">
-          <FiCalendar
-            className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-          />
-
-          <input
-            type="date"
-            value={startDate}
-            onChange={(event) => setStartDate(event.target.value)}
-            className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
-          />
-        </div>
-
-        <FilterSelect
-          icon={<FiUser />}
-          value={saleTypeFilter}
-          onChange={setSaleTypeFilter}
-          theme={theme}
-          options={[
-            { value: "All", label: "All Type" },
-            { value: "retail", label: "Retail" },
-            { value: "wholesale", label: "Wholesale" },
-          ]}
-        />
-
-        <FilterSelect
-          icon={<FiCreditCard />}
-          value={paymentStatusFilter}
-          onChange={setPaymentStatusFilter}
-          theme={theme}
-          options={[
-            { value: "All", label: "All Payment" },
-            { value: "unpaid", label: "Unpaid" },
-            { value: "partial", label: "Partial" },
-            { value: "paid", label: "Paid" },
-            { value: "refunded", label: "Refunded" },
-          ]}
-        />
-
-        <FilterSelect
-          icon={<FiFilter />}
-          value={saleStatusFilter}
-          onChange={setSaleStatusFilter}
-          theme={theme}
-          options={[
-            { value: "All", label: "All Status" },
-            { value: "draft", label: "Draft" },
-            { value: "confirmed", label: "Confirmed" },
-            { value: "completed", label: "Completed" },
-            { value: "cancelled", label: "Cancelled" },
-          ]}
-        />
-
-        <Link
-          to="/pos"
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600"
-        >
-          Open POS
-          <FiArrowUpRight className="text-lg" />
-        </Link>
-      </div>
 
       {/* Sales Table */}
       <div
         className={`overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}
       >
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-white/10">
-          <div>
-            <h2 className={`text-base font-semibold ${theme.pageTitle}`}>
-              Sales List
-            </h2>
+        {/* Tabs */}
+        <div className="flex items-center gap-0 border-b border-zinc-200 px-4 dark:border-white/10">
+          {[
+            { id: "all",      label: "ទាំងអស់",       icon: <FiShoppingCart />, count: sales.length,                                                                                        alert: false },
+            { id: "pending",  label: "ជំពាក់",       icon: <FiClock />,        count: sales.filter((s) => s.paymentStatus === "unpaid" || s.paymentStatus === "partial").length,           alert: true  },
+            { id: "refunded", label: "ត្រឡប់",         icon: <FiRefreshCcw />,   count: sales.filter((s) => s.paymentStatus === "refunded" || s.returnsCount > 0).length,               alert: false },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-3.5 text-xs font-bold transition ${
+                activeTab === tab.id
+                  ? "border-red-500 text-red-500"
+                  : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+              {tab.count > 0 && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                  tab.alert
+                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                    : "bg-zinc-100 text-zinc-500 dark:bg-white/10 dark:text-zinc-400"
+                }`}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
 
-            <p className={`mt-1 text-xs ${theme.muted}`}>
-              Showing {filteredSales.length} of {sales.length} invoices
-            </p>
+        {/* Filter bar inside card */}
+        <div className="border-b border-zinc-200 px-4 py-4 dark:border-white/10 space-y-3">
+          {/* Row 1: Search + POS button */}
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <FiSearch className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 ${theme.muted}`} />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="ស្វែងរក វិក្កយបត្រ, អតិថិជន, ផលិតផល..."
+                className={`h-11 w-full rounded-2xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+              />
+            </div>
+            <Link
+              to="/pos"
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600"
+            >
+              បើក POS <FiArrowUpRight />
+            </Link>
+          </div>
+
+          {/* Row 2: Filters + per page */}
+          <div className={`grid gap-3 grid-cols-2 ${
+            activeTab === "all" ? "xl:grid-cols-5" : "xl:grid-cols-4"
+          }`}>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className={`h-14 w-full rounded-2xl border px-4 text-sm outline-none transition focus:ring-4 ${theme.select}`}
+            />
+
+            <FilterSelect icon={<FiUser />} value={saleTypeFilter} onChange={setSaleTypeFilter} theme={theme}
+              options={[
+                { value: "All", label: "ប្រភេទទាំងអស់" },
+                { value: "retail", label: "លក់រាយ" },
+                { value: "wholesale", label: "លក់ដុំ" },
+              ]}
+            />
+
+            {activeTab === "all" && (
+              <FilterSelect icon={<FiCreditCard />} value={paymentStatusFilter} onChange={setPaymentStatusFilter} theme={theme}
+                options={[
+                  { value: "All", label: "ការទូទាត់ទាំងអស់" },
+                  { value: "unpaid", label: "មិនទាន់បង់" },
+                  { value: "partial", label: "បង់មួយចំណែក" },
+                  { value: "paid", label: "បង់ហើយ" },
+                  { value: "refunded", label: "ប្រាក់សងត្រឡប់" },
+                ]}
+              />
+            )}
+
+            <FilterSelect icon={<FiFilter />} value={saleStatusFilter} onChange={setSaleStatusFilter} theme={theme}
+              options={[
+                { value: "All", label: "ស្ថានភាពទាំងអស់" },
+                { value: "completed", label: "បញ្ចប់ហើយ" },
+                { value: "cancelled", label: "បោះបង់ហើយ" },
+              ]}
+            />
+
+            <FilterSelect icon={<FiHash />} value={perPage} onChange={(v) => setPerPage(Number(v))} theme={theme}
+              options={[
+                { value: 10, label: "10 / ទំព័រ" },
+                { value: 25, label: "25 / ទំព័រ" },
+                { value: 50, label: "50 / ទំព័រ" },
+              ]}
+            />
           </div>
         </div>
 
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-200 dark:border-white/10">
+          <p className={`text-xs ${theme.muted}`}>
+            បង្ហាញ {paginationStart}-{paginationEnd} នៃ {filteredSales.length} វិក្កយបត្រ
+          </p>
+        </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1240px]">
+          <table className="w-full min-w-[1060px]">
             <thead className="bg-red-600 text-white">
               <tr>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Invoice
+                <th className="px-4 py-3 text-left text-sm font-semibold">
+                  វិក្កយបត្រ
                 </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Customer
+                <th className="px-4 py-3 text-left text-sm font-semibold">
+                  អតិថិជន
                 </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Items
+                <th className="px-4 py-3 text-left text-sm font-semibold">
+                  ទំនិញ
                 </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Payment
+                <th className="px-4 py-3 text-left text-sm font-semibold">
+                  ការទូទាត់
                 </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Delivery
+                <th className="px-4 py-3 text-left text-sm font-semibold whitespace-nowrap">
+                  ថ្លៃដឹក
                 </th>
-                <th className="px-5 py-3 text-left text-sm font-semibold">
-                  Total
+                <th className="px-4 py-3 text-left text-sm font-semibold">
+                  សរុប
                 </th>
-                <th className="px-5 py-3 text-center text-sm font-semibold">
-                  Status
+                <th className="px-4 py-3 text-center text-sm font-semibold">
+                  ស្ថានភាព
                 </th>
-                <th className="px-5 py-3 text-center text-sm font-semibold">
-                  Actions
+                <th className="px-4 py-3 text-center text-sm font-semibold">
+                  សកម្មភាព
                 </th>
               </tr>
             </thead>
 
             <tbody>
-              {filteredSales.map((sale) => (
+              {salesQuery.isLoading && (
+                <TableLoading
+                  theme={theme}
+                  colSpan={8}
+                  text="រង់ចាំបន្តិច..."
+                />
+              )}
+
+              {!salesQuery.isLoading && paginatedSales.map((sale) => (
                 <tr key={sale.id} className={`border-t transition ${theme.row}`}>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
@@ -848,10 +851,16 @@ export default function Sale() {
 
                         <div className="mt-1 flex flex-wrap items-center gap-2">
                           <span
-                            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${theme.badge}`}
+                            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${theme.badge}`}
                           >
-                            {sale.saleType}
+                            {SALE_TYPE_LABEL[sale.saleType] ?? sale.saleType}
                           </span>
+
+                          {sale.saleChannel && sale.saleChannel !== "pos" && (
+                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
+                              {sale.saleChannel === "phone" ? "📞 ទូរស័ព្ទ" : sale.saleChannel === "online" ? "🌐 អនឡាញ" : sale.saleChannel}
+                            </span>
+                          )}
 
                           <span className={`text-xs ${theme.muted}`}>
                             {sale.displayDate} · {sale.cashierName}
@@ -861,28 +870,28 @@ export default function Sale() {
                     </div>
                   </td>
 
-                  <td className="px-5 py-4">
-                    <p className="text-sm font-semibold">{sale.customerName}</p>
-
+                  <td className="px-5 py-4 max-w-[160px]">
+                    <p className="text-sm font-semibold truncate" title={sale.customerName}>
+                      {sale.customerName}
+                    </p>
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      {sale.customerId ? "Wholesale customer" : "Walk-in sale"}
+                      {sale.customerId ? "លក់ដុំ" : "លក់រាយ"}
                     </p>
                   </td>
 
                   <td className="px-5 py-4">
                     <p className="text-sm font-semibold">
-                      {sale.items.length} line{sale.items.length > 1 ? "s" : ""} ·{" "}
-                      {getItemsCount(sale)} qty
+                      {sale.items.length} មុខ · {getItemsCount(sale)} ចំនួន
                     </p>
 
                     <p className={`mt-1 max-w-[260px] truncate text-xs ${theme.muted}`}>
-                      {sale.items.map((item) => item.variantNameSnapshot).join(", ")}
+                      {sale.items.map((item) => item.variantNameSnapshot).filter(Boolean).join(", ")}
                     </p>
                   </td>
 
                   <td className="px-5 py-4">
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                     >
                       <FiCreditCard />
                       {getPaymentSummary(sale)}
@@ -891,6 +900,7 @@ export default function Sale() {
                     <div className="mt-2">
                       <StatusBadge
                         status={sale.paymentStatus}
+                        label={PAYMENT_STATUS_LABEL[sale.paymentStatus]}
                         getStatusClass={getPaymentStatusClass}
                         getStatusIcon={getPaymentStatusIcon}
                       />
@@ -900,81 +910,83 @@ export default function Sale() {
                   <td className="px-5 py-4">
                     {sale.deliveryRequired ? (
                       <>
-                        <p className="text-sm font-semibold capitalize">
-                          {sale.deliveryOption.replaceAll("_", " ")}
-                        </p>
-
-                        <p className={`mt-1 text-xs ${theme.muted}`}>
-                          Fee: ${Number(sale.deliveryFee || 0).toFixed(2)} ·{" "}
-                          {sale.deliveryStatus}
-                        </p>
+                        <span className="inline-flex items-center rounded-md bg-sky-50 px-2 py-1 text-sm font-bold text-sky-700 ring-1 ring-inset ring-sky-600/20">
+                          ${Number(sale.deliveryFee || 0).toFixed(2)}
+                        </span>
+                        {sale.deliveryStatus && sale.deliveryStatus !== "none" && (
+                          <p className={`mt-1 text-xs ${theme.muted}`}>
+                            {DELIVERY_STATUS_KH[sale.deliveryStatus] ?? sale.deliveryStatus}
+                          </p>
+                        )}
                       </>
                     ) : (
-                      <>
-                        <p className="text-sm font-semibold">Pickup</p>
-                        <p className={`mt-1 text-xs ${theme.muted}`}>
-                          No delivery
-                        </p>
-                      </>
+                      <span className={`text-sm ${theme.muted}`}>—</span>
                     )}
                   </td>
 
                   <td className="px-5 py-4">
                     <p className="text-sm font-bold">
-                      ${Number(sale.grandTotal).toFixed(2)}
+                      {sale.payments.length === 1 && sale.payments[0].currencyCode === "KHR"
+                        ? `${Math.round(sale.grandTotal * sale.exchangeRateKhrPerUsd).toLocaleString()} ៛`
+                        : `$${Number(sale.grandTotal).toFixed(2)}`}
                     </p>
 
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      Subtotal ${Number(sale.subtotal).toFixed(2)}
+                      តម្លៃដើម ${Number(sale.subtotal).toFixed(2)}
                     </p>
                   </td>
 
                   <td className="px-5 py-4 text-center">
                     <StatusBadge
                       status={sale.saleStatus}
+                      label={SALE_STATUS_LABEL[sale.saleStatus]}
                       getStatusClass={getSaleStatusClass}
                       getStatusIcon={getSaleStatusIcon}
                     />
+                    {sale.returnsCount > 0 && (
+                      <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-500">
+                        <FiRotateCcw size={9} />
+                        {sale.returnsCount} ត្រឡប់
+                      </span>
+                    )}
                   </td>
 
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        title="View invoice"
-                        onClick={() => openViewModal(sale)}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
-                      >
-                        <FiEye size={16} />
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Print receipt"
-                        onClick={() => handlePrint(sale)}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600"
-                      >
-                        <FiPrinter size={16} />
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Return / refund"
-                        disabled={
-                          sale.paymentStatus === "refunded" ||
-                          sale.saleStatus === "cancelled"
-                        }
-                        onClick={() => openReturnModal(sale)}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <FiRotateCcw size={16} />
-                      </button>
+                      {(sale.paymentStatus === "unpaid" || sale.paymentStatus === "partial") && (
+                        <Tooltip label="កត់ត្រាការទូទាត់">
+                          <button type="button" onClick={() => openRecordPaymentModal(sale)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700">
+                            <FiCreditCard size={16} />
+                          </button>
+                        </Tooltip>
+                      )}
+                      <Tooltip label="មើលវិក្កយបត្រ">
+                        <button type="button" onClick={() => openViewModal(sale)}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600">
+                          <FiEye size={16} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="បោះពុម្ព">
+                        <button type="button" onClick={() => handlePrint(sale)}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                          <FiPrinter size={16} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="ត្រឡប់">
+                        <button type="button"
+                          disabled={sale.paymentStatus !== "paid" || sale.saleStatus === "cancelled" || sale.isFullyReturned}
+                          onClick={() => openReturnModal(sale)}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50">
+                          <FiRotateCcw size={16} />
+                        </button>
+                      </Tooltip>
                     </div>
                   </td>
                 </tr>
               ))}
 
-              {filteredSales.length === 0 && (
+              {!salesQuery.isLoading && filteredSales.length === 0 && (
                 <tr className={`border-t ${theme.row}`}>
                   <td colSpan="8" className="px-4 py-14 text-center">
                     <div className="flex flex-col items-center justify-center">
@@ -985,12 +997,11 @@ export default function Sale() {
                       </div>
 
                       <p className={`mt-4 text-sm font-semibold ${theme.pageTitle}`}>
-                        No sales found
+                        រកមិនឃើញការលក់
                       </p>
 
                       <p className={`mt-1 text-xs ${theme.muted}`}>
-                        Try changing your search keyword, date, type, payment, or
-                        status filter.
+                        ព្យាយាមផ្លាស់ប្ដូរ ពាក្យស្វែងរក, កាលបរិច្ឆេទ, ប្រភេទ, ការទូទាត់ ឬ ស្ថានភាព ។
                       </p>
                     </div>
                   </td>
@@ -999,10 +1010,72 @@ export default function Sale() {
             </tbody>
           </table>
         </div>
+
+        {!salesQuery.isLoading && filteredSales.length > 0 && (
+          <div className="flex flex-col gap-3 border-t border-zinc-200 px-4 py-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
+            <p className={`text-xs ${theme.muted}`}>
+              ទំព័រ {safeCurrentPage} នៃ {totalPages}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={safeCurrentPage === 1}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                className={`inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  isDark
+                    ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                    : "border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
+                }`}
+              >
+                មុន
+              </button>
+
+              {pageNumbers.map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  className={`inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-bold transition ${
+                    page === safeCurrentPage
+                      ? "bg-red-600 text-white shadow-sm"
+                      : isDark
+                        ? "border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                        : "border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                disabled={safeCurrentPage === totalPages}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                className={`inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  isDark
+                    ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                    : "border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
+                }`}
+              >
+                បន្ទាប់
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
+      {modalMode === "print" && selectedSale && (
+        <SalePrintModal sale={selectedSale} onClose={closeModal} />
+      )}
+
       {modalMode === "view" && selectedSale && (
-        <ViewSaleModal sale={selectedSale} theme={theme} onClose={closeModal} />
+        <ViewSaleModal
+          sale={selectedSale}
+          theme={theme}
+          onClose={closeModal}
+          onPrint={() => setModalMode("print")}
+        />
       )}
 
       {modalMode === "return" && selectedSale && (
@@ -1014,715 +1087,43 @@ export default function Sale() {
           onChange={handleReturnFormChange}
           onClose={closeModal}
           onSave={handleSaveReturn}
+          isSaving={returnMutation.isPending}
+          returnItems={returnItems}
+          onItemChange={handleReturnItemChange}
         />
+      )}
+
+      {modalMode === "record-payment" && selectedSale && (
+        <RecordPaymentModal
+          sale={selectedSale}
+          form={rpForm}
+          onChange={handleRpFormChange}
+          onClose={closeModal}
+          onSubmit={handleRecordPayment}
+          isLoading={recordPaymentMutation.isPending}
+          theme={theme}
+        />
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-9999 flex items-center gap-2.5 rounded-2xl bg-emerald-600 px-5 py-3.5 text-sm font-semibold text-white shadow-2xl">
+          <FiCheckCircle size={17} />
+          {toast}
+        </div>
       )}
     </section>
   );
 }
 
-function SalesActivityChart({ theme, isDark, data }) {
-  const [period, setPeriod] = useState("Week");
-  const periods = ["Week", "Month", "Year"];
-
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div
-          className={`rounded-xl border px-3 py-2 text-sm shadow-md ${theme.card}`}
-        >
-          <p className="font-bold">${Number(payload[0].value).toLocaleString()}</p>
-          <p className={`text-xs ${theme.muted}`}>{label}</p>
-        </div>
-      );
-    }
-
-    return null;
-  };
-
+function Tooltip({ label, children }) {
   return (
-    <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className={`text-base font-semibold ${theme.pageTitle}`}>
-          Sales Activity
-        </h2>
-
-        <div
-          className={`flex items-center gap-1 rounded-xl border p-1 ${
-            isDark
-              ? "border-white/10 bg-white/5"
-              : "border-zinc-200 bg-zinc-100"
-          }`}
-        >
-          {periods.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriod(p)}
-              className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
-                period === p
-                  ? "bg-red-500 text-white shadow-sm"
-                  : `${theme.muted} hover:text-zinc-900 dark:hover:text-white`
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="h-[260px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={data}
-            margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke={
-                isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"
-              }
-              vertical={false}
-            />
-
-            <XAxis
-              dataKey="day"
-              tick={{
-                fontSize: 11,
-                fill: isDark ? "#71717a" : "#a1a1aa",
-              }}
-              axisLine={false}
-              tickLine={false}
-            />
-
-            <YAxis
-              tickFormatter={(v) => `${v / 1000}k`}
-              tick={{
-                fontSize: 11,
-                fill: isDark ? "#71717a" : "#a1a1aa",
-              }}
-              axisLine={false}
-              tickLine={false}
-              domain={[0, 4000]}
-              ticks={[0, 1000, 2000, 3000, 4000]}
-            />
-
-            <Tooltip
-              content={<CustomTooltip />}
-              cursor={{
-                stroke: isDark
-                  ? "rgba(255,255,255,0.1)"
-                  : "rgba(0,0,0,0.07)",
-                strokeWidth: 1,
-              }}
-            />
-
-            <Line
-              type="monotone"
-              dataKey="amount"
-              stroke="#ef4444"
-              strokeWidth={2.5}
-              dot={{
-                r: 3,
-                fill: isDark ? "#18181b" : "#fff",
-                stroke: "#ef4444",
-                strokeWidth: 2,
-              }}
-              activeDot={{
-                r: 6,
-                fill: "#ef4444",
-                stroke: isDark ? "#18181b" : "#fff",
-                strokeWidth: 2,
-              }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({ theme, title, value, icon, iconBg }) {
-  return (
-    <div className={`rounded-2xl border px-5 py-5 shadow-sm ${theme.card}`}>
-      <div className="flex items-center gap-4">
-        <div
-          className={`flex h-14 w-14 items-center justify-center rounded-2xl ${iconBg}`}
-        >
-          {icon}
-        </div>
-
-        <div>
-          <p className={`text-sm font-medium ${theme.muted}`}>{title}</p>
-          <h3 className="mt-1 text-3xl font-bold leading-none">{value}</h3>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FilterSelect({ icon, value, onChange, options, theme }) {
-  return (
-    <div className="relative">
-      <span
-        className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-      >
-        {icon}
-      </span>
-
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={`h-12 w-full appearance-none rounded-2xl border pl-11 pr-11 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-      >
-        {options.map((option) => (
-          <option key={String(option.value)} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-
-      <FiChevronDown
-        className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-      />
-    </div>
-  );
-}
-
-function StatusBadge({ status, getStatusClass, getStatusIcon }) {
-  return (
-    <span
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold capitalize ${getStatusClass(
-        status
-      )}`}
-    >
-      {getStatusIcon(status)}
-      {status}
-    </span>
-  );
-}
-
-function ModalShell({
-  title,
-  subtitle,
-  theme,
-  onClose,
-  children,
-  footer,
-  width = "max-w-6xl",
-}) {
-  return (
-    <div
-      onMouseDown={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6"
-    >
-      <div
-        onMouseDown={(event) => event.stopPropagation()}
-        className={`flex h-auto max-h-[90dvh] w-full ${width} flex-col overflow-hidden rounded-3xl border shadow-2xl ${theme.modal}`}
-      >
-        <div className={`shrink-0 border-b px-6 py-5 ${theme.modalHeader}`}>
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h2 className="text-xl font-bold tracking-tight">{title}</h2>
-
-              {subtitle && (
-                <p className={`mt-1.5 text-sm leading-6 ${theme.muted}`}>
-                  {subtitle}
-                </p>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close modal"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
-            >
-              <FiX className="text-lg" />
-            </button>
-          </div>
-        </div>
-
-        <div
-          className={`custom-modal-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 ${theme.modalBody}`}
-        >
-          {children}
-        </div>
-
-        {footer && (
-          <div className={`shrink-0 border-t px-6 py-4 ${theme.modalHeader}`}>
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              {footer}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ViewSaleModal({ sale, theme, onClose }) {
-  return (
-    <ModalShell
-      title={sale.saleNo}
-      subtitle={`${sale.customerName} · ${sale.displayDate} · ${sale.cashierName}`}
-      theme={theme}
-      onClose={onClose}
-      footer={
-        <button
-          type="button"
-          onClick={onClose}
-          className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
-        >
-          Close
-        </button>
-      }
-    >
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">
-        <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
-          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
-            <FiShoppingCart size={38} />
-          </div>
-
-          <div className="mt-5 space-y-3 text-sm">
-            <InfoLine label="Invoice No" value={sale.saleNo} />
-            <InfoLine label="Customer" value={sale.customerName} />
-            <InfoLine label="Cashier" value={sale.cashierName} />
-            <InfoLine label="Sale Type" value={sale.saleType} />
-            <InfoLine label="Sale Channel" value={sale.saleChannel} />
-            <InfoLine label="Currency" value={sale.invoiceCurrency} />
-            <InfoLine
-              label="Exchange Rate"
-              value={`1 USD = ${sale.exchangeRateKhrPerUsd} KHR`}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-5">
-          <FormSection
-            title="Sale Items"
-            subtitle="Product snapshots saved at sale time."
-            icon={<FiPackage />}
-            theme={theme}
-          >
-            <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead className="bg-red-600 text-white">
-                  <tr>
-                    <th className="px-3 py-3 text-left">Product Variant</th>
-                    <th className="px-3 py-3 text-left">Qty</th>
-                    <th className="px-3 py-3 text-left">Base Qty</th>
-                    <th className="px-3 py-3 text-left">Unit Price</th>
-                    <th className="px-3 py-3 text-left">Line Total</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {sale.items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-t border-zinc-200 dark:border-white/10"
-                    >
-                      <td className="px-3 py-3">
-                        <p className="font-semibold">
-                          {item.variantNameSnapshot}
-                        </p>
-
-                        <p className={`mt-1 text-xs ${theme.muted}`}>
-                          {item.productNameSnapshot} · {item.unitNameSnapshot}
-                        </p>
-                      </td>
-
-                      <td className="px-3 py-3">
-                        {item.qty} {item.unitNameSnapshot}
-                      </td>
-
-                      <td className="px-3 py-3">{item.baseQty}</td>
-
-                      <td className="px-3 py-3">
-                        ${Number(item.unitPrice).toFixed(2)}
-                      </td>
-
-                      <td className="px-3 py-3 font-semibold">
-                        ${Number(item.lineTotal).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </FormSection>
-
-          <FormSection
-            title="Summary"
-            subtitle="Sale amount, discount, delivery fee, and grand total."
-            icon={<FiDollarSign />}
-            theme={theme}
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <SummaryMiniBox
-                theme={theme}
-                label="Subtotal"
-                value={`$${Number(sale.subtotal).toFixed(2)}`}
-              />
-
-              <SummaryMiniBox
-                theme={theme}
-                label="Discount"
-                value={`$${Number(sale.discountTotal).toFixed(2)}`}
-              />
-
-              <SummaryMiniBox
-                theme={theme}
-                label="Delivery"
-                value={`$${Number(sale.deliveryFee).toFixed(2)}`}
-              />
-
-              <SummaryMiniBox
-                theme={theme}
-                label="Grand Total"
-                value={`$${Number(sale.grandTotal).toFixed(2)}`}
-                strong
-              />
-            </div>
-
-            {sale.deliveryRequired && (
-              <div className="mt-5 rounded-xl border border-zinc-200 p-4 dark:border-white/10">
-                <div className="flex items-start gap-3">
-                  <FiMapPin className="mt-1 text-red-500" />
-
-                  <div>
-                    <p className="text-sm font-semibold">Delivery Address</p>
-
-                    <p className={`mt-1 text-sm ${theme.muted}`}>
-                      {sale.deliveryAddress || "-"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="mt-5">
-              <p className={`text-xs font-semibold ${theme.muted}`}>Note</p>
-              <p className="mt-2 text-sm leading-6">{sale.note || "-"}</p>
-            </div>
-          </FormSection>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
-function ReturnSaleModal({
-  sale,
-  form,
-  errors,
-  theme,
-  onChange,
-  onClose,
-  onSave,
-}) {
-  return (
-    <ModalShell
-      title="Return / Refund Sale"
-      subtitle={`${sale.saleNo} · ${sale.customerName} · Total $${Number(
-        sale.grandTotal
-      ).toFixed(2)}`}
-      theme={theme}
-      onClose={onClose}
-      width="max-w-4xl"
-      footer={
-        <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            onClick={onSave}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-red-600"
-          >
-            <FiSave />
-            Save Return
-          </button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <div className="flex items-start gap-2 rounded-xl bg-amber-500/10 p-4 text-sm text-amber-600 dark:text-amber-400">
-          <FiAlertTriangle className="mt-0.5 shrink-0" />
-
-          <span>
-            Return should create a sales return record. Good items can be
-            restocked, damaged items should be handled in inventory adjustment.
-          </span>
-        </div>
-
-        <FormSection
-          title="Return Information"
-          subtitle="Set return type, resolution, amount, and reason."
-          icon={<FiRefreshCcw />}
-          theme={theme}
-        >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FormSelect
-              label="Return Type"
-              required
-              value={form.returnType}
-              onChange={(value) => onChange("returnType", value)}
-              theme={theme}
-              icon={<FiRefreshCcw />}
-              options={[
-                { value: "partial_return", label: "Partial Return" },
-                { value: "full_return", label: "Full Return" },
-              ]}
-            />
-
-            <FormSelect
-              label="Resolution Type"
-              required
-              value={form.resolutionType}
-              onChange={(value) => onChange("resolutionType", value)}
-              theme={theme}
-              icon={<FiInfo />}
-              options={[
-                { value: "refund", label: "Refund" },
-                { value: "exchange", label: "Exchange" },
-                { value: "credit_note", label: "Credit Note" },
-              ]}
-            />
-
-            <FormInput
-              label="Return Amount"
-              required
-              type="number"
-              value={form.totalAmount}
-              error={errors.totalAmount}
-              onChange={(value) => onChange("totalAmount", value)}
-              theme={theme}
-              placeholder="0.00"
-              icon={<FiDollarSign />}
-            />
-
-            <FormSelect
-              label="Status"
-              value={form.status}
-              onChange={(value) => onChange("status", value)}
-              theme={theme}
-              icon={<FiClock />}
-              options={[
-                { value: "pending", label: "Pending" },
-                { value: "approved", label: "Approved" },
-                { value: "completed", label: "Completed" },
-                { value: "cancelled", label: "Cancelled" },
-              ]}
-            />
-          </div>
-
-          <div className="mt-4">
-            <FormTextarea
-              label="Reason"
-              value={form.reason}
-              error={errors.reason}
-              onChange={(value) => onChange("reason", value)}
-              theme={theme}
-              placeholder="Example: Customer returned damaged product..."
-              icon={<FiFileText />}
-            />
-          </div>
-        </FormSection>
-      </div>
-    </ModalShell>
-  );
-}
-
-function FormSection({ title, subtitle, icon, theme, children }) {
-  return (
-    <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
-      <div className="mb-4 flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
-          {icon}
-        </div>
-
-        <div>
-          <h3 className="text-sm font-bold">{title}</h3>
-
-          {subtitle && (
-            <p className={`mt-0.5 text-xs leading-5 ${theme.muted}`}>
-              {subtitle}
-            </p>
-          )}
-        </div>
-      </div>
-
+    <div className="relative inline-flex group">
       {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-zinc-700">
+        {label}
+        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-zinc-800 dark:border-t-zinc-700" />
+      </span>
     </div>
   );
 }
 
-function FormInput({
-  label,
-  required = false,
-  value,
-  onChange,
-  theme,
-  error = "",
-  type = "text",
-  placeholder = "",
-  icon,
-}) {
-  return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-        {required && <span className="ml-1 text-red-400">*</span>}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <input
-          type={type}
-          value={value}
-          placeholder={placeholder}
-          onChange={(event) => onChange(event.target.value)}
-          className={`h-11 w-full rounded-xl border ${
-            icon ? "pl-10" : "px-3"
-          } pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${
-            error ? "border-red-500 focus:border-red-500" : ""
-          }`}
-        />
-      </div>
-
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
-    </label>
-  );
-}
-
-function FormTextarea({
-  label,
-  value,
-  onChange,
-  theme,
-  error = "",
-  placeholder = "",
-  icon,
-}) {
-  return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-3.5 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <textarea
-          value={value}
-          placeholder={placeholder}
-          onChange={(event) => onChange(event.target.value)}
-          rows={3}
-          className={`w-full resize-none rounded-xl border ${
-            icon ? "pl-10" : "px-3"
-          } pr-3 py-3 text-sm outline-none transition focus:ring-4 ${
-            theme.input
-          } ${error ? "border-red-500 focus:border-red-500" : ""}`}
-        />
-      </div>
-
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
-    </label>
-  );
-}
-
-function FormSelect({
-  label,
-  required = false,
-  value,
-  onChange,
-  options,
-  theme,
-  error = "",
-  icon,
-}) {
-  return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-        {required && <span className="ml-1 text-red-400">*</span>}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <select
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className={`h-11 w-full appearance-none rounded-xl border ${
-            icon ? "pl-10" : "pl-3"
-          } pr-10 text-sm outline-none transition focus:ring-4 ${
-            theme.select
-          } ${error ? "border-red-500 focus:border-red-500" : ""}`}
-        >
-          {options.map((option) => (
-            <option key={String(option.value)} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        <FiChevronDown
-          className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-        />
-      </div>
-
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
-    </label>
-  );
-}
-
-function SummaryMiniBox({ theme, label, value, strong = false }) {
-  return (
-    <div className={`rounded-xl border p-4 ${theme.softCard}`}>
-      <p className={`text-xs font-semibold ${theme.muted}`}>{label}</p>
-
-      <p
-        className={`mt-2 ${
-          strong ? "text-xl font-bold" : "text-sm font-semibold"
-        }`}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function InfoLine({ label, value }) {
-  return (
-    <div>
-      <p className="text-xs font-semibold text-zinc-500">{label}</p>
-      <p className="mt-1 capitalize">{value || "-"}</p>
-    </div>
-  );
-}

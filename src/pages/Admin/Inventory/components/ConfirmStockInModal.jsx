@@ -35,8 +35,8 @@ export default function ConfirmStockInModal({
     return (
       <>
       <ModalShell
-        title="Confirm Stock In"
-        subtitle="Confirm accepted purchase items before adding them to inventory batches, stock movements, and balances."
+        title="បញ្ជាក់ស្តុកចូល"
+        subtitle="បញ្ជាក់ទំនិញទិញដែលទទួលបានមុននឹងបន្ថែមទៅ Batch ស្តុក ចលនាស្តុក និងសមតុល្យ"
         theme={theme}
         onClose={onClose}
         width="max-w-6xl"
@@ -46,7 +46,7 @@ export default function ConfirmStockInModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Close
+            បិទ
           </button>
         }
       >
@@ -55,11 +55,11 @@ export default function ConfirmStockInModal({
             <FiCheckCircle className="mx-auto text-5xl text-emerald-500" />
 
             <p className="mt-4 text-sm font-semibold">
-              No pending purchases for stock in
+              គ្មានការទិញរង់ចាំស្តុកចូល
             </p>
 
             <p className={`mt-1 text-xs ${theme.muted}`}>
-              When a purchase is ready to receive, it will appear here.
+              នៅពេលការទិញត្រៀមទទួល វានឹងបង្ហាញនៅទីនេះ
             </p>
           </div>
         ) : (
@@ -83,7 +83,7 @@ export default function ConfirmStockInModal({
 
                     <p className={`mt-1 text-sm ${theme.muted}`}>
                       {purchase.supplierName} · {purchase.purchaseDate} ·{" "}
-                      {purchase.totalItems} items
+                      {purchase.totalItems} ទំនិញ
                     </p>
 
                     {purchase.note && (
@@ -100,7 +100,7 @@ export default function ConfirmStockInModal({
                     className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isConfirming ? <FiRefreshCw className="animate-spin" /> : <FiCheckCircle />}
-                    {isConfirming ? "Confirming..." : "Confirm Stock In"}
+                    {isConfirming ? "កំពុងបញ្ជាក់..." : "បញ្ជាក់ស្តុកចូល"}
                   </button>
                 </div>
 
@@ -108,19 +108,26 @@ export default function ConfirmStockInModal({
                   <table className="w-full min-w-[1080px] text-sm">
                     <thead className="bg-red-600 text-white">
                       <tr>
-                        <th className="px-3 py-3 text-left">Product Variant</th>
-                        <th className="px-3 py-3 text-left">Variant Type</th>
-                        <th className="px-3 py-3 text-left">Purchase Unit</th>
-                        <th className="px-3 py-3 text-left">Accepted Qty</th>
-                        <th className="px-3 py-3 text-left">Base Qty</th>
-                        <th className="px-3 py-3 text-left">Unit Cost</th>
-                        <th className="px-3 py-3 text-left">Lot No</th>
-                        <th className="px-3 py-3 text-left">Expiry</th>
+                        <th className="px-3 py-3 text-left">ផលិតផល / ប្រភេទ</th>
+                        <th className="px-3 py-3 text-left">ប្រភេទ</th>
+                        <th className="px-3 py-3 text-left">ខ្នាតទិញ</th>
+                        <th className="px-3 py-3 text-left">ចំនួនទទួល</th>
+                        <th className="px-3 py-3 text-left">ចំនួនមូលដ្ឋាន</th>
+                        <th className="px-3 py-3 text-left">តម្លៃខ្នាត</th>
+                        <th className="px-3 py-3 text-left">Lot</th>
+                        <th className="px-3 py-3 text-left">ថ្ងៃផុតកំណត់</th>
                       </tr>
                     </thead>
 
                     <tbody>
-                      {purchase.items.map((item) => {
+                      {/* Merge rows with same purchaseItemId + expiry for display (original + replacement combined) */}
+                      {purchase.items.reduce((acc, item) => {
+                        const key = `${item.purchaseItemId || item.variantCode}-${item.expiredDate || ""}`;
+                        const existing = acc.find((i) => i._displayKey === key);
+                        if (existing) { existing.qty += Number(item.qty || 0); existing.baseQty += Number(item.baseQty || 0); }
+                        else acc.push({ ...item, qty: Number(item.qty || 0), baseQty: Number(item.baseQty || 0), _displayKey: key });
+                        return acc;
+                      }, []).map((item) => {
                         const conversionQty = Number(item.conversionQty || 1);
                         const baseDisplayUnit = item.baseUnit || "";
                         const rawVariantName = item.variantName || item.productName || "-";
@@ -133,7 +140,7 @@ export default function ConfirmStockInModal({
                         const conversionText =
                           item.unitName && item.baseUnit
                             ? `${item.unitName} = ${conversionQty.toLocaleString()} ${item.baseUnit}`
-                            : "Unit conversion unavailable";
+                            : "គ្មានការបំប្លែងខ្នាត";
                         const unitBadge = baseDisplayUnit
                           ? `${baseDisplayUnit.charAt(0).toUpperCase()}${baseDisplayUnit.slice(1)}`
                           : "Unit";
@@ -171,7 +178,7 @@ export default function ConfirmStockInModal({
                             </td>
 
                             <td className="px-3 py-3">
-                              {Number(item.baseQty).toLocaleString()} {item.baseUnit || "base units"}
+                              {Number(item.baseQty).toLocaleString()} {item.baseUnit || "ខ្នាតមូលដ្ឋាន"}
                             </td>
 
                             <td className="px-3 py-3">
@@ -188,7 +195,7 @@ export default function ConfirmStockInModal({
                                     [lotInputKey]: event.target.value,
                                   }))
                                 }
-                                placeholder="Optional"
+                                placeholder="ស្រេចចិត្ត"
                                 className={`h-10 w-40 rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${theme.input}`}
                               />
                             </td>
@@ -219,18 +226,18 @@ export default function ConfirmStockInModal({
             {isConfirming && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-2xl bg-black/40 backdrop-blur-sm">
                 <FiRefreshCw className="animate-spin text-3xl text-emerald-400" />
-                <p className="text-sm font-semibold text-emerald-400">Processing...</p>
+                <p className="text-sm font-semibold text-emerald-400">កំពុងដំណើរការ...</p>
               </div>
             )}
 
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10">
               <FiAlertTriangle className="text-2xl text-emerald-500" />
             </div>
-            <h3 className="text-base font-bold">Confirm Stock In</h3>
+            <h3 className="text-base font-bold">បញ្ជាក់ស្តុកចូល</h3>
             <p className={`mt-1 text-sm ${theme.muted}`}>
-              Stock in{" "}
+              ស្តុក{" "}
               <span className="font-semibold text-emerald-500">{confirmingPurchase?.purchaseNo}</span>{" "}
-              will be added to inventory. This action cannot be undone.
+              នឹងត្រូវបន្ថែមទៅស្តុក។ សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ
             </p>
             <div className="mt-5 flex justify-end gap-3">
               <button
@@ -239,7 +246,7 @@ export default function ConfirmStockInModal({
                 onClick={() => setConfirmingPurchase(null)}
                 className={`inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition hover:opacity-80 disabled:opacity-40 ${theme.card}`}
               >
-                <FiX /> Cancel
+                <FiX /> បោះបង់
               </button>
               <button
                 type="button"
@@ -248,7 +255,7 @@ export default function ConfirmStockInModal({
                 className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
               >
                 {isConfirming ? <FiRefreshCw className="animate-spin" /> : <FiCheckCircle />}
-                {isConfirming ? "Confirming..." : "Confirm"}
+                {isConfirming ? "កំពុងបញ្ជាក់..." : "បញ្ជាក់"}
               </button>
             </div>
           </div>

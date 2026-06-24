@@ -1,5 +1,6 @@
 import { FiClock, FiDollarSign, FiLayers, FiPackage, FiTrendingDown, FiTrendingUp } from "react-icons/fi";
 import { InfoLine, InventoryThumb, ModalShell, SectionTitle, StockStatusBadge } from "./InventoryCommon";
+import { formatMovementTypeKh } from "./StockMovementTable";
 export default function ViewInventoryModal({
     item,
     theme,
@@ -21,7 +22,7 @@ export default function ViewInventoryModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Close
+            បិទ
           </button>
         }
       >
@@ -30,17 +31,17 @@ export default function ViewInventoryModal({
             <InventoryThumb item={item} size="large" />
 
             <div className="mt-4 space-y-3 text-sm">
-              <InfoLine label="Product" value={item.productName} />
-              <InfoLine label="Variant Code" value={item.variantCode} />
-              <InfoLine label="Category" value={item.category} />
-              <InfoLine label="Base Unit" value={item.baseUnit} />
+              <InfoLine label="ផលិតផល" value={item.productName} />
+              <InfoLine label="កូដប្រភេទ" value={item.variantCode} />
+              <InfoLine label="ប្រភេទ" value={item.category} />
+              <InfoLine label="ខ្នាតមូលដ្ឋាន" value={item.baseUnit} />
               <InfoLine
-                label="Low Stock Alert"
-                value={thresholdBreakdown.baseText}
+                label="ជូនដំណឹងស្តុកទាប"
+                value={thresholdBreakdown?.baseText}
               />
-              {thresholdBreakdown.convertedTexts.length > 0 && (
+              {thresholdBreakdown?.convertedTexts?.length > 0 && (
                 <InfoLine
-                  label="Threshold Preview"
+                  label="ការគ្រប់គ្រងដែនកំណត់"
                   value={thresholdBreakdown.convertedTexts.map((converted) => converted.text).join(" / ")}
                 />
               )}
@@ -51,10 +52,10 @@ export default function ViewInventoryModal({
             <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h3 className="text-base font-bold">Current Stock</h3>
+                  <h3 className="text-base font-bold">ស្តុកបច្ចុប្បន្ន</h3>
 
                   <p className={`mt-1 text-sm ${theme.muted}`}>
-                    Stock is stored by base unit.
+                    ស្តុករក្សាទុកតាមខ្នាតមូលដ្ឋាន
                   </p>
                 </div>
 
@@ -85,8 +86,8 @@ export default function ViewInventoryModal({
             <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
               <SectionTitle
                 icon={<FiLayers />}
-                title="Units"
-                subtitle="Conversion units for this inventory item."
+                title="ខ្នាត"
+                subtitle="ខ្នាតបំប្លែងសម្រាប់ទំនិញស្តុកនេះ"
                 theme={theme}
               />
 
@@ -101,7 +102,7 @@ export default function ViewInventoryModal({
                     </p>
 
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      {unit.isBaseUnit ? "Base unit" : "Converted unit"}
+                      {unit.isBaseUnit ? "ខ្នាតមូលដ្ឋាន" : "ខ្នាតបំប្លែង"}
                     </p>
                   </div>
                 ))}
@@ -111,8 +112,8 @@ export default function ViewInventoryModal({
             <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
               <SectionTitle
                 icon={<FiPackage />}
-                title="Inventory Batches"
-                subtitle="Stock batch and expiry tracking."
+                title="Batch ស្តុក"
+                subtitle="តាមដាន Batch ស្តុក និងថ្ងៃផុតកំណត់"
                 theme={theme}
               />
 
@@ -121,11 +122,11 @@ export default function ViewInventoryModal({
                   <thead className="bg-red-600 text-white">
                     <tr>
                       <th className="px-3 py-3 text-left">Batch</th>
-                      <th className="px-3 py-3 text-left">Lot No</th>
-                      <th className="px-3 py-3 text-left">Expiry</th>
-                      <th className="px-3 py-3 text-left">Remaining</th>
-                      <th className="px-3 py-3 text-left">Cost</th>
-                      <th className="px-3 py-3 text-left">Status</th>
+                      <th className="px-3 py-3 text-left">Lot</th>
+                      <th className="px-3 py-3 text-left">ថ្ងៃផុតកំណត់</th>
+                      <th className="px-3 py-3 text-left">នៅសល់</th>
+                      <th className="px-3 py-3 text-left">តម្លៃ</th>
+                      <th className="px-3 py-3 text-left">ស្ថានភាព</th>
                     </tr>
                   </thead>
 
@@ -153,7 +154,7 @@ export default function ViewInventoryModal({
                     ) : (
                       <tr>
                         <td colSpan="6" className="px-3 py-8 text-center text-zinc-500">
-                          No active batch.
+                          គ្មាន Batch ដំណើរការ
                         </td>
                       </tr>
                     )}
@@ -165,8 +166,8 @@ export default function ViewInventoryModal({
             <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
               <SectionTitle
                 icon={<FiClock />}
-                title="Recent Stock Movements"
-                subtitle="Latest stock in, stock out, and adjustments."
+                title="ចលនាស្តុកថ្មីៗ"
+                subtitle="ស្តុកចូល ស្តុកចេញ និងការកែតម្រូវចុងក្រោយ"
                 theme={theme}
               />
 
@@ -183,8 +184,8 @@ export default function ViewInventoryModal({
                         </div>
 
                         <div>
-                          <p className="text-sm font-semibold capitalize">
-                            {movement.type.replaceAll("_", " ")}
+                          <p className="text-sm font-semibold">
+                            {formatMovementTypeKh(movement.type)}
                           </p>
 
                           <p className={`mt-1 text-xs ${theme.muted}`}>
@@ -206,7 +207,7 @@ export default function ViewInventoryModal({
                   ))
                 ) : (
                   <p className={`text-sm ${theme.muted}`}>
-                    No stock movement yet.
+                    គ្មានចលនាស្តុកនៅឡើយ
                   </p>
                 )}
               </div>

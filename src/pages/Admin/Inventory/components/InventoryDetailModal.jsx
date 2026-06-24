@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FiArrowDown, FiArrowUp, FiChevronDown, FiChevronRight, FiClock, FiDollarSign, FiLayers, FiPackage } from "react-icons/fi";
 import { InfoLine, InventoryThumb, ModalShell, SectionTitle, StockStatusBadge } from "./InventoryCommon";
+import { formatMovementTypeKh, translateNote } from "./StockMovementTable";
 export default function InventoryDetailModal({
     item,
     theme,
@@ -42,7 +43,7 @@ export default function InventoryDetailModal({
     return (
       <ModalShell
         title={displayName}
-        subtitle={`${item.variantCode || "No variant code"} - ${item.productName || "No product"}${item.category && item.category !== "-" ? ` - ${item.category}` : ""}`}
+        subtitle={`${item.variantCode || "គ្មានកូដ"} - ${item.productName || "គ្មានផលិតផល"}${item.category && item.category !== "-" ? ` - ${item.category}` : ""}`}
         theme={theme}
         onClose={onClose}
         footer={
@@ -51,7 +52,7 @@ export default function InventoryDetailModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Close
+            បិទ
           </button>
         }
       >
@@ -66,7 +67,7 @@ export default function InventoryDetailModal({
 
                   <div className="mt-2 flex flex-wrap gap-2">
                     <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}>
-                      {item.variantCode || "No code"}
+                      {item.variantCode || "គ្មានកូដ"}
                     </span>
 
                     <span className="rounded-full bg-red-500/10 px-3 py-1 text-xs font-bold text-red-500">
@@ -77,23 +78,24 @@ export default function InventoryDetailModal({
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4 xl:min-w-[560px]">
-                <InfoLine label="Product" value={item.productName} />
-                <InfoLine label="Category" value={item.category || "-"} />
-                <InfoLine label="Base Unit" value={item.baseUnit} />
-                <InfoLine label="Low Stock Alert" value={thresholdBreakdown.baseText} />
-                {thresholdBreakdown.convertedTexts.length > 0 && (
-                  <InfoLine
-                    label="Threshold Preview"
-                    value={thresholdBreakdown.convertedTexts.map((converted) => converted.text).join(" / ")}
-                  />
-                )}
+                <InfoLine label="ផលិតផល" value={item.productName} />
+                <InfoLine label="ប្រភេទ" value={item.category || "-"} />
+                <InfoLine label="ខ្នាតមូលដ្ឋាន" value={item.baseUnit} />
+                <InfoLine
+                  label="ជូនដំណឹងស្តុក"
+                  value={
+                    thresholdBreakdown.convertedTexts.length > 0
+                      ? thresholdBreakdown.convertedTexts.map((c) => c.text).join(" / ")
+                      : thresholdBreakdown.baseText
+                  }
+                />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
-                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>Current Stock</p>
+                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>ស្តុកបច្ចុប្បន្ន</p>
                 <p className="mt-2 text-2xl font-bold">{stockBreakdown.baseText}</p>
 
                 <div className="mt-3">
@@ -102,22 +104,22 @@ export default function InventoryDetailModal({
               </div>
 
               <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
-                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>Batch Remaining</p>
+                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>Batch នៅសល់</p>
                 <p className="mt-2 text-2xl font-bold">
                   {Number(totalRemaining).toLocaleString()} {item.baseUnit}
                 </p>
 
                 <p className={`mt-2 text-xs ${theme.muted}`}>
-                  {batches.length} active batch{batches.length === 1 ? "" : "es"}
+                  {batches.length} Batch ដំណើរការ
                 </p>
               </div>
 
               <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
-                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>Latest Expiry</p>
+                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>ថ្ងៃផុតកំណត់ចុងក្រោយ</p>
                 <p className="mt-2 text-2xl font-bold">{latestBatch?.expiredDate || "-"}</p>
 
                 <p className={`mt-2 text-xs ${theme.muted}`}>
-                  Unit cost {formatUnitCost(item.unitCostBase || latestBatch?.unitCostBase || 0)}
+                  តម្លៃខ្នាត {formatUnitCost(item.unitCostBase || latestBatch?.unitCostBase || 0)}
                 </p>
               </div>
           </div>
@@ -125,8 +127,8 @@ export default function InventoryDetailModal({
           <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
             <SectionTitle
               icon={<FiLayers />}
-              title="Units"
-              subtitle="Purchase and base unit conversion for this variant."
+              title="ខ្នាត"
+              subtitle="ការបំប្លែងខ្នាតទិញ និងខ្នាតមូលដ្ឋានសម្រាប់ប្រភេទនេះ"
               theme={theme}
             />
 
@@ -137,7 +139,7 @@ export default function InventoryDetailModal({
                   className={`rounded-xl border p-3 text-sm ${theme.softCard}`}
                 >
                   <p className={`text-xs font-semibold uppercase ${theme.muted}`}>
-                    {unit.isBaseUnit ? "Base Unit" : "Converted Unit"}
+                    {unit.isBaseUnit ? "ខ្នាតមូលដ្ឋាន" : "ខ្នាតបំប្លែង"}
                   </p>
 
                   <p className="mt-2 font-bold">
@@ -152,8 +154,8 @@ export default function InventoryDetailModal({
             <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
               <SectionTitle
                 icon={<FiPackage />}
-                title="Inventory Batches"
-                subtitle="Stock batch and expiry tracking."
+                title="Batch ស្តុក"
+                subtitle="តាមដាន Batch ស្តុក និងថ្ងៃផុតកំណត់"
                 theme={theme}
               />
 
@@ -161,17 +163,17 @@ export default function InventoryDetailModal({
               <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">
                 <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-4 py-2 dark:border-white/10 dark:bg-white/5">
                   <span className="text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400">
-                    Active Batches
+                    Batch ដំណើរការ
                   </span>
-                  <span className={`text-xs font-semibold ${theme.muted}`}>{activeBatches.length} batch{activeBatches.length !== 1 ? "es" : ""}</span>
+                  <span className={`text-xs font-semibold ${theme.muted}`}>{activeBatches.length} Batch</span>
                 </div>
                 <table className="w-full table-fixed text-sm">
                   <thead className="bg-red-600 text-white">
                     <tr>
                       <th className="w-[44%] px-4 py-3 text-left">Batch</th>
-                      <th className="w-[18%] px-4 py-3 text-left">Expiry</th>
-                      <th className="w-[18%] px-4 py-3 text-left">Remaining</th>
-                      <th className="w-[20%] px-4 py-3 text-left">Cost</th>
+                      <th className="w-[18%] px-4 py-3 text-left">ថ្ងៃផុតកំណត់</th>
+                      <th className="w-[18%] px-4 py-3 text-left">នៅសល់</th>
+                      <th className="w-[20%] px-4 py-3 text-left">តម្លៃ</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -181,7 +183,7 @@ export default function InventoryDetailModal({
                           <p className="font-semibold" title={batch.batchNo}>{truncateBatchNo(batch.batchNo)}</p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             <p className={`truncate text-xs ${theme.muted}`}>Lot {batch.lotNo || "-"}</p>
-                            <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-500">Active</span>
+                            <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-500">ដំណើរការ</span>
                           </div>
                         </td>
                         <td className="px-4 py-4">{batch.expiredDate || "-"}</td>
@@ -191,12 +193,12 @@ export default function InventoryDetailModal({
                         </td>
                         <td className="px-4 py-4">
                           <p className="font-semibold">${Number(batch.unitCostBase || 0).toFixed(3)}</p>
-                          <p className={`mt-1 text-xs ${theme.muted}`}>per {baseUnitLabel} · {formatUsd(Number(batch.qtyRemainingBase || 0) * Number(batch.unitCostBase || 0))}</p>
+                          <p className={`mt-1 text-xs ${theme.muted}`}>ក្នុង {baseUnitLabel} · {formatUsd(Number(batch.qtyRemainingBase || 0) * Number(batch.unitCostBase || 0))}</p>
                         </td>
                       </tr>
                     )) : (
                       <tr>
-                        <td colSpan="4" className={`px-4 py-6 text-center text-sm ${theme.muted}`}>No active batches.</td>
+                        <td colSpan="4" className={`px-4 py-6 text-center text-sm ${theme.muted}`}>គ្មាន Batch ដំណើរការ</td>
                       </tr>
                     )}
                   </tbody>
@@ -214,11 +216,11 @@ export default function InventoryDetailModal({
                     <div className="flex items-center gap-2">
                       {showDepleted ? <FiChevronDown className="text-sm" /> : <FiChevronRight className="text-sm" />}
                       <span className="text-xs font-bold uppercase text-zinc-500 dark:text-zinc-400">
-                        Depleted Batches
+                        Batch អស់ស្តុក
                       </span>
                     </div>
                     <span className={`rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-[11px] font-semibold ${theme.muted}`}>
-                      {depletedBatches.length} batch{depletedBatches.length !== 1 ? "es" : ""}
+                      {depletedBatches.length} Batch
                     </span>
                   </button>
 
@@ -227,9 +229,9 @@ export default function InventoryDetailModal({
                       <thead className="bg-zinc-600 text-white">
                         <tr>
                           <th className="w-[44%] px-4 py-3 text-left">Batch</th>
-                          <th className="w-[18%] px-4 py-3 text-left">Expiry</th>
-                          <th className="w-[18%] px-4 py-3 text-left">Remaining</th>
-                          <th className="w-[20%] px-4 py-3 text-left">Cost</th>
+                          <th className="w-[18%] px-4 py-3 text-left">ថ្ងៃផុតកំណត់</th>
+                          <th className="w-[18%] px-4 py-3 text-left">នៅសល់</th>
+                          <th className="w-[20%] px-4 py-3 text-left">តម្លៃ</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -239,7 +241,7 @@ export default function InventoryDetailModal({
                               <p className="font-semibold" title={batch.batchNo}>{truncateBatchNo(batch.batchNo)}</p>
                               <div className="mt-1 flex flex-wrap items-center gap-2">
                                 <p className={`truncate text-xs ${theme.muted}`}>Lot {batch.lotNo || "-"}</p>
-                                <span className="rounded-full bg-zinc-500/10 px-2 py-0.5 text-[11px] font-semibold text-zinc-500">Depleted</span>
+                                <span className="rounded-full bg-zinc-500/10 px-2 py-0.5 text-[11px] font-semibold text-zinc-500">អស់ស្តុក</span>
                               </div>
                             </td>
                             <td className="px-4 py-4">{batch.expiredDate || "-"}</td>
@@ -249,7 +251,7 @@ export default function InventoryDetailModal({
                             </td>
                             <td className="px-4 py-4">
                               <p className="font-semibold">${Number(batch.unitCostBase || 0).toFixed(3)}</p>
-                              <p className={`mt-1 text-xs ${theme.muted}`}>per {baseUnitLabel} · $0.00</p>
+                              <p className={`mt-1 text-xs ${theme.muted}`}>ក្នុង {baseUnitLabel} · $0.00</p>
                             </td>
                           </tr>
                         ))}
@@ -263,8 +265,8 @@ export default function InventoryDetailModal({
             <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
               <SectionTitle
                 icon={<FiClock />}
-                title="Recent Stock Movements"
-                subtitle="Latest stock in, stock out, and adjustments."
+                title="ចលនាស្តុកថ្មីៗ"
+                subtitle="ស្តុកចូល ស្តុកចេញ និងការកែតម្រូវចុងក្រោយ"
                 theme={theme}
               />
 
@@ -286,8 +288,8 @@ export default function InventoryDetailModal({
 
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-3">
-                              <p className="min-w-0 text-sm font-semibold capitalize leading-5">
-                                {movement.type.replaceAll("_", " ")}
+                              <p className="min-w-0 text-sm font-semibold leading-5">
+                                {formatMovementTypeKh(movement.type)}
                               </p>
                               <p className={`shrink-0 text-sm font-bold ${qtyColor}`}>
                                 {isIn ? "+" : ""}{Number(movement.qtyBase).toLocaleString()} {baseUnitLabel}
@@ -299,12 +301,16 @@ export default function InventoryDetailModal({
                             </p>
 
                             <p className="mt-2 inline-flex rounded-full bg-purple-500/10 px-2 py-1 text-[11px] font-semibold text-purple-500">
-                              {movement.referenceLabel || movement.refType || "No reference"}
+                              {(() => {
+                                const ref = movement.referenceLabel || movement.refType || "";
+                                const translated = ref.replace(/^purchase\s+#(\d+)$/i, "ការទិញ #$1").replace(/^sale\s+#(\d+)$/i, "ការលក់ #$1").replace(/^adjustment\s+#(\d+)$/i, "ការកែតម្រូវ #$1");
+                                return translated || "គ្មានតំណភ្ជាប់";
+                              })()}
                               {movement.sourcePurchaseNo ? ` · ${movement.sourcePurchaseNo}` : ""}
                             </p>
 
                             <p className={`mt-2 line-clamp-2 text-xs leading-5 ${theme.muted}`}>
-                              {movement.note || "-"}
+                              {translateNote(movement.note) || "-"}
                             </p>
                           </div>
                         </div>
@@ -313,7 +319,7 @@ export default function InventoryDetailModal({
                   })
                 ) : (
                   <div className={`rounded-xl border border-dashed p-6 text-center text-sm lg:col-span-2 ${theme.softCard}`}>
-                    <p className={theme.muted}>No stock movement yet.</p>
+                    <p className={theme.muted}>គ្មានចលនាស្តុកនៅឡើយ</p>
                   </div>
                 )}
               </div>

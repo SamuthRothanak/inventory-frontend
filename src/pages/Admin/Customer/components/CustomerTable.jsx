@@ -1,4 +1,4 @@
-import {
+﻿import {
   FiCheckSquare,
   FiCheckCircle,
   FiChevronLeft,
@@ -60,13 +60,13 @@ export default function CustomerTable({
       <div className="flex flex-col gap-3 border-b border-zinc-200 px-5 py-4 dark:border-white/10 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className={`text-base font-semibold ${theme.pageTitle}`}>
-            Customer List
+            បញ្ជីអតិថិជន
           </h2>
 
           <p className={`mt-1 text-xs ${theme.muted}`}>
             {isLoading
-              ? "Loading customers..."
-              : `Showing ${from || 0}-${to || customers.length} of ${totalCustomers} customers`}
+              ? "រង់ចាំបន្តិច..."
+              : `បង្ហាញ ${from || 0}-${to || customers.length} នៃ ${totalCustomers} អតិថិជន`}
           </p>
         </div>
 
@@ -80,7 +80,7 @@ export default function CustomerTable({
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-xs font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
               >
                 <FiX />
-                Cancel
+                បោះបង់
               </button>
 
               <button
@@ -91,8 +91,8 @@ export default function CustomerTable({
               >
                 <FiTrash2 />
                 {bulkDeleteIsPending
-                  ? "Deleting..."
-                  : `Delete Selected (${selectedCustomerIds.length})`}
+                  ? "កំពុងលុប..."
+                  : `លុបដែលបានជ្រើស (${selectedCustomerIds.length})`}
               </button>
             </>
           ) : (
@@ -103,7 +103,7 @@ export default function CustomerTable({
               className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-xs font-semibold text-red-500 shadow-sm transition hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FiCheckSquare />
-              Select Multiple
+              ជ្រើសរើសច្រើន
             </button>
           )}
         </div>
@@ -119,30 +119,30 @@ export default function CustomerTable({
                     type="checkbox"
                     checked={allVisibleSelected}
                     onChange={onToggleSelectAll}
-                    aria-label="Select all visible customers"
+                    aria-label="ជ្រើសអតិថិជនទាំងអស់លើទំព័រនេះ"
                     className="h-4 w-4 rounded border-white/60 text-red-500 focus:ring-red-500"
                   />
                 </th>
               )}
 
               <th className="px-5 py-3 text-left text-sm font-semibold">
-                Customer
+                អតិថិជន
               </th>
 
               <th className="px-5 py-3 text-left text-sm font-semibold">
-                Contact
+                ទំនាក់ទំនង
               </th>
 
               <th className="px-5 py-3 text-left text-sm font-semibold">
-                Address
+                អាសយដ្ឋាន
               </th>
 
               <th className="px-5 py-3 text-center text-sm font-semibold">
-                Status
+                ស្ថានភាព
               </th>
 
               <th className="px-5 py-3 text-center text-sm font-semibold">
-                Actions
+                សកម្មភាព
               </th>
             </tr>
           </thead>
@@ -152,13 +152,13 @@ export default function CustomerTable({
               <TableLoading
                 theme={theme}
                 colSpan={tableColSpan}
-                text="Loading customers..."
+                text="រង់ចាំបន្តិច..."
               />
             ) : isError ? (
               <tr className={`border-t ${theme.row}`}>
                 <td colSpan={tableColSpan} className="px-4 py-14 text-center">
                   <p className="text-sm font-semibold text-red-500">
-                    Failed to load customers.
+                    មិនអាចផ្ទុកអតិថិជនបានទេ។
                   </p>
                 </td>
               </tr>
@@ -176,7 +176,7 @@ export default function CustomerTable({
                           (id) => Number(id) === Number(item.id)
                         )}
                         onChange={() => onToggleSelect(item.id)}
-                        aria-label={`Select ${item.shopName}`}
+                        aria-label={`ជ្រើស ${item.shopName}`}
                         className="h-4 w-4 rounded border-zinc-300 text-red-500 focus:ring-red-500 dark:border-white/20"
                       />
                     </td>
@@ -201,7 +201,7 @@ export default function CustomerTable({
                           </span>
 
                           <span className={`text-xs ${theme.muted}`}>
-                            {item.contactName || "No contact"}
+                            {item.contactName || "គ្មានអ្នកទំនាក់ទំនង"}
                           </span>
                         </div>
                       </div>
@@ -216,7 +216,7 @@ export default function CustomerTable({
                       </div>
 
                       <p className={`text-xs ${theme.muted}`}>
-                        Updated: {item.updatedAt}
+                        បានកែ: {item.updatedAt}
                       </p>
                     </div>
                   </td>
@@ -238,33 +238,36 @@ export default function CustomerTable({
 
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onView(item)}
-                        title="View customer"
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
-                      >
-                        <FiEye size={16} />
-                      </button>
+                      <Tooltip label="មើលអតិថិជន">
+                        <button
+                          type="button"
+                          onClick={() => onView(item)}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
+                        >
+                          <FiEye size={16} />
+                        </button>
+                      </Tooltip>
 
-                      <button
-                        type="button"
-                        onClick={() => onEdit(item)}
-                        title="Edit customer"
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
-                      >
-                        <FiEdit2 size={16} />
-                      </button>
+                      <Tooltip label="កែអតិថិជន">
+                        <button
+                          type="button"
+                          onClick={() => onEdit(item)}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                        >
+                          <FiEdit2 size={16} />
+                        </button>
+                      </Tooltip>
 
-                      <button
-                        type="button"
-                        disabled={isDeleting}
-                        onClick={() => onDelete(item)}
-                        title="Delete customer"
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <FiTrash2 size={16} />
-                      </button>
+                      <Tooltip label="លុបអតិថិជន">
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          onClick={() => onDelete(item)}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <FiTrash2 size={16} />
+                        </button>
+                      </Tooltip>
                     </div>
                   </td>
                 </tr>
@@ -282,11 +285,11 @@ export default function CustomerTable({
                     <p
                       className={`mt-4 text-sm font-semibold ${theme.pageTitle}`}
                     >
-                      No customers found
+                      រកមិនឃើញអតិថិជន
                     </p>
 
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      Try changing your search keyword or status filter.
+                      សូមប្តូរពាក្យស្វែងរក ឬតម្រងស្ថានភាព។
                     </p>
                   </div>
                 </td>
@@ -299,7 +302,7 @@ export default function CustomerTable({
       {!isLoading && !isError && totalPages > 1 && (
         <div className="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 dark:border-white/10 md:flex-row md:items-center md:justify-between">
           <p className={`text-xs ${theme.muted}`}>
-            Page {currentPage} of {totalPages}
+            ទំព័រ {currentPage} នៃ {totalPages}
           </p>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -310,7 +313,7 @@ export default function CustomerTable({
               className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
             >
               <FiChevronLeft />
-              Previous
+              ថយក្រោយ
             </button>
 
             {pageNumbers.map((item) =>
@@ -344,7 +347,7 @@ export default function CustomerTable({
               onClick={() => onPageChange(currentPage + 1)}
               className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
             >
-              Next
+              បន្ទាប់
               <FiChevronRight />
             </button>
           </div>
@@ -386,6 +389,19 @@ function getPageNumbers(currentPage, totalPages) {
   ];
 }
 
+function Tooltip({ label, children }) {
+  return (
+    <div className="relative inline-flex group">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-zinc-700">
+        {label}
+        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-zinc-800 dark:border-t-zinc-700" />
+      </span>
+    </div>
+  );
+}
+
+
 function StatusBadge({ status }) {
   const isActive = status === "Active";
 
@@ -398,7 +414,7 @@ function StatusBadge({ status }) {
       }`}
     >
       {isActive ? <FiCheckCircle /> : <FiXCircle />}
-      {status}
+      {isActive ? "ដំណើរការ" : "មិនដំណើរការ"}
     </span>
   );
 }

@@ -1,0 +1,141 @@
+export const auditLogModules = [
+  { label: "All Modules",  value: "all" },
+  { label: "Auth",         value: "auth" },
+  { label: "Sales",        value: "sales" },
+  { label: "Purchases",    value: "purchases" },
+  { label: "Inventory",    value: "inventory" },
+  { label: "Products",     value: "products" },
+  { label: "Categories",   value: "categories" },
+  { label: "Users",        value: "users" },
+  { label: "Settings",     value: "settings" },
+];
+
+export const auditLogActions = [
+  { label: "All Actions", value: "all" },
+  { label: "Login",       value: "login" },
+  { label: "Logout",      value: "logout" },
+  { label: "Created",     value: "created" },
+  { label: "Updated",     value: "updated" },
+  { label: "Deleted",     value: "deleted" },
+  { label: "Cancelled",   value: "cancelled" },
+];
+
+export const pageSizeOptions = [
+  { label: "10 / page", value: 10 },
+  { label: "20 / page", value: 20 },
+  { label: "50 / page", value: 50 },
+];
+
+export const auditLogRows = [
+  {
+    id: 1008,
+    user_id: 1,
+    user_name: "Admin",
+    module: "inventory",
+    action: "created",
+    ref_table: "stock_movements",
+    ref_id: 23,
+    description: "Confirmed purchase stock in for 40 case Coca-Cola.",
+    old_values: null,
+    new_values: {
+      product_variant_id: 1,
+      movement_type: "purchase_in",
+      qty_base: 960,
+      reference_no: "PUR-20260615-0003",
+    },
+    ip_address: "127.0.0.1",
+    created_at: "2026-06-15T09:15:00+07:00",
+  },
+  {
+    id: 1007,
+    user_id: 1,
+    user_name: "Admin",
+    module: "purchases",
+    action: "updated",
+    ref_table: "purchases",
+    ref_id: 18,
+    description: "Supplier claim resolved by replacement.",
+    old_values: {
+      status: "pending_claim",
+      claim_qty: 10,
+    },
+    new_values: {
+      status: "pending_stock_in",
+      claim_qty: 0,
+    },
+    ip_address: "127.0.0.1",
+    created_at: "2026-06-15T09:07:00+07:00",
+  },
+  {
+    id: 1006,
+    user_id: 1,
+    user_name: "Admin",
+    module: "products",
+    action: "updated",
+    ref_table: "product_variants",
+    ref_id: 4,
+    description: "Updated low stock threshold for Coca-Cola Can.",
+    old_values: {
+      low_stock_threshold: 24,
+    },
+    new_values: {
+      low_stock_threshold: 48,
+    },
+    ip_address: "127.0.0.1",
+    created_at: "2026-06-15T08:30:00+07:00",
+  },
+  {
+    id: 1005,
+    user_id: 1,
+    user_name: "Admin",
+    module: "categories",
+    action: "deleted",
+    ref_table: "categories",
+    ref_id: 12,
+    description: "Deleted inactive category.",
+    old_values: {
+      name: "Test Category",
+      status: "inactive",
+    },
+    new_values: null,
+    ip_address: "127.0.0.1",
+    created_at: "2026-06-14T17:42:00+07:00",
+  },
+  {
+    id: 1004,
+    user_id: 1,
+    user_name: "Admin",
+    module: "sales",
+    action: "created",
+    ref_table: "sales",
+    ref_id: 31,
+    description: "Created sale invoice with split payment.",
+    old_values: null,
+    new_values: {
+      sale_no: "SAL-20260614-0031",
+      grand_total_usd: 20,
+      payment_status: "paid",
+    },
+    ip_address: "127.0.0.1",
+    created_at: "2026-06-14T14:25:00+07:00",
+  },
+  {
+    id: 1003,
+    user_id: 1,
+    user_name: "Admin",
+    module: "settings",
+    action: "updated",
+    ref_table: "settings",
+    ref_id: 1,
+    description: "Changed shop profile contact information.",
+    old_values: {
+      phone: "012345678",
+    },
+    new_values: {
+      phone: "010123456",
+    },
+    ip_address: "127.0.0.1",
+    created_at: "2026-06-14T10:10:00+07:00",
+  },
+];
+

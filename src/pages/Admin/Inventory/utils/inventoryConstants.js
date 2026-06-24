@@ -189,13 +189,27 @@ export const emptyAdjustmentForm = {
 };
 
 export const adjustmentReasons = [
-  { value: "damaged", label: "Damaged" },
-  { value: "expired", label: "Expired" },
-  { value: "internal_use", label: "Internal Use" },
-  { value: "lost", label: "Lost" },
-  { value: "stock_count", label: "Stock Count" },
-  { value: "correction", label: "Correction" },
-  { value: "other", label: "Other" },
+  { value: "damaged", label: "ខូចខាត" },
+  { value: "expired", label: "ផុតកំណត់" },
+  { value: "internal_use", label: "ដកប្រើប្រាស់ខ្លួនឯង" },
+  { value: "lost", label: "បាត់" },
+  { value: "stock_count", label: "រាប់ស្តុកពិតប្រាកដ" },
+  { value: "correction", label: "ការកែតម្រូវ" },
+  { value: "other", label: "ផ្សេងទៀត" },
+];
+
+export const stockInReasons = [
+  { value: "stock_count", label: "រាប់ស្តុកពិតប្រាកដ" },
+  { value: "correction", label: "ការកែតម្រូវ" },
+  { value: "other", label: "ផ្សេងទៀត" },
+];
+
+export const stockOutReasons = [
+  { value: "damaged", label: "ខូចខាត" },
+  { value: "expired", label: "ផុតកំណត់" },
+  { value: "internal_use", label: "ដកប្រើប្រាស់ខ្លួនឯង" },
+  { value: "lost", label: "បាត់" },
+  { value: "other", label: "ផ្សេងទៀត" },
 ];
 
 export function getPageNumbers(currentPage, totalPages) {

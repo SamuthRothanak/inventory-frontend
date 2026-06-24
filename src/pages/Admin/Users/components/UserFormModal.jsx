@@ -1,15 +1,22 @@
+﻿import { useState } from "react";
 import {
   FiX,
   FiSave,
   FiUser,
   FiLock,
   FiShield,
+  FiToggleRight,
   FiMail,
   FiPhone,
   FiHash,
   FiChevronDown,
   FiAlertCircle,
+  FiEye,
+  FiEyeOff,
 } from "react-icons/fi";
+
+const sanitizePhone = (value) =>
+  String(value || "").replace(/[^0-9+\-\s(),/]/g, "");
 
 export default function UserFormModal({
   isEdit,
@@ -21,9 +28,13 @@ export default function UserFormModal({
   closeModal,
   createMutation,
   updateMutation,
+  resetPasswordMutation,
   theme,
 }) {
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isSaving =
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    (resetPasswordMutation?.isPending ?? false);
 
   return (
     <div
@@ -39,13 +50,13 @@ export default function UserFormModal({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h2 className="text-xl font-bold tracking-tight">
-                {isEdit ? "Update User" : "Add User"}
+                {isEdit ? "កែអ្នកប្រើប្រាស់" : "បន្ថែមអ្នកប្រើប្រាស់"}
               </h2>
 
               <p className={`mt-1.5 text-sm leading-6 ${theme.muted}`}>
                 {isEdit
-                  ? "Update user information and role."
-                  : "Create a new system user with login credentials."}
+                  ? "កែព័ត៌មានអ្នកប្រើប្រាស់ និងតួនាទី ។"
+                  : "បង្កើតគណនីអ្នកប្រើប្រាស់ក្នុងប្រព័ន្ធ ។"}
               </p>
             </div>
 
@@ -93,18 +104,18 @@ export default function UserFormModal({
               )}
 
               <FormSection
-                title="1. User Information"
-                subtitle="Basic user profile and contact information."
+                title="១. ព័ត៌មានអ្នកប្រើប្រាស់"
+                subtitle="ព័ត៌មានផ្ទាល់ខ្លួននិងទំនាក់ទំនង ។"
                 icon={<FiUser />}
                 theme={theme}
               >
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <FormInput
-                    label="Full Name"
+                    label="ឈ្មោះពេញ"
                     required
                     register={register("name")}
                     error={errors.name}
-                    placeholder="Full name"
+                    placeholder="ឈ្មោះពេញ"
                     theme={theme}
                     icon={<FiUser />}
                   />
@@ -114,13 +125,13 @@ export default function UserFormModal({
                     required
                     register={register("username")}
                     error={errors.username}
-                    placeholder="Enter username"
+                    placeholder="បញ្ចូល username"
                     theme={theme}
                     icon={<FiHash />}
                   />
 
                   <FormInput
-                    label="Email"
+                    label="អ៊ីមែល"
                     required
                     type="email"
                     register={register("email")}
@@ -131,72 +142,87 @@ export default function UserFormModal({
                   />
 
                   <FormInput
-                    label="Phone"
+                    label="ទូរស័ព្ទ"
                     register={register("phone")}
                     error={errors.phone}
-                    placeholder="Enter phone number"
+                    placeholder="012345678 / 098765432"
                     theme={theme}
                     icon={<FiPhone />}
+                    sanitize={sanitizePhone}
                   />
                 </div>
               </FormSection>
 
-              {!isEdit && (
-                <FormSection
-                  title="2. Password"
-                  subtitle="Set secure login credentials for this user."
-                  icon={<FiLock />}
-                  theme={theme}
-                >
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <FormInput
-                      label="Password"
-                      required
-                      type="password"
-                      register={register("password")}
-                      error={errors.password}
-                      placeholder="Min 6 characters"
-                      theme={theme}
-                      icon={<FiLock />}
-                    />
+              <FormSection
+                title={isEdit ? "២. ផ្លាស់ប្ដូរលេខសម្ងាត់" : "២. លេខសម្ងាត់"}
+                subtitle={
+                  isEdit
+                    ? "ទុកទំនេរដើម្បីរក្សាលេខសម្ងាត់ចាស់ ។"
+                    : "កំណត់លេខសម្ងាត់សម្រាប់ចូលប្រព័ន្ធ ។"
+                }
+                icon={<FiLock />}
+                theme={theme}
+              >
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <PasswordInput
+                    label={isEdit ? "លេខសម្ងាត់ថ្មី" : "លេខសម្ងាត់"}
+                    required={!isEdit}
+                    register={register("password")}
+                    error={errors.password}
+                    placeholder={isEdit ? "ទុកទំនេរដើម្បីរក្សាលេខសម្ងាត់ចាស់" : "យ៉ាងតិច 6 តួអក្សរ"}
+                    theme={theme}
+                  />
 
-                    <FormInput
-                      label="Confirm Password"
-                      required
-                      type="password"
-                      register={register("password_confirmation")}
-                      error={errors.password_confirmation}
-                      placeholder="Confirm password"
-                      theme={theme}
-                      icon={<FiLock />}
-                    />
-                  </div>
-                </FormSection>
-              )}
+                  <PasswordInput
+                    label="បញ្ជាក់លេខសម្ងាត់"
+                    required={!isEdit}
+                    register={register("password_confirmation")}
+                    error={errors.password_confirmation}
+                    placeholder="បញ្ជាក់លេខសម្ងាត់"
+                    theme={theme}
+                  />
+                </div>
+              </FormSection>
 
               <FormSection
-                title={isEdit ? "2. Role & Access" : "3. Role & Access"}
-                subtitle="Role controls what this user can access in the system."
+                title={isEdit ? "៣. តួនាទី & ស្ថានភាព" : "៣. តួនាទី & សិទ្ធិ"}
+                subtitle={isEdit ? "កែតួនាទីនិងស្ថានភាពគណនី ។" : "តួនាទីកំណត់សិទ្ធិចូលប្រើប្រព័ន្ធ ។"}
                 icon={<FiShield />}
                 theme={theme}
               >
-                <FormSelect
-                  label="Role"
-                  required
-                  register={register("role")}
-                  error={errors.role}
-                  theme={theme}
-                  icon={<FiShield />}
-                  options={[
-                    { value: "staff", label: "Staff" },
-                    { value: "admin", label: "Admin" },
-                    { value: "cashier", label: "Cashier" },
-                  ]}
-                />
+                <div className={`grid gap-4 ${isEdit ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
+                  <FormSelect
+                    label="តួនាទី"
+                    required
+                    register={register("role")}
+                    error={errors.role}
+                    theme={theme}
+                    icon={<FiShield />}
+                    options={[
+                      { value: "staff",   label: "បុគ្គលិក" },
+                      { value: "admin",   label: "អ្នកគ្រប់គ្រង" },
+                      { value: "cashier", label: "អ្នកគិតលុយ" },
+                    ]}
+                  />
+
+                  {isEdit && (
+                    <FormSelect
+                      label="ស្ថានភាព"
+                      required
+                      register={register("status")}
+                      error={errors.status}
+                      theme={theme}
+                      icon={<FiToggleRight />}
+                      options={[
+                        { value: "active",   label: "ដំណើរការ" },
+                        { value: "inactive", label: "មិនដំណើរការ" },
+                      ]}
+                    />
+                  )}
+                </div>
 
                 <p className={`mt-3 text-xs leading-5 ${theme.muted}`}>
-                  Admin can manage system data. Cashier is mainly for POS. Staff
-                  has limited access.
+                  អ្នកគ្រប់គ្រង អាចគ្រប់គ្រងទិន្ន័យប្រព័ន្ធ ។ អ្នកគិតលុយ សម្រាប់ POS ។ បុគ្គលិក មានសិទ្ធិចំកាត់ ។
                 </p>
               </FormSection>
             </div>
@@ -218,7 +244,7 @@ export default function UserFormModal({
                   dark:hover:bg-white/10 dark:hover:text-white
                 "
               >
-                Cancel
+                បោះបង់
               </button>
 
               <button
@@ -232,7 +258,7 @@ export default function UserFormModal({
                 "
               >
                 <FiSave />
-                {isSaving ? "Saving..." : isEdit ? "Update User" : "Save User"}
+                {isSaving ? "កំពុងរក្សាទុក..." : isEdit ? "កែអ្នកប្រើប្រាស់" : "រក្សាទុក"}
               </button>
             </div>
           </div>
@@ -275,7 +301,18 @@ function FormInput({
   type = "text",
   placeholder = "",
   icon,
+  sanitize,
 }) {
+  const inputProps = sanitize
+    ? {
+        ...register,
+        onChange: (event) => {
+          event.target.value = sanitize(event.target.value);
+          register?.onChange?.(event);
+        },
+      }
+    : register;
+
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
@@ -294,14 +331,54 @@ function FormInput({
 
         <input
           type={type}
-          {...register}
+          {...inputProps}
           placeholder={placeholder}
+          inputMode={sanitize === sanitizePhone ? "tel" : undefined}
           className={`h-11 w-full rounded-xl border ${
             icon ? "pl-10" : "px-3"
           } pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${
             error ? "border-red-500 focus:border-red-500" : ""
           }`}
         />
+      </div>
+
+      {error && <p className="mt-1.5 text-xs text-red-400">{error.message}</p>}
+    </label>
+  );
+}
+
+function PasswordInput({ label, required = false, register, error, theme, placeholder = "" }) {
+  const [show, setShow] = useState(false);
+
+  return (
+    <label className="block">
+      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
+        {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
+      </span>
+
+      <div className="relative">
+        <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>
+          <FiLock />
+        </span>
+
+        <input
+          type={show ? "text" : "password"}
+          {...register}
+          placeholder={placeholder}
+          className={`h-11 w-full rounded-xl border pl-10 pr-10 text-sm outline-none transition focus:ring-4 ${theme.input} ${
+            error ? "border-red-500 focus:border-red-500" : ""
+          }`}
+        />
+
+        <button
+          type="button"
+          onClick={() => setShow((v) => !v)}
+          className={`absolute right-3 top-1/2 -translate-y-1/2 text-base transition hover:opacity-70 ${theme.muted}`}
+          tabIndex={-1}
+        >
+          {show ? <FiEyeOff /> : <FiEye />}
+        </button>
       </div>
 
       {error && <p className="mt-1.5 text-xs text-red-400">{error.message}</p>}

@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import {
   FiAlertTriangle,
+  FiCalendar,
   FiCheckCircle,
   FiChevronLeft,
   FiChevronRight,
@@ -54,9 +56,11 @@ import {
   PurchaseMobileCard,
   PurchaseReturnModal,
   ReceiveReplacementModal,
+  ResolveMoneyClaimModal,
   RecordPaymentModal,
   PurchaseTable,
   SummaryCard,
+  Tooltip,
   ViewPurchaseModal,
 } from "./components";
 import {
@@ -68,7 +72,9 @@ import {
 import {
   paymentModeOptions,
   RETURN_STATUS,
+  RETURN_STATUS_LABEL,
   STATUS,
+  STATUS_LABEL,
 } from "./utils/purchaseConstants";
 import {
   buildTheme,
@@ -80,6 +86,7 @@ import {
   formatCurrencyPair,
   formatDateOnly,
   formatMoney,
+  formatCondition,
   formatSnake,
   getErrorMessage,
   getPaginationMeta,
@@ -99,6 +106,7 @@ export default function Purchases() {
   const theme = buildTheme(isDark);
   const queryClient = useQueryClient();
   const notify = useNotification();
+  const confirm = useConfirm();
 
   const [localPurchases, setLocalPurchases] = useState([]);
   const [purchaseReturns, setPurchaseReturns] = useState([]);
@@ -107,7 +115,8 @@ export default function Purchases() {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [paymentModeFilter, setPaymentModeFilter] = useState("All");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("All");
+  const [dateFilter, setDateFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
@@ -136,7 +145,22 @@ export default function Purchases() {
   const [replacementItems, setReplacementItems] = useState([]);
   const [replacementErrors, setReplacementErrors] = useState({});
 
-  useLockBodyScroll(Boolean(modalMode || itemModalOpen || replacementModalOpen));
+  const [resolveMoneyModalOpen, setResolveMoneyModalOpen] = useState(false);
+  const [resolveMoneyPurchase, setResolveMoneyPurchase] = useState(null);
+  const [resolveMoneyReturn, setResolveMoneyReturn] = useState(null);
+
+  useLockBodyScroll(Boolean(modalMode || itemModalOpen || replacementModalOpen || resolveMoneyModalOpen));
+
+  const [activeTab, setActiveTab] = useState("orders");
+  const [returnStatusFilter, setReturnStatusFilter] = useState("open");
+  const [paymentViewFilter, setPaymentViewFilter] = useState("outstanding");
+  const [newReturnPanelOpen, setNewReturnPanelOpen] = useState(false);
+  const [newReturnSearchTerm, setNewReturnSearchTerm] = useState("");
+  const [expandedReturnId, setExpandedReturnId] = useState(null);
+
+  const [receiveSearchTerm, setReceiveSearchTerm] = useState("");
+  const [returnSearchTerm, setReturnSearchTerm] = useState("");
+  const [paymentSearchTerm, setPaymentSearchTerm] = useState("");
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -148,7 +172,15 @@ export default function Purchases() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearchTerm, statusFilter, paymentModeFilter, perPage]);
+  }, [debouncedSearchTerm, statusFilter, paymentStatusFilter, perPage]);
+
+  useEffect(() => {
+    setNewReturnPanelOpen(false);
+    setNewReturnSearchTerm("");
+    setReceiveSearchTerm("");
+    setReturnSearchTerm("");
+    setPaymentSearchTerm("");
+  }, [activeTab]);
 
   const purchasesQuery = useQuery({
     queryKey: [
@@ -158,7 +190,7 @@ export default function Purchases() {
         perPage,
         search: debouncedSearchTerm,
         statusFilter,
-        paymentModeFilter,
+        paymentStatusFilter,
       },
     ],
     queryFn: () =>
@@ -167,8 +199,8 @@ export default function Purchases() {
         per_page: perPage,
         search: debouncedSearchTerm || undefined,
         status: statusFilter === "All" ? undefined : statusToApi(statusFilter),
-        payment_mode:
-          paymentModeFilter === "All" ? undefined : paymentModeFilter,
+        payment_status:
+          paymentStatusFilter === "All" ? undefined : paymentStatusFilter,
       }),
     keepPreviousData: true,
   });
@@ -176,6 +208,12 @@ export default function Purchases() {
   const purchaseStatsQuery = useQuery({
     queryKey: ["purchases", "stats"],
     queryFn: getPurchaseStatsApi,
+    staleTime: 1000 * 60,
+  });
+
+  const allPurchasesQuery = useQuery({
+    queryKey: ["purchases", "all-unpaginated"],
+    queryFn: () => getPurchasesApi({ per_page: 500 }),
     staleTime: 1000 * 60,
   });
 
@@ -223,7 +261,7 @@ export default function Purchases() {
       purchaseNo: item.purchase_no || item.purchaseNo || "",
       supplierId: item.supplier_id || item.supplierId || "",
       supplierName: item.supplier_name || item.supplierName || item.supplier?.name || "",
-      returnDate: item.return_date || item.returnDate || "",
+      returnDate: item.return_date || item.returnDate || (item.created_at ? String(item.created_at).slice(0, 10) : ""),
       returnType: item.return_type || item.returnType || "",
       returnReason: item.return_reason || item.returnReason || "",
       resolutionType: normalizeReturnResolutionType(item.resolution_type || item.resolutionType || ""),
@@ -241,6 +279,9 @@ export default function Purchases() {
       creditStatus: item.credit_status || item.creditStatus || "none",
       note: item.note || "",
       status: normalizeReturnStatusLabel(item.status || item.resolution_status || item.resolutionStatus || RETURN_STATUS.SUBMITTED),
+      replacementQty: Number(item.replacement_qty ?? item.replacementQty ?? 0),
+      replacementReceivedQty: Number(item.replacement_received_qty ?? item.replacementReceivedQty ?? 0),
+      replacementStockedInQty: Number(item.replacement_stocked_in_qty ?? item.replacementStockedInQty ?? 0),
       items: item.items || item.purchase_return_items || [],
       raw: item,
     })));
@@ -286,6 +327,12 @@ export default function Purchases() {
   }, [purchasesQuery.data]);
 
   const purchases = purchasesQuery.data ? serverPurchases : localPurchases;
+
+  const allPurchases = useMemo(
+    () => extractApiData(allPurchasesQuery.data).map(normalizePurchase),
+    [allPurchasesQuery.data]
+  );
+
   const pagination = useMemo(() => {
     return getPaginationMeta(purchasesQuery.data, purchases.length);
   }, [purchasesQuery.data, purchases.length]);
@@ -313,6 +360,17 @@ export default function Purchases() {
 
   const filteredPurchases = useMemo(() => {
     const search = searchTerm.toLowerCase();
+    const fmtLocal = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    const today = new Date();
+    const todayStr = fmtLocal(today);
+
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
+    const weekStartStr = fmtLocal(weekStart);
+
+    const monthStartStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
 
     return purchases.filter((purchase) => {
       const matchesSearch =
@@ -324,10 +382,18 @@ export default function Purchases() {
         );
 
       const matchesStatus = statusFilter === "All" || purchase.status === statusFilter;
-      const matchesPaymentMode = paymentModeFilter === "All" || purchase.paymentMode === paymentModeFilter;
-      return matchesSearch && matchesStatus && matchesPaymentMode;
+      const matchesPaymentStatus = paymentStatusFilter === "All" || purchase.paymentStatus === paymentStatusFilter;
+
+      const d = purchase.purchaseDate ? String(purchase.purchaseDate).slice(0, 10) : "";
+      const matchesDate =
+        dateFilter === "all" ||
+        (dateFilter === "today" && d === todayStr) ||
+        (dateFilter === "week" && d >= weekStartStr && d <= todayStr) ||
+        (dateFilter === "month" && d >= monthStartStr && d <= todayStr);
+
+      return matchesSearch && matchesStatus && matchesPaymentStatus && matchesDate;
     });
-  }, [purchases, searchTerm, statusFilter, paymentModeFilter]);
+  }, [purchases, searchTerm, statusFilter, paymentStatusFilter, dateFilter]);
 
   const totalPurchaseReturnAmount = purchaseReturns.reduce((total, item) => total + Number(item.subtotal || 0), 0);
 
@@ -370,8 +436,11 @@ export default function Purchases() {
   const normalizeReturnStatusLabel = (value = RETURN_STATUS.DRAFT) => {
     const status = String(value || "").trim().toLowerCase();
     const map = {
+      draft: RETURN_STATUS.DRAFT,
       submitted: RETURN_STATUS.SUBMITTED,
       approved: RETURN_STATUS.APPROVED,
+      waiting_replacement: RETURN_STATUS.WAITING_REPLACEMENT,
+      "waiting replacement": RETURN_STATUS.WAITING_REPLACEMENT,
       rejected: RETURN_STATUS.REJECTED,
       resolved: RETURN_STATUS.COMPLETED,
       completed: RETURN_STATUS.COMPLETED,
@@ -444,9 +513,10 @@ export default function Purchases() {
       return resolutionType === "replacement" && receivedQty > stockedQty;
     });
 
-  const pendingReceive = purchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_RECEIVE).length;
-  const pendingStockIn = purchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_STOCK_IN).length;
-  const pendingClaims = purchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_CLAIM).length;
+  const pendingReceive = allPurchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_RECEIVE).length;
+  const pendingStockIn = allPurchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_STOCK_IN).length;
+  const pendingClaims = allPurchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_CLAIM).length;
+  const pendingClaimWithStock = allPurchases.filter((p) => p.status === STATUS.PENDING_CLAIM && hasRemainingStockInQty(p)).length;
   const purchaseStats = extractApiObject(purchaseStatsQuery.data) || {};
   const totalPurchasesCount = Number(purchaseStats.total_purchases ?? purchaseStats.totalPurchases ?? pagination.total ?? purchases.length);
   const pendingReceiveCount = Number(purchaseStats.pending_receive ?? purchaseStats.pendingReceive ?? pendingReceive);
@@ -459,6 +529,115 @@ export default function Purchases() {
 
   const fmtUsd = (n) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtKhr = (n) => `៛${Math.round(n).toLocaleString("en-US")}`;
+
+  const filteredTotalUsd = filteredPurchases.reduce((sum, p) => sum + Number(p.grandTotalUsd || 0), 0);
+  const filteredCount = filteredPurchases.length;
+  const isDateFiltered = dateFilter !== "all";
+
+  const openReturnsCount = purchaseReturns.filter((r) =>
+    ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(
+      normalizeReturnStatusLabel(r.status || r.resolutionStatus)
+    )
+  ).length;
+
+  const resolvedReturnsCount = purchaseReturns.filter((r) =>
+    [RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(
+      normalizeReturnStatusLabel(r.status || r.resolutionStatus)
+    )
+  ).length;
+
+  const isPaymentReady = (p) => {
+    if ((p.paymentMode || "").toLowerCase() === "pay_after_check") {
+      return [STATUS.PENDING_STOCK_IN, STATUS.PENDING_CLAIM, STATUS.RECEIVED].includes(
+        getEffectivePurchaseStatus(p)
+      );
+    }
+    return true;
+  };
+
+  const unpaidCount = allPurchases.filter(
+    (p) =>
+      p.paymentStatus !== "paid" &&
+      p.status !== STATUS.CANCELLED &&
+      Number(p.balanceAmountUsd || 0) > 0 &&
+      isPaymentReady(p)
+  ).length;
+
+  const totalOutstandingUsd = allPurchases
+    .filter((p) => p.paymentStatus !== "paid" && p.status !== STATUS.CANCELLED && isPaymentReady(p))
+    .reduce((sum, p) => sum + Number(p.balanceAmountUsd || 0), 0);
+
+  const receiveFilteredList = (() => {
+    const base = allPurchases.filter((p) => {
+      const eff = getEffectivePurchaseStatus(p);
+      if ([STATUS.PENDING_RECEIVE, STATUS.PENDING_STOCK_IN].includes(eff)) return true;
+      return p.status === STATUS.PENDING_CLAIM && (hasRemainingStockInQty(p) || hasPendingReplacementStockIn(p));
+    });
+    const q = receiveSearchTerm.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(
+      (p) =>
+        (p.purchaseNo || "").toLowerCase().includes(q) ||
+        (p.supplierName || "").toLowerCase().includes(q)
+    );
+  })();
+
+  const returnFilteredList = (() => {
+    let list = purchaseReturns;
+    if (returnStatusFilter === "open")
+      list = list.filter((r) =>
+        ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(normalizeReturnStatusLabel(r.status || r.resolutionStatus))
+      );
+    else if (returnStatusFilter === "resolved")
+      list = list.filter((r) =>
+        [RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(normalizeReturnStatusLabel(r.status || r.resolutionStatus))
+      );
+    const q = returnSearchTerm.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (r) =>
+        (r.purchaseReturnNo || "").toLowerCase().includes(q) ||
+        (r.purchaseNo || "").toLowerCase().includes(q) ||
+        (r.supplierName || "").toLowerCase().includes(q)
+    );
+  })();
+
+  const eligibleForReturn = allPurchases.filter((p) =>
+    [STATUS.RECEIVED, STATUS.PENDING_STOCK_IN, STATUS.PENDING_CLAIM].includes(getEffectivePurchaseStatus(p))
+  );
+
+  const newReturnEligible = (() => {
+    const q = newReturnSearchTerm.trim().toLowerCase();
+    if (!q) return eligibleForReturn;
+    return eligibleForReturn.filter(
+      (p) =>
+        (p.purchaseNo || "").toLowerCase().includes(q) ||
+        (p.supplierName || "").toLowerCase().includes(q)
+    );
+  })();
+
+  const paymentFilteredList = (() => {
+    let list;
+    if (paymentViewFilter === "outstanding")
+      list = allPurchases.filter(
+        (p) =>
+          p.paymentStatus !== "paid" &&
+          p.status !== STATUS.CANCELLED &&
+          Number(p.balanceAmountUsd || 0) > 0 &&
+          isPaymentReady(p)
+      );
+    else if (paymentViewFilter === "paid")
+      list = allPurchases.filter((p) => p.paymentStatus === "paid" && p.status !== STATUS.CANCELLED);
+    else
+      list = allPurchases.filter((p) => p.status !== STATUS.CANCELLED);
+    const q = paymentSearchTerm.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (p) =>
+        (p.purchaseNo || "").toLowerCase().includes(q) ||
+        (p.supplierName || "").toLowerCase().includes(q)
+    );
+  })();
 
   const getOpenReplacementClaim = (purchase) => {
     return getRelatedPurchaseReturns(purchase).find((item) => {
@@ -476,52 +655,67 @@ export default function Purchases() {
     });
   };
 
+  const getReturnItemResolution = (item, resolutionType, ret = {}) => {
+    if (resolutionType === "refund") {
+      const amt = Number(ret.refundAmountUsd || item.refund_amount_usd || item.refundAmountUsd || 0);
+      return amt > 0 ? `សង $${amt.toFixed(2)}` : "រង់ចាំការសង";
+    }
+    if (resolutionType === "credit_note") {
+      const amt = Number(ret.creditAmountUsd || item.credit_amount_usd || item.creditAmountUsd || 0);
+      return amt > 0 ? `Credit $${amt.toFixed(2)}` : "រង់ចាំ Credit";
+    }
+    const received = Number(ret.replacementReceivedQty || item.replacement_received_qty || item.replacementReceivedQty || 0);
+    const total = Number(ret.replacementQty || item.replacement_qty || item.replacementQty || item.qty_returned || item.qtyReturned || item.qty || 0);
+    if (total === 0) return "រង់ចាំ";
+    return received >= total ? `${received}/${total} បានទទួល ✓` : `${received}/${total} បានទទួល`;
+  };
+
   const getPurchaseProblemLabel = (purchase) => {
     const claimQty = getClaimRequiredCount(purchase);
     const damagedQty = getDamagedCount(purchase);
     const replacementClaim = getOpenReplacementClaim(purchase);
     const moneyClaim = getOpenMoneyClaim(purchase);
-    if (replacementClaim) return "Waiting supplier replacement";
+    if (replacementClaim) return "រង់ចាំ​ជំនួស​ពីអ្នកផ្គត់ផ្គង់";
     if (moneyClaim) {
       const resolutionType = normalizeReturnResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type);
-      return resolutionType === "refund" ? "Waiting refund from supplier" : "Credit note pending";
+      return resolutionType === "refund" ? "រង់ចាំការសងពី អ្នកផ្គត់ផ្គង់" : "Credit Note កំពុងដំណើរការ";
     }
-    if (purchase.status === STATUS.PENDING_CLAIM && hasResolvedSupplierClaim(purchase) && !getOpenSupplierClaim(purchase)) return "Supplier claim resolved";
-    if (getOpenSupplierClaim(purchase)) return "Supplier claim created";
-    if ((purchase.paymentMode === "prepaid" || purchase.paymentMode === "partial_prepaid") && claimQty > 0) return `${claimQty} claim required`;
-    if (purchase.paymentMode === "pay_after_check" && damagedQty > 0) return `${damagedQty} damaged excluded`;
-    if (purchase.status === STATUS.PENDING_RECEIVE) return "Waiting goods";
+    if (purchase.status === STATUS.PENDING_CLAIM && hasResolvedSupplierClaim(purchase) && !getOpenSupplierClaim(purchase)) return "ការទាមទារ អ្នកផ្គត់ផ្គង់ បានដោះស្រាយ";
+    if (getOpenSupplierClaim(purchase)) return "ការទាមទារ អ្នកផ្គត់ផ្គង់ បានបង្កើត";
+    if ((purchase.paymentMode === "prepaid" || purchase.paymentMode === "partial_prepaid") && claimQty > 0) return `ទាមទារ ${claimQty}`;
+    if (purchase.paymentMode === "pay_after_check" && damagedQty > 0) return `${damagedQty} ខូចដកចេញ`;
+    if (purchase.status === STATUS.PENDING_RECEIVE) return "រង់ចាំទំនិញ";
     return "";
   };
 
   const getNextActionLabel = (purchase) => {
     const effectiveStatus = getEffectivePurchaseStatus(purchase);
-    if (effectiveStatus === STATUS.DRAFT) return "Continue editing";
-    if (effectiveStatus === STATUS.PENDING_RECEIVE) return "Receive goods";
-    if (getOpenReplacementClaim(purchase)) return "Receive replacement";
+    if (effectiveStatus === STATUS.DRAFT) return "បន្តកែ";
+    if (effectiveStatus === STATUS.PENDING_RECEIVE) return "ទទួលទំនិញ";
+    if (getOpenReplacementClaim(purchase)) return "ទទួលជំនួស";
     const moneyClaim = getOpenMoneyClaim(purchase);
     if (moneyClaim) {
       const resolutionType = normalizeReturnResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type);
-      return resolutionType === "refund" ? "Mark refund received" : "Resolve credit note";
+      return resolutionType === "refund" ? "កត់ការសងបានទទួល" : "ដោះស្រាយ Credit Note";
     }
-    if (getOpenSupplierClaim(purchase)) return "Supplier claim created";
-    if (effectiveStatus === STATUS.PENDING_CLAIM) return "Create supplier claim";
-    if (effectiveStatus === STATUS.PENDING_STOCK_IN) return "Open Inventory";
-    if (effectiveStatus === STATUS.RECEIVED) return "Completed";
-    return "No action";
+    if (getOpenSupplierClaim(purchase)) return "ការទាមទារ អ្នកផ្គត់ផ្គង់ បានបង្កើត";
+    if (effectiveStatus === STATUS.PENDING_CLAIM) return "បង្កើតការទាមទារ អ្នកផ្គត់ផ្គង់";
+    if (effectiveStatus === STATUS.PENDING_STOCK_IN) return "បើក ស្តុក";
+    if (effectiveStatus === STATUS.RECEIVED) return "បានបញ្ចប់";
+    return "គ្មានសកម្មភាព";
   };
 
   const getPrimarySaveLabel = () => {
-    if (modalMode === "receive_goods") return "Save Receiving";
-    if (purchaseForm.paymentMode === "pay_after_check") return "Save as Pending Stock In";
+    if (modalMode === "receive_goods") return "រក្សាការទទួល";
+    if (purchaseForm.paymentMode === "pay_after_check") return "រក្សារង់ចាំបញ្ចូលក្នុងស្តុក";
     if (purchaseForm.paymentMode === "prepaid" || purchaseForm.paymentMode === "partial_prepaid") {
       const hasReceived = purchaseItems.some((item) => Number(item.receivedQty || 0) > 0);
       const hasClaim = purchaseItems.some((item) => Number(item.claimQty || 0) > 0);
-      if (!hasReceived) return "Save as Pending Receive";
-      if (hasClaim) return "Save as Pending Claim";
-      return "Save as Pending Stock In";
+      if (!hasReceived) return "រក្សារង់ចាំទទួល";
+      if (hasClaim) return "រក្សារង់ចាំការទាមទារ";
+      return "រក្សារង់ចាំបញ្ចូលក្នុងស្តុក";
     }
-    return "Save Purchase";
+    return "រក្សាការទិញ";
   };
 
   const invalidatePurchaseQueries = () => {
@@ -535,11 +729,11 @@ export default function Purchases() {
     mutationFn: createPurchaseApi,
     onSuccess: () => {
       invalidatePurchaseQueries();
-      notify.success("Purchase created", "The purchase invoice has been saved.");
+      notify.success("បានបង្កើតការទិញ", "វិក្កយបត្រការទិញបានរក្សាទុករួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      notify.error("Create failed", getErrorMessage(error));
+      notify.error("បរាជ័យក្នុងការបង្កើត", getErrorMessage(error));
     },
   });
 
@@ -547,11 +741,11 @@ export default function Purchases() {
     mutationFn: updatePurchaseApi,
     onSuccess: () => {
       invalidatePurchaseQueries();
-      notify.success("Purchase updated", "The purchase invoice has been updated.");
+      notify.success("បានធ្វើបច្ចុប្បន្នភាពការទិញ", "វិក្កយបត្រការទិញបានធ្វើបច្ចុប្បន្នភាពរួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      notify.error("Update failed", getErrorMessage(error));
+      notify.error("បរាជ័យក្នុងការធ្វើបច្ចុប្បន្នភាព", getErrorMessage(error));
     },
   });
 
@@ -559,11 +753,11 @@ export default function Purchases() {
     mutationFn: createPurchaseReturnApi,
     onSuccess: () => {
       invalidatePurchaseQueries();
-      notify.success("Supplier claim saved", "The purchase return has been saved.");
+      notify.success("បានរក្សាការទាមទារ អ្នកផ្គត់ផ្គង់", "ការត្រឡប់ទំនិញបានរក្សាទុករួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      notify.error("Claim failed", getErrorMessage(error));
+      notify.error("បរាជ័យក្នុងការទាមទារ", getErrorMessage(error));
     },
   });
 
@@ -600,12 +794,12 @@ export default function Purchases() {
     },
     onSuccess: () => {
       invalidatePurchaseQueries();
-      notify.success("Replacement received", "Supplier replacement has been marked as received.");
+      notify.success("បានទទួលជំនួស", "ការជំនួស អ្នកផ្គត់ផ្គង់ បានកត់ទុកថាបានទទួលរួចហើយ។");
       closeReplacementModal();
       closeModal();
     },
     onError: (error) => {
-      notify.error("Receive replacement failed", getErrorMessage(error));
+      notify.error("បរាជ័យក្នុងការទទួលជំនួស", getErrorMessage(error));
     },
   });
 
@@ -617,11 +811,11 @@ export default function Purchases() {
       }),
     onSuccess: () => {
       invalidatePurchaseQueries();
-      notify.success("Supplier claim resolved", "The refund or credit note has been marked as completed.");
+      notify.success("ការទាមទារ អ្នកផ្គត់ផ្គង់ បានដោះស្រាយ", "ការសង ឬ Credit Note បានកត់ទុកថាបានបញ្ចប់រួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      notify.error("Resolve claim failed", getErrorMessage(error));
+      notify.error("បរាជ័យក្នុងការដោះស្រាយការទាមទារ", getErrorMessage(error));
     },
   });
 
@@ -633,14 +827,14 @@ export default function Purchases() {
       setRecordPaymentPurchase(null);
       if (updated) setSelectedPurchase(updated);
       if (updated?.paymentStatus === "paid") {
-        notify.success("Payment completed", "Purchase has been fully paid.");
+        notify.success("ការទូទាត់បានបញ្ចប់", "ការទិញបានបង់ទាំងស្រុងរួចហើយ។");
         closeModal();
       } else {
-        notify.success("Payment recorded", "Partial payment has been recorded successfully.");
+        notify.success("ការទូទាត់បានកត់ត្រា", "ការទូទាត់ផ្នែកខ្លះបានកត់ត្រារួចហើយ។");
       }
     },
     onError: (error) => {
-      notify.error("Record payment failed", getErrorMessage(error));
+      notify.error("បរាជ័យក្នុងការកត់ការទូទាត់", getErrorMessage(error));
     },
   });
 
@@ -752,7 +946,7 @@ export default function Purchases() {
           purchaseContext: detail,
           qtyReturned: Number(item.claimQty || item.damagedQty || 0),
           condition: "damaged",
-          reason: "Damaged item claimed to supplier.",
+          reason: "ទំនិញខូចបានទាមទារទៅអ្នកផ្គត់ផ្គង់ ។",
         })
       );
 
@@ -831,8 +1025,8 @@ export default function Purchases() {
     setItemEditIndex(null);
     setItemForm({
       ...emptyItemForm,
-      receivedQty: purchaseForm.paymentMode === "prepaid" ? 0 : "",
-      acceptedQty: purchaseForm.paymentMode === "prepaid" ? 0 : "",
+      receivedQty: (purchaseForm.paymentMode === "prepaid" || purchaseForm.paymentMode === "partial_prepaid" || purchaseForm.paymentMode === "pay_after_check") ? 0 : "",
+      acceptedQty: (purchaseForm.paymentMode === "prepaid" || purchaseForm.paymentMode === "partial_prepaid" || purchaseForm.paymentMode === "pay_after_check") ? 0 : "",
     });
     setItemModalOpen(true);
   };
@@ -850,6 +1044,16 @@ export default function Purchases() {
       claimQty: item.claimQty,
       inputCurrency: item.inputCurrency || "USD",
       inputUnitCost: item.inputUnitCost || item.unitCost,
+      invoiceTotal: (() => {
+        const cost = Number(item.inputUnitCost || item.unitCost || 0);
+        const qty = Number(item.invoicedQty || 0);
+        return cost > 0 && qty > 0 ? String(parseFloat((cost * qty).toFixed(2))) : "";
+      })(),
+      paidAmount: (() => {
+        const cost = Number(item.inputUnitCost || item.unitCost || 0);
+        const qty = Number(item.paidQty || 0);
+        return cost > 0 && qty > 0 ? String(parseFloat((cost * qty).toFixed(2))) : "";
+      })(),
       unitCost: item.unitCost,
       expiredDate: formatDateOnly(item.expiredDate) === "-" ? "" : formatDateOnly(item.expiredDate),
     });
@@ -868,12 +1072,42 @@ export default function Purchases() {
         }
       }
 
-      if (field === "invoicedQty") {
-        if (purchaseForm.paymentMode === "pay_after_check" && next.receivedQty === "") {
-          next.receivedQty = value;
-          next.acceptedQty = value;
+      if (field === "invoiceTotal") {
+        const qty = Number(next.invoicedQty || 0);
+        if (qty > 0 && value !== "") {
+          next.inputUnitCost = String(parseFloat((Number(value) / qty).toFixed(4)));
+          next.unitCost = next.inputUnitCost;
+          if (purchaseForm.paymentMode === "partial_prepaid" && next.paidAmount !== "") {
+            const newCost = parseFloat((Number(value) / qty).toFixed(4));
+            next.paidQty = newCost > 0 ? String(parseFloat((Number(next.paidAmount) / newCost).toFixed(4))) : "";
+          }
         }
+      }
+
+      if (field === "inputUnitCost") {
+        const qty = Number(next.invoicedQty || 0);
+        next.invoiceTotal = qty > 0 ? String(parseFloat((Number(value || 0) * qty).toFixed(2))) : "";
+        if (purchaseForm.paymentMode === "partial_prepaid" && next.paidAmount !== "") {
+          const newCost = Number(value || 0);
+          next.paidQty = newCost > 0 ? String(parseFloat((Number(next.paidAmount) / newCost).toFixed(4))) : "";
+        }
+      }
+
+      if (field === "paidAmount") {
+        const unitCost = Number(next.inputUnitCost || 0);
+        if (unitCost > 0 && value !== "") {
+          next.paidQty = String(parseFloat((Number(value) / unitCost).toFixed(4)));
+        } else {
+          next.paidQty = "0";
+        }
+      }
+
+      if (field === "invoicedQty") {
         if (purchaseForm.paymentMode === "prepaid") next.paidQty = value;
+        const unitCost = Number(next.inputUnitCost || 0);
+        if (unitCost > 0) {
+          next.invoiceTotal = String(parseFloat((unitCost * Number(value || 0)).toFixed(2)));
+        }
       }
 
       if (field === "receivedQty") {
@@ -908,20 +1142,20 @@ export default function Purchases() {
     const nextErrors = {};
     const selectedUnit = variantUnits.find((unit) => String(unit.id) === String(itemForm.variantUnitId));
 
-    if (!itemForm.variantUnitId) nextErrors.variantUnitId = "Please select product variant.";
-    if (!itemForm.inputCurrency) nextErrors.inputCurrency = "Currency is required.";
-    if (!itemForm.inputUnitCost || Number(itemForm.inputUnitCost) <= 0) nextErrors.inputUnitCost = "Unit cost must be greater than 0.";
-    if (!itemForm.invoicedQty || Number(itemForm.invoicedQty) <= 0) nextErrors.invoicedQty = "Invoiced quantity must be greater than 0.";
-    if (purchaseForm.paymentMode === "partial_prepaid" && (itemForm.paidQty === "" || Number(itemForm.paidQty) < 0)) nextErrors.paidQty = "Paid quantity is required.";
-    if (Number(itemForm.paidQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.paidQty = "Paid quantity cannot exceed invoiced qty.";
-    if (itemForm.receivedQty === "" || Number(itemForm.receivedQty) < 0) nextErrors.receivedQty = "Received quantity cannot be negative.";
-    if (itemForm.acceptedQty === "" || Number(itemForm.acceptedQty) < 0) nextErrors.acceptedQty = "Accepted quantity cannot be negative.";
-    if (Number(itemForm.acceptedQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.acceptedQty = "Accepted quantity cannot exceed invoiced qty.";
-    if (Number(itemForm.acceptedQty || 0) + Number(itemForm.damagedQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.damagedQty = "Accepted plus damaged qty cannot exceed invoiced qty.";
-    if (Number(itemForm.acceptedQty || 0) > Number(itemForm.receivedQty || 0)) nextErrors.acceptedQty = "Accepted quantity cannot exceed received qty.";
-    if (Number(itemForm.damagedQty || 0) < 0) nextErrors.damagedQty = "Damaged quantity cannot be negative.";
+    if (!itemForm.variantUnitId) nextErrors.variantUnitId = "សូមជ្រើសប្រភេទផលិតផល";
+    if (!itemForm.inputCurrency) nextErrors.inputCurrency = "សូមជ្រើសរូបិយប័ណ្ណ";
+    if (!itemForm.invoicedQty || Number(itemForm.invoicedQty) <= 0) nextErrors.invoicedQty = "ចំនួនកម្មង់ត្រូវតែធំជាង 0";
+    if (!itemForm.invoiceTotal || Number(itemForm.invoiceTotal) <= 0) nextErrors.invoiceTotal = "សរុបវិក្កយបត្រត្រូវតែធំជាង 0";
+    if (purchaseForm.paymentMode === "partial_prepaid" && (itemForm.paidAmount === "" || Number(itemForm.paidAmount) < 0)) nextErrors.paidAmount = "ទឹកប្រាក់បានបង់ចាំបាច់";
+    if (purchaseForm.paymentMode === "partial_prepaid" && Number(itemForm.paidAmount || 0) > Number(itemForm.invoicedQty || 0) * Number(itemForm.inputUnitCost || 0)) nextErrors.paidAmount = "ទឹកប្រាក់បានបង់មិនអាចលើសសរុបវិក្កយបត្រ";
+    if (itemForm.receivedQty === "" || Number(itemForm.receivedQty) < 0) nextErrors.receivedQty = "ចំនួនទទួលមិនអាចតិចជាង 0";
+    if (itemForm.acceptedQty === "" || Number(itemForm.acceptedQty) < 0) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចតិចជាង 0";
+    if (Number(itemForm.acceptedQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចលើសចំនួនកម្មង់";
+    if (Number(itemForm.acceptedQty || 0) + Number(itemForm.damagedQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.damagedQty = "ចំនួនទទួលយក + ខូចមិនអាចលើសចំនួនកម្មង់";
+    if (Number(itemForm.acceptedQty || 0) > Number(itemForm.receivedQty || 0)) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចលើសចំនួនទទួល";
+    if (Number(itemForm.damagedQty || 0) < 0) nextErrors.damagedQty = "ចំនួនខូចមិនអាចតិចជាង 0";
     if (selectedUnit?.isExpirable && Number(itemForm.receivedQty || 0) > 0 && !itemForm.expiredDate) {
-      nextErrors.expiredDate = "Expiry date is required after goods are received.";
+      nextErrors.expiredDate = "ថ្ងៃផុតកំណត់ចាំបាច់ក្រោយទទួលទំនិញ";
     }
 
     setItemErrors(nextErrors);
@@ -960,7 +1194,7 @@ export default function Purchases() {
     }
 
     if (paymentMode === "partial_prepaid") {
-      claimQty = Math.max(0, paidQty - acceptedQty);
+      claimQty = receivedQty > 0 ? Math.max(0, paidQty - acceptedQty) : 0;
     }
 
     const lineTotalUsd = calculateLineTotalByPaymentMode({ paymentMode, acceptedQty, paidQty, unitCost: unitCostUsd });
@@ -1004,18 +1238,29 @@ export default function Purchases() {
       return;
     }
 
-    if (itemEditIndex !== null) {
-      setPurchaseItems((previous) => previous.map((row, index) => (index === itemEditIndex ? { ...item, id: row.id } : row)));
-    } else {
-      setPurchaseItems((previous) => [...previous, item]);
+    const newItems = itemEditIndex !== null
+      ? purchaseItems.map((row, index) => (index === itemEditIndex ? { ...item, id: row.id } : row))
+      : [...purchaseItems, item];
+
+    setPurchaseItems(newItems);
+
+    if (purchaseForm.paymentMode === "partial_prepaid") {
+      const totalPaid = parseFloat(newItems.reduce((sum, it) => sum + Number(it.lineTotalUsd || 0), 0).toFixed(2));
+      setPurchaseForm((prev) => ({ ...prev, paidAmount: totalPaid }));
     }
 
     closeItemModal();
   };
 
   const handleRemoveItem = (index) => {
-    setPurchaseItems((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
+    const newItems = purchaseItems.filter((_, itemIndex) => itemIndex !== index);
+    setPurchaseItems(newItems);
     setPurchaseErrors((previous) => ({ ...previous, items: "" }));
+
+    if (purchaseForm.paymentMode === "partial_prepaid") {
+      const totalPaid = parseFloat(newItems.reduce((sum, it) => sum + Number(it.lineTotalUsd || 0), 0).toFixed(2));
+      setPurchaseForm((prev) => ({ ...prev, paidAmount: totalPaid }));
+    }
   };
 
   const validatePurchaseForm = () => {
@@ -1287,7 +1532,7 @@ export default function Purchases() {
       }
 
       setLocalPurchases((previous) => [payload, ...previous]);
-      notify.success("Purchase created", "The purchase invoice has been saved.");
+      notify.success("បានបង្កើតការទិញ", "វិក្កយបត្រការទិញបានរក្សាទុករួចហើយ។");
       closeModal();
       return;
     }
@@ -1302,7 +1547,7 @@ export default function Purchases() {
       }
 
       setLocalPurchases((previous) => previous.map((item) => (item.id === selectedPurchase.id ? payload : item)));
-      notify.success("Purchase updated", "The purchase invoice has been updated.");
+      notify.success("បានធ្វើបច្ចុប្បន្នភាពការទិញ", "វិក្កយបត្រការទិញបានធ្វើបច្ចុប្បន្នភាពរួចហើយ។");
       closeModal();
     }
   };
@@ -1321,8 +1566,8 @@ export default function Purchases() {
 
     // IMPORTANT UX / DATA-SAFETY RULE:
     // Purchases prepares a purchase for stock-in only.
-    // The actual inventory update must happen one time in the Inventory module.
-    // This prevents double stock-in when the user also confirms from Inventory.
+    // The actual inventory update must happen one time in the ស្តុក module.
+    // This prevents double stock-in when the user also confirms from ស្តុក.
     navigate(`/home/inventory?stockInPurchaseId=${purchase.id}&purchaseNo=${encodeURIComponent(purchase.purchaseNo)}`);
   };
 
@@ -1428,7 +1673,7 @@ export default function Purchases() {
 
     const items = buildReplacementItems(detail, activeReturn);
     if (items.length === 0) {
-      notify.error("Receive replacement failed", "No replacement item is available for this supplier claim.");
+      notify.error("បរាជ័យក្នុងការទទួលជំនួស", "គ្មានទំនិញជំនួសសម្រាប់ការទាមទារ អ្នកផ្គត់ផ្គង់ នេះ។");
       return;
     }
 
@@ -1459,10 +1704,10 @@ export default function Purchases() {
     const itemErrors = {};
     replacementItems.forEach((item, index) => {
       if (!item.expiryDate) {
-        itemErrors[index] = { expiryDate: "Replacement expiry date is required." };
+        itemErrors[index] = { expiryDate: "ថ្ងៃផុតកំណត់ជំនួសត្រូវបំពេញ។" };
       }
       if (Number(item.qty || 0) <= 0) {
-        itemErrors[index] = { ...(itemErrors[index] || {}), qty: "Replacement quantity must be greater than 0." };
+        itemErrors[index] = { ...(itemErrors[index] || {}), qty: "ចំនួនជំនួសត្រូវតែធំជាង 0។" };
       }
     });
 
@@ -1557,7 +1802,7 @@ export default function Purchases() {
       credit_amount_khr: 0,
       note:
         purchaseReturn.note ||
-        `Supplier replacement received for claim ${purchaseReturn.purchaseReturnNo || purchaseReturn.purchase_return_no || ""} from purchase ${purchase.purchaseNo || purchase.purchase_no || ""}.`,
+        `ទទួលបានទំនិញជំនួសសម្រាប់ការទាមទារ ${purchaseReturn.purchaseReturnNo || purchaseReturn.purchase_return_no || ""} ពីការទិញ ${purchase.purchaseNo || purchase.purchase_no || ""} ។`,
       resolved_at: now,
       replacement_items: items.map((item) => ({
         purchase_return_item_id: item.returnItemId || null,
@@ -1646,21 +1891,27 @@ export default function Purchases() {
         )
       );
     }
-    notify.success("Replacement received", "Supplier replacement has been marked as received.");
+    notify.success("បានទទួលជំនួស", "ការជំនួស អ្នកផ្គត់ផ្គង់ បានកត់ទុកថាបានទទួលរួចហើយ។");
     closeReplacementModal();
     closeModal();
   };
 
   const handleResolveSupplierClaim = (purchase, claim) => {
     if (!claim) return;
+    setResolveMoneyPurchase(purchase);
+    setResolveMoneyReturn(claim);
+    setResolveMoneyModalOpen(true);
+  };
+
+  const handleConfirmMoneyResolution = () => {
+    const claim = resolveMoneyReturn;
+    const purchase = resolveMoneyPurchase;
+    if (!claim) return;
 
     const resolutionType = normalizeReturnResolutionType(claim.resolutionType || claim.resolution_type || "");
     const now = new Date().toISOString().slice(0, 10);
     const isRefund = resolutionType === "refund";
     const isCredit = resolutionType === "credit_note";
-    const actionLabel = isRefund ? "mark this refund as received" : "mark this credit note as resolved";
-    const ok = window.confirm(`Do you want to ${actionLabel} for ${claim.purchaseReturnNo || claim.purchase_return_no || "this supplier claim"}?`);
-    if (!ok) return;
 
     const payload = {
       resolution_type: resolutionType,
@@ -1683,6 +1934,8 @@ export default function Purchases() {
       payload.credit_amount_khr = Number(claim.creditAmountKhr ?? claim.credit_amount_khr ?? claim.subtotalKhr ?? 0);
     }
 
+    setResolveMoneyModalOpen(false);
+
     if (purchasesQuery.data && !String(claim.id).startsWith("local-")) {
       resolveSupplierClaimMutation.mutate({ claim, payload });
       return;
@@ -1703,12 +1956,12 @@ export default function Purchases() {
           : item
       )
     );
-    notify.success("Supplier claim resolved", "The refund or credit note has been marked as completed.");
+    notify.success("ការទាមទារ អ្នកផ្គត់ផ្គង់ បានដោះស្រាយ", "ការសង ឬ Credit Note បានកត់ទុកថាបានបញ្ចប់រួចហើយ។");
     closeModal();
   };
 
-  const handleCancelPurchase = (purchase) => {
-    const ok = window.confirm(`Cancel ${purchase.purchaseNo}?`);
+  const handleCancelPurchase = async (purchase) => {
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបចោល ${purchase.purchaseNo}?`);
     if (!ok) return;
 
     if (purchasesQuery.data && !String(purchase.id).startsWith("local-")) {
@@ -1805,7 +2058,7 @@ export default function Purchases() {
       creditAmountKhr: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "credit_note" ? lineTotalKhr : 0,
       condition,
       stockAction,
-      reason: reason || "Supplier claim item.",
+      reason: reason || "អ្នកផ្គត់ផ្គង់ claim item.",
     };
   };
 
@@ -1854,17 +2107,17 @@ export default function Purchases() {
           const hasDamage = Number(purchaseItem.damagedQty || 0) > 0;
           next.condition = hasClaim || hasDamage ? "damaged" : "wrong_item";
           next.qtyReturned = hasClaim ? purchaseItem.claimQty : hasDamage ? purchaseItem.damagedQty : "";
-          next.reason = hasClaim || hasDamage ? "Damaged item claimed to supplier." : "Wrong item supplied.";
+          next.reason = hasClaim || hasDamage ? "ទំនិញខូចបានទាមទារទៅអ្នកផ្គត់ផ្គង់ ។" : "ទំនិញខុសបានដឹកមក ។";
         }
       }
 
       if (field === "condition") {
         const reasons = {
-          damaged: "Damaged item claimed to supplier.",
-          wrong_item: "Wrong item supplied.",
-          over_supplied: "Supplier delivered more than ordered.",
-          expired: "Expired or near-expired item.",
-          other: "Other supplier issue.",
+          damaged:       "ទំនិញខូចបានទាមទារទៅអ្នកផ្គត់ផ្គង់ ។",
+          wrong_item:    "ទំនិញខុសបានដឹកមក ។",
+          over_supplied: "អ្នកផ្គត់ផ្គង់ដឹកទំនិញលើសចំនួន ។",
+          expired:       "ទំនិញផុតកំណត់ ឬជិតផុតកំណត់ ។",
+          other:         "បញ្ហាអ្នកផ្គត់ផ្គង់ផ្សេងទៀត ។",
         };
         next.reason = reasons[value] || next.reason;
       }
@@ -1879,17 +2132,17 @@ export default function Purchases() {
     const purchaseItem = selectedPurchase?.items.find((item) => String(item.id) === String(purchaseReturnItemForm.purchaseItemId));
     const qtyReturned = Number(purchaseReturnItemForm.qtyReturned || 0);
 
-    if (!purchaseReturnItemForm.purchaseItemId) nextErrors.purchaseItemId = "Please select item to claim / return.";
-    if (!purchaseItem) nextErrors.purchaseItemId = "Invalid purchase item.";
-    if (!purchaseReturnItemForm.qtyReturned || qtyReturned <= 0) nextErrors.qtyReturned = "Claim / return quantity must be greater than 0.";
+    if (!purchaseReturnItemForm.purchaseItemId) nextErrors.purchaseItemId = "សូមជ្រើសទំនិញដើម្បីទាមទារ / ត្រឡប់។";
+    if (!purchaseItem) nextErrors.purchaseItemId = "ទំនិញការទិញមិនត្រឹមត្រូវ។";
+    if (!purchaseReturnItemForm.qtyReturned || qtyReturned <= 0) nextErrors.qtyReturned = "ចំនួនទាមទារ / ត្រឡប់ត្រូវតែធំជាង 0។";
 
     if (purchaseItem) {
       const availableQty = getAvailableReturnQty(purchaseItem);
-      if (qtyReturned > availableQty) nextErrors.qtyReturned = `Quantity cannot exceed ${availableQty} ${purchaseItem.unitName}.`;
+      if (qtyReturned > availableQty) nextErrors.qtyReturned = `ចំនួនមិនអាចលើស ${availableQty} ${purchaseItem.unitName}។`;
     }
 
-    if (!purchaseReturnItemForm.condition) nextErrors.condition = "Please select reason.";
-    if (!purchaseReturnItemForm.reason.trim()) nextErrors.reason = "Reason note is required.";
+    if (!purchaseReturnItemForm.condition) nextErrors.condition = "សូមជ្រើសមូលហេតុ។";
+    if (!purchaseReturnItemForm.reason.trim()) nextErrors.reason = "ចំណាំមូលហេតុត្រូវបំពេញ។";
 
     setPurchaseReturnItemErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -1915,10 +2168,10 @@ export default function Purchases() {
 
   const validatePurchaseReturnForm = () => {
     const nextErrors = {};
-    if (!purchaseReturnForm.purchaseReturnNo.trim()) nextErrors.purchaseReturnNo = "Purchase return number is required.";
-    if (!purchaseReturnForm.returnDate) nextErrors.returnDate = "Return date is required.";
-    if (!purchaseReturnForm.resolutionType) nextErrors.resolutionType = "Resolution type is required.";
-    if (purchaseReturnItems.length === 0) nextErrors.items = "Please add at least one problem item.";
+    if (!purchaseReturnForm.purchaseReturnNo.trim()) nextErrors.purchaseReturnNo = "លេខការត្រឡប់ត្រូវបំពេញ។";
+    if (!purchaseReturnForm.returnDate) nextErrors.returnDate = "កាលបរិច្ឆេទត្រឡប់ត្រូវបំពេញ។";
+    if (!purchaseReturnForm.resolutionType) nextErrors.resolutionType = "ប្រភេទដំណោះស្រាយត្រូវជ្រើស។";
+    if (purchaseReturnItems.length === 0) nextErrors.items = "សូមបន្ថែមទំនិញបញ្ហាយ៉ាងហោចណាស់មួយ។";
     setPurchaseReturnErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -2035,193 +2288,674 @@ export default function Purchases() {
   return (
     <section className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard theme={theme} title="Total Purchases" value={totalPurchasesCount} icon={<FiShoppingCart className="text-[34px] text-violet-500" />} iconBg="bg-violet-500/10" />
-        <SummaryCard theme={theme} title="Total Amount" value={fmtUsd(totalGrandUsd)} subValue={fmtKhr(totalGrandKhr)} icon={<FiDollarSign className="text-[34px] text-emerald-500" />} iconBg="bg-emerald-500/10" />
-        <SummaryCard theme={theme} title="Outstanding Balance" value={fmtUsd(totalBalanceUsd)} subValue={fmtKhr(totalBalanceKhr)} subValueColor={totalBalanceUsd > 0 ? "text-amber-500" : "text-emerald-500"} icon={<FiCreditCard className="text-[34px] text-amber-500" />} iconBg="bg-amber-500/10" />
-        <SummaryCard theme={theme} title="Supplier Claims" value={pendingClaimsCount} icon={<FiRotateCcw className="text-[34px] text-red-500" />} iconBg="bg-red-500/10" />
+        <SummaryCard theme={theme} title={isDateFiltered ? `ការទិញ${dateFilter === "today" ? "ថ្ងៃនេះ" : dateFilter === "week" ? "អាទិត្យនេះ" : "ខែនេះ"}` : "ការទិញសរុប"} value={fmtUsd(isDateFiltered ? filteredTotalUsd : totalGrandUsd)} subValue={`${isDateFiltered ? filteredCount : totalPurchasesCount} ការទិញ`} subValueColor="text-violet-500" icon={<FiShoppingCart className="text-[34px] text-violet-500" />} iconBg="bg-violet-500/10" />
+        <SummaryCard theme={theme} title="រង់ចាំទទួល" value={pendingReceiveCount + pendingStockInCount} subValue={pendingReceiveCount > 0 ? `${pendingReceiveCount} រង់ចាំ · ${pendingStockInCount} ស្តុកចូល` : "ទទួលរួចទាំងអស់"} subValueColor={pendingReceiveCount + pendingStockInCount > 0 ? "text-amber-500" : "text-emerald-500"} icon={<FiTruck className="text-[34px] text-blue-500" />} iconBg="bg-blue-500/10" />
+        <SummaryCard theme={theme} title="ប្រាក់មិនទាន់បង់" value={fmtUsd(totalOutstandingUsd)} subValue={unpaidCount > 0 ? `${unpaidCount} ការទិញមិនទាន់បង់` : "បានទូទាត់ទាំងអស់"} subValueColor={unpaidCount > 0 ? "text-amber-500" : "text-emerald-500"} icon={<FiCreditCard className="text-[34px] text-amber-500" />} iconBg="bg-amber-500/10" />
+        <SummaryCard theme={theme} title="ទាមទារការខូចខាត" value={pendingClaimsCount} subValue={openReturnsCount > 0 ? `${openReturnsCount} ទាមទារនៅសល់` : "ទាមទាររួចរាល់ទាំងអស់"} subValueColor={openReturnsCount > 0 ? "text-red-500" : "text-emerald-500"} icon={<FiRotateCcw className="text-[34px] text-red-500" />} iconBg="bg-red-500/10" />
       </div>
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_220px_220px_220px_auto]">
-          <div className="relative">
-            <FiSearch className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`} />
-            <input
-              type="text"
-              placeholder="Search purchase, supplier, product, variant..."
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
-            />
-          </div>
-
-          <FilterSelect
-            value={statusFilter}
-            setValue={setStatusFilter}
-            theme={theme}
-            icon={<FiFilter />}
-            options={[
-              { value: "All", label: "All Status" },
-              ...Object.values(STATUS).map((status) => ({ value: status, label: status })),
-            ]}
-          />
-
-          <FilterSelect
-            value={paymentModeFilter}
-            setValue={setPaymentModeFilter}
-            theme={theme}
-            icon={<FiCreditCard />}
-            options={[{ value: "All", label: "All Payment" }, ...paymentModeOptions]}
-          />
-
-          <FilterSelect
-            value={perPage}
-            setValue={(value) => setPerPage(Number(value))}
-            theme={theme}
-            icon={<FiHash />}
-            options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / page` }))}
-          />
-
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-          >
-            <FiPlusCircle className="text-lg" />
-            Add Purchase
-          </button>
-        </div>
-      </div>
-
+      {/* ── Tab Card ── */}
       <div className={`overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}>
-        <div className="flex flex-col gap-2 border-b border-zinc-200 px-5 py-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className={`text-base font-semibold ${theme.pageTitle}`}>Purchase List</h2>
-            <p className={`mt-1 text-xs ${theme.muted}`}>Showing {pagination.from || 0}-{pagination.to || filteredPurchases.length} of {pagination.total || purchases.length} purchases</p>
-          </div>
-          <div className={`flex flex-wrap gap-3 text-xs ${theme.muted}`}>
-            <span>Claim amount: {formatMoney(totalPurchaseReturnAmount)}</span>
-          </div>
-        </div>
 
-        <div className="hidden xl:block">
-          {purchasesQuery.isLoading ? (
-            <table className="w-full">
-              <tbody>
-                <TableLoading theme={theme} colSpan={5} text="Loading purchases..." />
-              </tbody>
-            </table>
-          ) : (
-            <PurchaseTable
-              purchases={filteredPurchases}
-              purchaseReturns={purchaseReturns}
-              theme={theme}
-              getEffectivePurchaseStatus={getEffectivePurchaseStatus}
-              getPurchaseProblemLabel={getPurchaseProblemLabel}
-              getClaimRequiredCount={getClaimRequiredCount}
-              getDamagedCount={getDamagedCount}
-              getNextActionLabel={getNextActionLabel}
-              getStatusClass={getStatusClass}
-              getStatusIcon={getStatusIcon}
-              openViewModal={openViewModal}
-              openEditModal={openEditModal}
-              openReceiveGoodsModal={openReceiveGoodsModal}
-              openPurchaseReturnModal={openPurchaseReturnModal}
-              handleReceiveReplacement={handleReceiveReplacement}
-              handleResolveSupplierClaim={handleResolveSupplierClaim}
-              handleConfirmStockIn={handleConfirmStockIn}
-              handleCancelPurchase={handleCancelPurchase}
-            />
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 p-4 xl:hidden">
-          {purchasesQuery.isLoading ? (
-            <table className="w-full">
-              <tbody>
-                <TableLoading theme={theme} colSpan={1} text="Loading purchases..." />
-              </tbody>
-            </table>
-          ) : filteredPurchases.length === 0 ? (
-            <EmptyState theme={theme} icon={<FiSearch />} title="No purchases found" description="Try changing your search keyword or filters." />
-          ) : (
-            filteredPurchases.map((purchase) => (
-              <PurchaseMobileCard
-                key={purchase.id}
-                purchase={purchase}
-                purchaseReturns={purchaseReturns}
-                theme={theme}
-                effectiveStatus={getEffectivePurchaseStatus(purchase)}
-                problemLabel={getPurchaseProblemLabel(purchase)}
-                nextActionLabel={getNextActionLabel(purchase)}
-                getStatusClass={getStatusClass}
-                getStatusIcon={getStatusIcon}
-                openViewModal={openViewModal}
-                openEditModal={openEditModal}
-                openReceiveGoodsModal={openReceiveGoodsModal}
-                openPurchaseReturnModal={openPurchaseReturnModal}
-                handleReceiveReplacement={handleReceiveReplacement}
-                handleResolveSupplierClaim={handleResolveSupplierClaim}
-                handleConfirmStockIn={handleConfirmStockIn}
-                handleCancelPurchase={handleCancelPurchase}
-              />
-            ))
-          )}
-        </div>
-
-        {!purchasesQuery.isLoading && pagination.lastPage > 1 && (
-          <div className="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 dark:border-white/10 md:flex-row md:items-center md:justify-between">
-            <p className={`text-xs ${theme.muted}`}>
-              Page {pagination.currentPage} of {pagination.lastPage}
-            </p>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                disabled={page <= 1 || purchasesQuery.isFetching}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
-              >
-                <FiChevronLeft />
-                Previous
+        {/* Tab bar */}
+        <div className="flex items-center gap-0 border-b border-zinc-200 px-4 dark:border-white/10">
+          {[
+            { key: "orders",   label: "បញ្ជាទិញ",    count: totalPurchasesCount,                        icon: <FiShoppingCart /> },
+            { key: "receive",  label: "ទទួលទំនិញ",  count: pendingReceiveCount + pendingStockInCount,   icon: <FiTruck /> },
+            { key: "returns",  label: "ត្រឡប់ទំនិញ", count: openReturnsCount,                           icon: <FiRotateCcw /> },
+            { key: "payments", label: "ការទូទាត់",  count: unpaidCount,                                icon: <FiCreditCard /> },
+          ].map((tab) => {
+            const isAlert = (tab.key === "receive" && pendingReceiveCount + pendingStockInCount > 0)
+              || (tab.key === "returns" && openReturnsCount > 0)
+              || (tab.key === "payments" && unpaidCount > 0);
+            return (
+              <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
+                className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-3.5 text-xs font-bold transition ${
+                  activeTab === tab.key
+                    ? "border-red-500 text-red-500"
+                    : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                }`}>
+                {tab.icon}
+                {tab.label}
+                {tab.count > 0 && (
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    isAlert ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-zinc-100 text-zinc-500 dark:bg-white/10 dark:text-zinc-400"
+                  }`}>{tab.count}</span>
+                )}
               </button>
+            );
+          })}
+        </div>
 
-              {pageNumbers.map((item) =>
-                item === "..." ? (
-                  <span
-                    key={item}
-                    className={`px-2 text-sm font-semibold ${theme.muted}`}
-                  >
-                    ...
-                  </span>
-                ) : (
-                  <button
-                    key={item}
-                    type="button"
-                    disabled={purchasesQuery.isFetching}
-                    onClick={() => setPage(item)}
-                    className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      item === pagination.currentPage
-                        ? "bg-red-600 text-white"
-                        : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
-                    }`}
-                  >
-                    {item}
-                  </button>
-                )
-              )}
-
-              <button
-                type="button"
-                disabled={page >= pagination.lastPage || purchasesQuery.isFetching}
-                onClick={() => setPage((current) => Math.min(pagination.lastPage, current + 1))}
-                className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
-              >
-                Next
-                <FiChevronRight />
+        {/* ── Orders Tab ── */}
+        {activeTab === "orders" && (
+          <>
+            <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-4 dark:border-white/10 xl:flex-row xl:items-center xl:justify-between">
+              <div className="grid flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_200px_200px_160px_160px]">
+                <div className="relative">
+                  <FiSearch className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`} />
+                  <input type="text" placeholder="ស្វែងរកការទិញ អ្នកផ្គត់ផ្គង់ ទំនិញ..." value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className={`h-11 w-full rounded-xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
+                </div>
+                <FilterSelect value={statusFilter} setValue={setStatusFilter} theme={theme} icon={<FiFilter />}
+                  options={[{ value: "All", label: "ស្ថានភាពទាំងអស់" }, ...Object.values(STATUS).map((s) => ({ value: s, label: STATUS_LABEL[s] ?? s }))]} />
+                <FilterSelect value={paymentStatusFilter} setValue={setPaymentStatusFilter} theme={theme} icon={<FiCreditCard />}
+                  options={[
+                    { value: "All", label: "ការទូទាត់ទាំងអស់" },
+                    { value: "unpaid", label: "មិនទាន់បង់" },
+                    { value: "partial", label: "មួយផ្នែក" },
+                    { value: "paid", label: "បានបង់" },
+                  ]} />
+                <FilterSelect value={dateFilter} setValue={setDateFilter} theme={theme} icon={<FiCalendar />}
+                  options={[
+                    { value: "all", label: "កាលបរិច្ឆេទទាំងអស់" },
+                    { value: "today", label: "ថ្ងៃនេះ" },
+                    { value: "week", label: "អាទិត្យនេះ" },
+                    { value: "month", label: "ខែនេះ" },
+                  ]} />
+                <FilterSelect value={perPage} setValue={(v) => setPerPage(Number(v))} theme={theme} icon={<FiHash />}
+                  options={[10, 25, 50, 100].map((v) => ({ value: v, label: `${v} / ទំព័រ` }))} />
+              </div>
+              <button type="button" onClick={openAddModal}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:shrink-0">
+                <FiPlusCircle className="text-lg" /> បន្ថែមការទិញ
               </button>
             </div>
+
+            <div className="flex items-center justify-between px-5 py-3">
+              <p className={`text-xs ${theme.muted}`}>បង្ហាញ {pagination.from || 0}–{pagination.to || filteredPurchases.length} នៃ {pagination.total || purchases.length} ការទិញ</p>
+              <span className={`text-xs ${theme.muted}`}>ចំនួនទាមទារ: {formatMoney(totalPurchaseReturnAmount)}</span>
+            </div>
+
+            <div className="hidden xl:block">
+              {purchasesQuery.isLoading ? (
+                <table className="w-full"><tbody><TableLoading theme={theme} colSpan={5} text="រង់ចាំបន្តិច..." /></tbody></table>
+              ) : (
+                <PurchaseTable purchases={filteredPurchases} purchaseReturns={purchaseReturns} theme={theme}
+                  getEffectivePurchaseStatus={getEffectivePurchaseStatus}
+                  getPurchaseProblemLabel={getPurchaseProblemLabel}
+                  getClaimRequiredCount={getClaimRequiredCount}
+                  getDamagedCount={getDamagedCount}
+                  getNextActionLabel={getNextActionLabel}
+                  getStatusClass={getStatusClass}
+                  getStatusIcon={getStatusIcon}
+                  openViewModal={openViewModal}
+                  openEditModal={openEditModal}
+                  openReceiveGoodsModal={openReceiveGoodsModal}
+                  openPurchaseReturnModal={openPurchaseReturnModal}
+                  handleReceiveReplacement={handleReceiveReplacement}
+                  handleResolveSupplierClaim={handleResolveSupplierClaim}
+                  handleConfirmStockIn={handleConfirmStockIn}
+                  handleCancelPurchase={handleCancelPurchase}
+                  simplified
+                />
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 p-4 xl:hidden">
+              {purchasesQuery.isLoading ? (
+                <table className="w-full"><tbody><TableLoading theme={theme} colSpan={1} text="រង់ចាំបន្តិច..." /></tbody></table>
+              ) : filteredPurchases.length === 0 ? (
+                <EmptyState theme={theme} icon={<FiSearch />} title="រកមិនឃើញការទិញ" description="ព្យាយាមប្តូរការស្វែងរក ឬតម្រង។" />
+              ) : (
+                filteredPurchases.map((purchase) => (
+                  <PurchaseMobileCard key={purchase.id} purchase={purchase} purchaseReturns={purchaseReturns} theme={theme}
+                    effectiveStatus={getEffectivePurchaseStatus(purchase)} problemLabel={getPurchaseProblemLabel(purchase)}
+                    nextActionLabel={getNextActionLabel(purchase)} getStatusClass={getStatusClass} getStatusIcon={getStatusIcon}
+                    openViewModal={openViewModal} openEditModal={openEditModal} openReceiveGoodsModal={openReceiveGoodsModal}
+                    openPurchaseReturnModal={openPurchaseReturnModal} handleReceiveReplacement={handleReceiveReplacement}
+                    handleResolveSupplierClaim={handleResolveSupplierClaim} handleConfirmStockIn={handleConfirmStockIn}
+                    handleCancelPurchase={handleCancelPurchase}
+                    simplified
+                  />
+                ))
+              )}
+            </div>
+
+            {!purchasesQuery.isLoading && pagination.lastPage > 1 && (
+              <div className="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 dark:border-white/10 md:flex-row md:items-center md:justify-between">
+                <p className={`text-xs ${theme.muted}`}>ទំព័រ {pagination.currentPage} នៃ {pagination.lastPage}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" disabled={page <= 1 || purchasesQuery.isFetching}
+                    onClick={() => setPage((c) => Math.max(1, c - 1))}
+                    className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+                    <FiChevronLeft /> មុន
+                  </button>
+                  {pageNumbers.map((item) => item === "..." ? (
+                    <span key={item} className={`px-2 text-sm font-semibold ${theme.muted}`}>...</span>
+                  ) : (
+                    <button key={item} type="button" disabled={purchasesQuery.isFetching} onClick={() => setPage(item)}
+                      className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                        item === pagination.currentPage ? "bg-red-600 text-white" : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                      }`}>{item}
+                    </button>
+                  ))}
+                  <button type="button" disabled={page >= pagination.lastPage || purchasesQuery.isFetching}
+                    onClick={() => setPage((c) => Math.min(pagination.lastPage, c + 1))}
+                    className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+                    បន្ទាប់ <FiChevronRight />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Receive Tab ── */}
+        {activeTab === "receive" && (
+          <div className="p-4">
+            {allPurchasesQuery.isLoading ? (
+              <table className="w-full"><tbody><TableLoading theme={theme} colSpan={7} text="រង់ចាំបន្តិច..." /></tbody></table>
+            ) : pendingReceiveCount + pendingStockInCount + pendingClaimWithStock === 0 ? (
+              <EmptyState theme={theme} icon={<FiTruck />} title="គ្មានការដឹករង់ចាំ" description="ការទិញទាំងអស់បានទទួលហើយ និងស្តុករួចហើយ។" />
+            ) : (
+              <>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                      <FiTruck /> {pendingReceiveCount} រង់ចាំដឹក
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      <FiCheckCircle /> {pendingStockInCount} រួចរាល់ស្តុក
+                    </span>
+                    {pendingClaimWithStock > 0 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                        <FiAlertTriangle /> {pendingClaimWithStock} រង់ចាំការទាមទារ
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative w-full sm:w-72">
+                    <FiSearch className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm ${theme.muted}`} />
+                    <input type="text" placeholder="ស្វែងរកលេខការទិញ អ្នកផ្គត់ផ្គង់..."
+                      value={receiveSearchTerm} onChange={(e) => setReceiveSearchTerm(e.target.value)}
+                      className={`h-9 w-full rounded-xl border pl-9 pr-3 text-xs outline-none transition focus:ring-2 ${theme.input}`} />
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
+                  <table className="w-full min-w-200 text-sm">
+                    <thead className="bg-blue-600 text-white">
+                      <tr>
+                        <th className="px-4 py-3 text-left">លេខការទិញ</th>
+                        <th className="px-4 py-3 text-left">អ្នកផ្គត់ផ្គង់</th>
+                        <th className="px-4 py-3 text-left">កាលបរិច្ឆេទ</th>
+                        <th className="px-4 py-3 text-left">សរុប</th>
+                        <th className="px-4 py-3 text-left">ទំនិញ / ខូច</th>
+                        <th className="px-4 py-3 text-left">ស្ថានភាព</th>
+                        <th className="px-4 py-3 text-center">សកម្មភាព</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {receiveFilteredList.length === 0 ? (
+                        <tr><td colSpan={7} className={`px-4 py-10 text-center text-sm ${theme.muted}`}>រកមិនឃើញ "{receiveSearchTerm}"</td></tr>
+                      ) : receiveFilteredList.map((purchase) => {
+                          const damagedQty = getDamagedCount(purchase);
+                          const itemsCount = purchase.itemsCount || getPurchaseLines(purchase).length;
+                          return (
+                            <tr key={purchase.id} className={`border-t border-zinc-200 dark:border-white/10 ${theme.row}`}>
+                              <td className="px-4 py-3 font-semibold">{purchase.purchaseNo}</td>
+                              <td className="px-4 py-3">{purchase.supplierName}</td>
+                              <td className="px-4 py-3">{purchase.purchaseDate}</td>
+                              <td className="px-4 py-3 font-semibold">{fmtUsd(purchase.grandTotalUsd || 0)}</td>
+                              <td className="px-4 py-3">
+                                {(() => {
+                                  const claimQty = getClaimRequiredCount(purchase);
+                                  const hasBoth = damagedQty > 0 && claimQty > 0;
+                                  return (
+                                    <div className="flex flex-col gap-1">
+                                      <span className={`text-xs ${theme.muted}`}>{itemsCount} មុខទំនិញ</span>
+                                      {hasBoth ? (
+                                        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600">
+                                          <FiAlertTriangle size={9} />
+                                          {damagedQty === claimQty ? `${damagedQty} ខូច · ទាមទារ` : `${damagedQty} ខូច · ${claimQty} ទាមទារ`}
+                                        </span>
+                                      ) : damagedQty > 0 ? (
+                                        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-500">
+                                          <FiAlertTriangle size={9} /> {damagedQty} ខូច
+                                        </span>
+                                      ) : claimQty > 0 ? (
+                                        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600">
+                                          <FiAlertTriangle size={9} /> {claimQty} ទាមទារ
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })()}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(getEffectivePurchaseStatus(purchase))}`}>
+                                  {getStatusIcon(getEffectivePurchaseStatus(purchase))}
+                                  {STATUS_LABEL[getEffectivePurchaseStatus(purchase)] ?? getEffectivePurchaseStatus(purchase)}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center justify-center gap-2">
+                                  {getEffectivePurchaseStatus(purchase) === STATUS.PENDING_RECEIVE && (
+                                    <Tooltip label="ទទួលទំនិញ">
+                                      <button type="button" onClick={() => openReceiveGoodsModal(purchase)}
+                                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700">
+                                        <FiTruck size={17} />
+                                      </button>
+                                    </Tooltip>
+                                  )}
+                                  {getEffectivePurchaseStatus(purchase) === STATUS.PENDING_STOCK_IN && purchase.status !== STATUS.PENDING_CLAIM && (
+                                    <Tooltip label="បញ្ជាក់ស្តុកចូល">
+                                      <button type="button" onClick={() => handleConfirmStockIn(purchase)}
+                                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                                        <FiCheckCircle size={17} />
+                                      </button>
+                                    </Tooltip>
+                                  )}
+                                  {purchase.status === STATUS.PENDING_CLAIM && (
+                                    <>
+                                      {((hasRemainingStockInQty(purchase) && !hasAnyStockedInQty(purchase)) || hasPendingReplacementStockIn(purchase)) && (
+                                        <Tooltip label="បញ្ជាក់ស្តុកចូល">
+                                          <button type="button" onClick={() => handleConfirmStockIn(purchase)}
+                                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                                            <FiCheckCircle size={17} />
+                                          </button>
+                                        </Tooltip>
+                                      )}
+                                      {getClaimRequiredCount(purchase) > 0 && !getOpenSupplierClaim(purchase) && !hasResolvedSupplierClaim(purchase) && (
+                                        <Tooltip label="បង្កើតការទាមទារ">
+                                          <button type="button" onClick={() => openPurchaseReturnModal(purchase)}
+                                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600">
+                                            <FiRotateCcw size={17} />
+                                          </button>
+                                        </Tooltip>
+                                      )}
+                                    </>
+                                  )}
+                                  <Tooltip label="មើលការទិញ">
+                                    <button type="button" onClick={() => openViewModal(purchase)}
+                                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600">
+                                      <FiEye size={17} />
+                                    </button>
+                                  </Tooltip>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )}
+
+        {/* ── Returns Tab ── */}
+        {activeTab === "returns" && (
+          <div className="p-4 space-y-4">
+            {/* Filter bar + New Return button */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex gap-1.5">
+                {[
+                  { key: "open", label: "បើក", count: openReturnsCount },
+                  { key: "resolved", label: "បានដោះស្រាយ", count: resolvedReturnsCount },
+                  { key: "all", label: "ទាំងអស់", count: purchaseReturns.length },
+                ].map((f) => (
+                  <button key={f.key} type="button" onClick={() => setReturnStatusFilter(f.key)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      returnStatusFilter === f.key
+                        ? "bg-red-600 text-white"
+                        : `${theme.badge} hover:opacity-80`
+                    }`}>
+                    {f.label}
+                    {f.count != null && (
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${returnStatusFilter === f.key ? "bg-white/20 text-white" : "bg-red-500/15 text-red-500"}`}>
+                        {f.count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative w-full sm:w-64">
+                  <FiSearch className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm ${theme.muted}`} />
+                  <input type="text" placeholder="ស្វែងរកលេខ ឬអ្នកផ្គត់ផ្គង់..."
+                    value={returnSearchTerm} onChange={(e) => setReturnSearchTerm(e.target.value)}
+                    className={`h-9 w-full rounded-xl border pl-9 pr-3 text-xs outline-none transition focus:ring-2 ${theme.input}`} />
+                </div>
+                <p className={`text-xs ${theme.muted}`}>{returnFilteredList.length} លទ្ធផល</p>
+                <button type="button"
+                  onClick={() => { setNewReturnPanelOpen((v) => !v); setNewReturnSearchTerm(""); }}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${newReturnPanelOpen ? "bg-red-700 text-white" : "bg-red-600 text-white hover:bg-red-700"}`}>
+                  <FiPlus className="text-xs" /> ត្រឡប់ថ្មី
+                </button>
+              </div>
+            </div>
+
+            {/* Inline New Return panel */}
+            {newReturnPanelOpen && (
+              <div className={`overflow-hidden rounded-xl border ${theme.tableWrap}`}>
+                {/* Header: icon + search + count + close in one row */}
+                <div className={`flex items-center gap-3 border-b px-4 py-2.5 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+                    <FiRotateCcw size={13} />
+                  </div>
+                  <div className="relative flex-1">
+                    <FiSearch className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs ${theme.muted}`} />
+                    <input autoFocus type="text" placeholder="ស្វែងរកការទិញដើម្បីត្រឡប់..."
+                      value={newReturnSearchTerm}
+                      onChange={(e) => setNewReturnSearchTerm(e.target.value)}
+                      className={`h-8 w-full rounded-lg border pl-8 pr-3 text-xs outline-none focus:ring-1 focus:ring-red-400 ${theme.input}`} />
+                  </div>
+                  <span className={`shrink-0 text-[11px] ${theme.muted}`}>{newReturnEligible.length} អាច</span>
+                  <button type="button" onClick={() => { setNewReturnPanelOpen(false); setNewReturnSearchTerm(""); }}
+                    className={`shrink-0 rounded-lg p-1 transition hover:bg-zinc-500/10 ${theme.muted}`}>
+                    <FiX size={14} />
+                  </button>
+                </div>
+                {/* Purchase list */}
+                <div className="max-h-56 overflow-y-auto">
+                  {allPurchasesQuery.isLoading ? (
+                    <p className={`p-5 text-center text-xs ${theme.muted}`}>រង់ចាំបន្តិច...</p>
+                  ) : newReturnEligible.length === 0 ? (
+                    <p className={`px-4 py-5 text-center text-xs ${theme.muted}`}>
+                      {newReturnSearchTerm ? "រកមិនឃើញ។" : "គ្មានការទិញដែលអាចត្រឡប់បាន។"}
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-zinc-100 dark:divide-white/5">
+                      {newReturnEligible.map((p) => {
+                        const claimCount = getClaimRequiredCount(p);
+                        const damagedCount = getDamagedCount(p);
+                        const effStatus = getEffectivePurchaseStatus(p);
+                        return (
+                          <button key={p.id} type="button"
+                            onClick={() => { setNewReturnPanelOpen(false); setNewReturnSearchTerm(""); openPurchaseReturnModal(p); }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-red-500/5">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+                              <FiShoppingCart size={13} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-bold">{p.purchaseNo}</p>
+                              <p className={`truncate text-[11px] ${theme.muted}`}>{p.supplierName} · {p.purchaseDate}</p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getStatusClass(effStatus)}`}>
+                                {effStatus}
+                              </span>
+                              {(claimCount > 0 || damagedCount > 0) && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600">
+                                  <FiAlertTriangle size={9} />
+                                  {claimCount > 0 ? `${claimCount} claim` : `${damagedCount} damaged`}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {purchaseReturnsQuery.isLoading ? (
+              <table className="w-full"><tbody><TableLoading theme={theme} colSpan={8} text="រង់ចាំបន្តិច..." /></tbody></table>
+            ) : returnFilteredList.length === 0 ? (
+              <EmptyState theme={theme} icon={<FiRotateCcw />}
+                title={returnStatusFilter === "open" ? "គ្មានការត្រឡប់បើក" : returnStatusFilter === "resolved" ? "គ្មានការត្រឡប់ដោះស្រាយ" : "គ្មានការត្រឡប់"}
+                description={returnStatusFilter === "open" ? "ការត្រឡប់ទាំងអស់បានដោះស្រាយ។ ចុច + ត្រឡប់ថ្មីដើម្បីបង្កើត។" : "គ្មានការត្រឡប់ អ្នកផ្គត់ផ្គង់ ត្រូវបានកត់ទុករឿន។"} />
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
+                <table className="w-full min-w-4xl text-sm">
+                  <thead className="bg-red-600 text-white">
+                    <tr>
+                      <th className="w-8 px-3 py-3" />
+                      <th className="px-4 py-3 text-left">លេខត្រឡប់</th>
+                      <th className="px-4 py-3 text-left">លេខការទិញ</th>
+                      <th className="px-4 py-3 text-left">អ្នកផ្គត់ផ្គង់</th>
+                      <th className="px-4 py-3 text-left">កាលបរិច្ឆេទ</th>
+                      <th className="px-4 py-3 text-left">ដំណោះស្រាយ</th>
+                      <th className="px-4 py-3 text-left">ស្ថានភាព</th>
+                      <th className="px-4 py-3 text-left">សកម្មភាព</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {returnFilteredList.map((ret) => {
+                      const retStatus = normalizeReturnStatusLabel(ret.status || ret.resolutionStatus);
+                      const retIsOpen = ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(retStatus);
+                      const retPurchase = allPurchases.find((p) => String(p.id) === String(ret.purchaseId));
+                      const isReplacement = ret.resolutionType === "replacement";
+                      const isMoneyClaim = ["refund", "credit_note"].includes(ret.resolutionType);
+                      const isExpanded = expandedReturnId === ret.id;
+                      const purchaseNo = ret.purchaseNo || retPurchase?.purchaseNo || "-";
+                      const retItems = Array.isArray(ret.items) ? ret.items : [];
+                      return (
+                        <React.Fragment key={ret.id}>
+                          <tr
+                            className={`border-t border-zinc-200 dark:border-white/10 cursor-pointer transition ${theme.row} ${isExpanded ? (isDark ? "bg-white/5" : "bg-zinc-50") : ""}`}
+                            onClick={() => setExpandedReturnId(isExpanded ? null : ret.id)}
+                          >
+                            <td className="px-3 py-3 text-center">
+                              <FiChevronRight className={`inline-block transition-transform duration-200 ${isExpanded ? "rotate-90" : ""} ${theme.muted}`} />
+                            </td>
+                            <td className="px-4 py-3 font-semibold">{ret.purchaseReturnNo || "-"}</td>
+                            <td className="px-4 py-3">{purchaseNo}</td>
+                            <td className="px-4 py-3">{ret.supplierName || "-"}</td>
+                            <td className="px-4 py-3">{ret.returnDate || "-"}</td>
+                            <td className="px-4 py-3">{{ replacement: "ជំនួសទំនិញខូច", refund: "សងប្រាក់", credit_note: "Credit Note" }[ret.resolutionType] ?? (ret.resolutionType || "-")}</td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${getPurchaseReturnStatusClass(retStatus)}`}>
+                                {getPurchaseReturnStatusIcon(retStatus)} {RETURN_STATUS_LABEL[retStatus] ?? retStatus}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-2">
+                                {retIsOpen && retPurchase && isReplacement && (
+                                  <Tooltip label="ទទួលជំនួស">
+                                    <button type="button" onClick={() => handleReceiveReplacement(retPurchase, ret)}
+                                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700">
+                                      <FiTruck size={17} />
+                                    </button>
+                                  </Tooltip>
+                                )}
+                                {retIsOpen && retPurchase && isMoneyClaim && (
+                                  <Tooltip label={ret.resolutionType === "refund" ? "កត់ការសងបានទទួល" : "ដោះស្រាយ Credit Note"}>
+                                    <button type="button" onClick={() => handleResolveSupplierClaim(retPurchase, ret)}
+                                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                                      <FiCheckCircle size={17} />
+                                    </button>
+                                  </Tooltip>
+                                )}
+                                {retPurchase && (
+                                  <Tooltip label="មើលការទិញ">
+                                    <button type="button" onClick={() => openViewModal(retPurchase)}
+                                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600">
+                                      <FiEye size={17} />
+                                    </button>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+
+                          {isExpanded && (
+                            <tr className={`border-t border-zinc-200 dark:border-white/10 ${isDark ? "bg-white/5" : "bg-zinc-50"}`}>
+                              <td colSpan={8} className="px-6 pb-5 pt-2">
+                                <div className={`rounded-xl border p-4 ${theme.tableWrap}`}>
+                                  {/* Return meta */}
+                                  <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+                                    {ret.returnReason && (
+                                      <span className={theme.muted}>
+                                        មូលហេតុ: <span className="font-semibold text-current">{formatCondition(ret.returnReason)}</span>
+                                      </span>
+                                    )}
+                                    {ret.subtotalUsd > 0 && (
+                                      <span className={theme.muted}>
+                                        ចំនួន: <span className="font-semibold text-red-500">${ret.subtotalUsd.toFixed(2)}</span>
+                                      </span>
+                                    )}
+                                    {ret.note && (
+                                      <span className={theme.muted}>
+                                        កំណត់ចំណាំ: <span className="font-semibold text-current">{ret.note}</span>
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Items table */}
+                                  {retItems.length > 0 ? (
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className={`text-left ${theme.muted} border-b border-zinc-200 dark:border-white/10`}>
+                                          <th className="pb-2 font-semibold pr-4">ផលិតផល</th>
+                                          <th className="pb-2 font-semibold pr-4">ចំនួនត្រឡប់</th>
+                                          <th className="pb-2 font-semibold pr-4">លក្ខខណ្ឌ</th>
+                                          <th className="pb-2 font-semibold">វឌ្ឍនភាពដំណោះស្រាយ</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {retItems.map((item, idx) => {
+                                          const name = item.variant_name || item.variantName || item.product_name || "-";
+                                          const unit = item.unit_name || item.unitName || "";
+                                          const qty = Number(item.qty_returned || item.qtyReturned || item.qty || 0);
+                                          const condition = formatCondition(item.condition);
+                                          const resDetail = getReturnItemResolution(item, ret.resolutionType, ret);
+                                          return (
+                                            <tr key={idx} className="border-t border-zinc-200/60 dark:border-white/10">
+                                              <td className="py-2 pr-4 font-medium">{name}</td>
+                                              <td className="py-2 pr-4">{qty} {unit}</td>
+                                              <td className="py-2 pr-4">{condition || "-"}</td>
+                                              <td className="py-2">{resDetail}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  ) : (
+                                    <p className={`text-xs ${theme.muted}`}>គ្មានទំនិញកត់ត្រាសម្រាប់ការត្រឡប់នេះ។</p>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Payments Tab ── */}
+        {activeTab === "payments" && (
+          <div className="p-4 space-y-4">
+            {/* Outstanding banner */}
+            {totalOutstandingUsd > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-500/8 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/8">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15">
+                    <FiCreditCard className="text-amber-500" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">សរុបជំពាក់</p>
+                    <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{fmtUsd(totalOutstandingUsd)}</p>
+                  </div>
+                </div>
+                <p className={`text-xs ${theme.muted}`}>{unpaidCount} ការទិញមិនទាន់បង់</p>
+              </div>
+            )}
+
+            {/* Filter bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex gap-1.5">
+                {[
+                  { key: "outstanding", label: "ជំពាក់", count: unpaidCount },
+                  { key: "paid", label: "បានបង់" },
+                  { key: "all", label: "ទាំងអស់" },
+                ].map((f) => (
+                  <button key={f.key} type="button" onClick={() => setPaymentViewFilter(f.key)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      paymentViewFilter === f.key
+                        ? "bg-amber-500 text-white"
+                        : `${theme.badge} hover:opacity-80`
+                    }`}>
+                    {f.label}
+                    {f.count != null && (
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${paymentViewFilter === f.key ? "bg-white/20 text-white" : "bg-amber-500/15 text-amber-500"}`}>
+                        {f.count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative w-full sm:w-64">
+                  <FiSearch className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm ${theme.muted}`} />
+                  <input type="text" placeholder="ស្វែងរកលេខ ឬអ្នកផ្គត់ផ្គង់..."
+                    value={paymentSearchTerm} onChange={(e) => setPaymentSearchTerm(e.target.value)}
+                    className={`h-9 w-full rounded-xl border pl-9 pr-3 text-xs outline-none transition focus:ring-2 ${theme.input}`} />
+                </div>
+                <p className={`text-xs ${theme.muted}`}>{paymentFilteredList.length} លទ្ធផល</p>
+              </div>
+            </div>
+
+            {allPurchasesQuery.isLoading ? (
+              <table className="w-full"><tbody><TableLoading theme={theme} colSpan={8} text="រង់ចាំបន្តិច..." /></tbody></table>
+            ) : paymentFilteredList.length === 0 ? (
+              <EmptyState theme={theme} icon={<FiCheckCircle />}
+                title={paymentViewFilter === "outstanding" ? "ការទូទាត់ទាំងអស់បានបញ្ចប់" : paymentViewFilter === "paid" ? "គ្មានការទិញបានបង់" : "គ្មានការទិញ"}
+                description={paymentViewFilter === "outstanding" ? "គ្មានសមតុល្យជំពាក់លើការទិញណាមួយ។" : "រកមិនឃើញទំនាក់ទំនង។"} />
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
+                <table className="w-full min-w-200 text-sm">
+                  <thead className="bg-amber-500 text-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left">លេខការទិញ</th>
+                      <th className="px-4 py-3 text-left">អ្នកផ្គត់ផ្គង់</th>
+                      <th className="px-4 py-3 text-left">កាលបរិច្ឆេទ</th>
+                      <th className="px-4 py-3 text-left">សរុប</th>
+                      <th className="px-4 py-3 text-left">បានបង់</th>
+                      <th className="px-4 py-3 text-left">នៅសល់</th>
+                      <th className="px-4 py-3 text-left">របៀប</th>
+                      <th className="px-4 py-3 text-center">សកម្មភាព</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentFilteredList.map((purchase) => (
+                      <tr key={purchase.id} className={`border-t border-zinc-200 dark:border-white/10 ${theme.row}`}>
+                        <td className="px-4 py-3 font-semibold">{purchase.purchaseNo}</td>
+                        <td className="px-4 py-3">{purchase.supplierName}</td>
+                        <td className="px-4 py-3">{purchase.purchaseDate || "-"}</td>
+                        <td className="px-4 py-3">{fmtUsd(purchase.grandTotalUsd || 0)}</td>
+                        <td className="px-4 py-3 text-emerald-600 dark:text-emerald-400">{fmtUsd(purchase.paidAmountUsd || 0)}</td>
+                        <td className={`px-4 py-3 font-semibold ${Number(purchase.balanceAmountUsd || 0) > 0 ? "text-amber-500" : "text-emerald-500"}`}>
+                          {fmtUsd(purchase.balanceAmountUsd || 0)}
+                        </td>
+                        <td className="px-4 py-3">{paymentModeOptions.find(o => o.value === purchase.paymentMode)?.label ?? (purchase.paymentMode || "-")}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            {purchase.paymentStatus !== "paid" && Number(purchase.balanceAmountUsd || 0) > 0 && isPaymentReady(purchase) && (
+                              <Tooltip label="កត់ការទូទាត់">
+                                <button type="button" onClick={() => setRecordPaymentPurchase(purchase)}
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                                  <FiCreditCard size={17} />
+                                </button>
+                              </Tooltip>
+                            )}
+                            <Tooltip label="មើលការទិញ">
+                              <button type="button" onClick={() => openViewModal(purchase)}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600">
+                                <FiEye size={17} />
+                              </button>
+                            </Tooltip>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
 
       {modalMode === "view" && selectedPurchase && (
@@ -2289,6 +3023,17 @@ export default function Purchases() {
           getAvailableReturnQty={getAvailableReturnQty}
           onClose={closeModal}
           onSave={handleSavePurchaseReturn}
+        />
+      )}
+
+      {resolveMoneyModalOpen && resolveMoneyReturn && (
+        <ResolveMoneyClaimModal
+          purchase={resolveMoneyPurchase}
+          purchaseReturn={resolveMoneyReturn}
+          theme={theme}
+          onClose={() => setResolveMoneyModalOpen(false)}
+          onSave={handleConfirmMoneyResolution}
+          isSaving={resolveSupplierClaimMutation.isPending}
         />
       )}
 

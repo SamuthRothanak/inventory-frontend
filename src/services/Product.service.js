@@ -68,8 +68,23 @@ export const updateProductApi = async ({ id, payload }) => {
   return response.data;
 };
 
+export const toggleProductStatusApi = async ({ id, status }) => {
+  const formData = new FormData();
+  formData.append("_method", "PUT");
+  formData.append("status", status);
+  const response = await api.post(`/products/${id}`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
 export const deleteProductApi = async (id) => {
   const response = await api.delete(`/products/${id}`);
+  return response.data;
+};
+
+export const bulkDeleteProductsApi = async (ids) => {
+  const response = await api.post("/products/bulk-delete", { ids });
   return response.data;
 };
 

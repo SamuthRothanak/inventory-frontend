@@ -1,4 +1,4 @@
-import React, { useEffect, useId } from "react";
+﻿import React, { useEffect, useId } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -22,7 +22,7 @@ import {
 
 const sanitizeInputValue = (value, mode) => {
   if (mode === "number") return String(value || "").replace(/[^0-9]/g, "");
-  if (mode === "text") return String(value || "").replace(/[^\p{L}\s]/gu, "");
+  if (mode === "text") return String(value || "").replace(/[^\p{L}\p{M}\s]/gu, "");
   return value;
 };
 
@@ -81,12 +81,12 @@ export default function CategoryFormModal({
     });
   };
 
-  const title = isEdit ? "Edit Category" : "Add Category";
+  const title = isEdit ? "កែប្រភេទ" : "បន្ថែមប្រភេទ";
 
   return (
     <ModalShell
       title={title}
-      subtitle="Category image is optional but useful for POS category filters."
+      subtitle="រូបភាពប្រភេទជា optional តែមានប្រយោជន៍សម្រាប់ POS។"
       theme={theme}
       onClose={onClose}
       footer={
@@ -96,7 +96,7 @@ export default function CategoryFormModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Cancel
+            បោះបង់
           </button>
 
           <button
@@ -106,7 +106,7 @@ export default function CategoryFormModal({
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FiSave />
-            {isSaving ? "Saving..." : "Save Category"}
+            {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកប្រភេទ"}
           </button>
         </>
       }
@@ -124,40 +124,40 @@ export default function CategoryFormModal({
 
         <SectionTitle
           icon={<FiTag />}
-          title="Basic Information"
-          subtitle="Required category details for product management."
+          title="ព័ត៌មានមូលដ្ឋាន"
+          subtitle="ព័ត៌មានចាំបាច់សម្រាប់ការគ្រប់គ្រងផលិតផល។"
           theme={theme}
         />
 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormInput
-              label="Category Name"
+              label="ឈ្មោះប្រភេទ"
               required
               error={errors.name?.message}
               theme={theme}
-              placeholder="Beverage"
+              placeholder="ភេសជ្ជៈ"
               icon={<FiTag />}
               inputProps={register("name")}
               sanitize="text"
             />
 
             <FormSelect
-              label="Status"
+              label="ស្ថានភាព"
               theme={theme}
               icon={status === "Active" ? <FiCheckCircle /> : <FiXCircle />}
               value={status}
               onChange={(value) => setValue("status", value, { shouldValidate: true })}
               inputProps={register("status")}
               options={[
-                { value: "Active", label: "Active" },
-                { value: "Inactive", label: "Inactive" },
+                { value: "Active", label: "ដំណើរការ" },
+                { value: "Inactive", label: "មិនដំណើរការ" },
               ]}
             />
 
             <div className="md:col-span-2">
               <FormImageInput
-                label="Image"
+                label="រូបភាព"
                 file={imageFile}
                 preview={imagePath}
                 error={errors.imageFile?.message || errors.imagePath?.message}
@@ -192,9 +192,9 @@ export default function CategoryFormModal({
 
           <div className="mt-4">
             <FormTextarea
-              label="Description"
+              label="ការពិពណ៌នា"
               theme={theme}
-              placeholder="Drinks, soda, water, and juice"
+              placeholder="ភេសជ្ជៈជំនួយរាងកាយ...."
               icon={<FiFileText />}
               inputProps={register("description")}
               error={errors.description?.message}
@@ -204,8 +204,8 @@ export default function CategoryFormModal({
 
         <SectionTitle
           icon={<FiImage />}
-          title="Preview"
-          subtitle="How this category may appear in the POS screen."
+          title="មើលជាមុន"
+          subtitle="របៀបដែលប្រភេទនេះអាចលេចឡើងក្នុងអេក្រង់ POS។"
           theme={theme}
         />
 
@@ -213,16 +213,16 @@ export default function CategoryFormModal({
           <div className="flex items-center gap-4">
             <CategoryImage
               image={imagePath}
-              name={watch("name") || "Category"}
+              name={watch("name") || "ប្រភេទ"}
             />
 
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">
-                {watch("name") || "Category Name"}
+                {watch("name") || "ឈ្មោះប្រភេទ"}
               </p>
 
               <p className={`mt-1 line-clamp-2 text-xs ${theme.muted}`}>
-                {watch("description") || "Category description"}
+                {watch("description") || "ការពិពណ៌នាប្រភេទ"}
               </p>
 
               <span
@@ -233,7 +233,7 @@ export default function CategoryFormModal({
                 }`}
               >
                 {status === "Active" ? <FiCheckCircle /> : <FiXCircle />}
-                {status}
+                {status === "Active" ? "ដំណើរការ" : "មិនដំណើរការ"}
               </span>
             </div>
           </div>
@@ -424,7 +424,7 @@ function FormImageInput({
               className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
             >
               <FiUploadCloud className="text-lg" />
-              Choose Image
+              ជ្រើសរើសរូបភាព
             </label>
 
             <input
@@ -439,7 +439,7 @@ function FormImageInput({
             />
 
             <p className={`mt-3 truncate text-sm ${theme.muted}`}>
-              {file?.name || "PNG, JPG, JPEG up to your backend limit."}
+              {file?.name || "PNG, JPG, JPEG"}
             </p>
 
             {file && (
@@ -456,7 +456,7 @@ function FormImageInput({
               className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <FiX />
-              Remove
+              លុបចេញ
             </button>
           )}
         </div>

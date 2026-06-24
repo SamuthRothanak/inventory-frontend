@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
+import { useConfirm } from "../../../../components/ConfirmDialog";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   FiBox,
@@ -15,6 +16,7 @@ import {
   FiPackage,
   FiPlus,
   FiSave,
+  FiSettings,
   FiTag,
   FiTrash2,
   FiXCircle,
@@ -22,12 +24,19 @@ import {
 
 import ModalShell from "./ModalShell";
 import SearchableDropdown from "./SearchableDropdown";
+import { SizeUnitSelect } from "./SizeUnitSelect";
 import {
   productSetupDefaultValues,
   productSetupSchema,
 } from "../schemas/productSetup.schema";
 
 const makeLocalKey = (prefix) => `${prefix}_${Date.now()}_${Math.random()}`;
+
+const PACKAGE_TYPES = [
+  "ដុំ", "កញ្ចប់", "កញ្ចប់តូច", "ថង់", "ប្រអប់",
+  "កេស", "កាតុង", "កំប៉ុង", "ដប", "ដុំរមូរ",
+  "ថាស", "ឡូ", "គីឡូក្រាម", "ក្រាម", "លីត្រ", "មីលីលីត្រ",
+];
 
 function onlyPositiveNumber(value, allowDecimal = true) {
   let nextValue = String(value || "");
@@ -67,6 +76,10 @@ function detectUnitType(unitName) {
   }
 
   return "piece";
+}
+
+function unitTypeDisplay(type) {
+  return { weight: "ទម្ងន់", volume: "មាឌ", piece: "ចំនួន" }[type] ?? type;
 }
 
 function preventInvalidNumberKey(event, allowDecimal = true) {
@@ -125,6 +138,7 @@ export default function ProductSetupFormModal({
   const [formErrorMessage, setFormErrorMessage] = useState("");
   const [activeVariantIndex, setActiveVariantIndex] = useState(null);
   const [pendingNewVariantIndex, setPendingNewVariantIndex] = useState(null);
+  const [showDescription, setShowDescription] = useState(false);
 
   const {
     register,
@@ -219,19 +233,19 @@ export default function ProductSetupFormModal({
 
   const getUnitLabel = (unitId) => {
     const unit = units.find((item) => String(item.id) === String(unitId));
-    return unit?.unit_name || unit?.unitName || unit?.unit_code || "Unit";
+    return unit?.unit_name || unit?.unitName || unit?.unit_code || "ខ្នាតទំនិញ";
   };
 
   const getPackageTypeFromVariant = (variant = {}) => {
     const variantUnits = variant.units || [];
     const baseUnit = variantUnits.find((item) => item.is_base_unit) || variantUnits[0];
     const unitLabel = getUnitLabel(baseUnit?.unit_id);
-    return unitLabel === "Unit" ? "" : unitLabel.toLowerCase();
+    return unitLabel === "ខ្នាតទំនិញ" ? "" : unitLabel.toLowerCase();
   };
 
   const getVariantUnitSummary = (variant = {}) => {
     const variantUnits = variant.units || [];
-    if (variantUnits.length === 0) return "No units";
+    if (variantUnits.length === 0) return "គ្មានខ្នាតទំនិញ";
     return variantUnits
       .map((item) => `${Number(item.conversion_qty || 1)} ${getUnitLabel(item.unit_id)}`)
       .join(", ");
@@ -260,14 +274,14 @@ export default function ProductSetupFormModal({
 
   const handleInvalidSubmit = () => {
     setFormErrorMessage(
-      "Please check Product Information, Variants, Units, and Price Rules. Some required fields are missing.",
+      "សូមពិនិត្យ ព័ត៌មានផលិតផល, មុខទំនិញ, ខ្នាតទំនិញ, និងច្បាប់តម្លៃ ។ ទុកដាក់ field ចាំបាច់មួយចំនួន ។",
     );
   };
 
   return (
     <ModalShell
-      title="Add Product Setup"
-      subtitle="Create product, variants, units, and price rules in one flow before using it in Purchases."
+      title="បន្ថែមផលិតផល"
+      subtitle="បង្កើតផលិតផល បន្ទាប់មកបន្ថែមមុខទំនិញ បន្ទាប់មកជ្រើសរើសខ្នាតទំនិញ សម្រាប់មុខទំនិញនីមួយៗ និងចំនួនស្ដុកដែលជិតអស់។"
       theme={theme}
       onClose={onClose}
       width="max-w-7xl"
@@ -275,12 +289,12 @@ export default function ProductSetupFormModal({
         <>
           <button type="button" onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
-            Cancel
+            បោះបង់
           </button>
           <button type="submit" form="product-setup-form" disabled={isSaving}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
             <FiSave />
-            {isSaving ? "Saving..." : "Save Product Setup"}
+            {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកផលិតផល"}
           </button>
         </>
       }
@@ -294,52 +308,62 @@ export default function ProductSetupFormModal({
 
         {Number(activeExchangeRate || 0) <= 0 && (
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm font-semibold text-amber-500">
-            No active exchange rate found. Please create and activate an exchange rate before saving product prices.
+            គ្មានអត្រាប្ដូររូបិយប័ណ្ណ ។ សូមបង្កើត និងធ្វើឲ្យសកម្មអត្រាប្ដូររូបិយប័ណ្ណ មុនពេលរក្សាទុកតម្លៃផលិតផល ។
           </div>
         )}
 
-        <FormSection title="1. Product Information" subtitle="Main product data. Example: Coca Cola." icon={<FiBox />} theme={theme}>
+        <FormSection title="១. ព័ត៌មានផលិតផល" subtitle="ទិន្នន័យផលិតផលចម្បង ។ ឧទាហរណ៍: Coca Cola ។" icon={<FiBox />} theme={theme}>
+          {/* Status hidden — always Active on creation */}
+          <input type="hidden" {...register("product.status")} defaultValue="active" />
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FormInput label="Product Name" required error={errors.product?.name?.message} theme={theme} icon={<FiPackage />}
+            <FormInput label="ឈ្មោះផលិតផល" required error={errors.product?.name?.message} theme={theme} icon={<FiPackage />}
               inputProps={register("product.name")} placeholder="Coca Cola" />
-            <SearchableDropdown label="Category" required error={errors.product?.category_id?.message} theme={theme} icon={<FiGrid />}
+            <SearchableDropdown label="ប្រភេទ" required error={errors.product?.category_id?.message} theme={theme} icon={<FiGrid />}
               value={watch("product.category_id")}
               onChange={(v) => setValue("product.category_id", v, { shouldValidate: true })}
-              placeholder="Select category"
-              options={[
-                ...categories.map((c) => ({ value: String(c.id), label: c.name })),
-              ]} />
+              placeholder="ជ្រើសរើសប្រភេទ"
+              options={categories.map((c) => ({ value: String(c.id), label: c.name }))} />
             <input type="hidden" {...register("product.category_id")} />
-            <FormSelectRHF label="Status" error={errors.product?.status?.message} theme={theme}
-              icon={watch("product.status") === "active" ? <FiCheckCircle /> : <FiXCircle />}
-              value={watch("product.status")}
-              onChange={(value) => setValue("product.status", value, { shouldValidate: true })}
-              inputProps={register("product.status")}
-              options={[{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }]} />
           </div>
-          <div className="mt-4">
-            <FormTextarea label="Description" error={errors.product?.description?.message} theme={theme} icon={<FiFileText />}
-              inputProps={register("product.description")} placeholder="Coca Cola soft drink" />
+
+          {/* Description — collapsible */}
+          <div className="mt-3">
+            {showDescription ? (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-white/10 dark:bg-white/3">
+                <FormTextarea label="ការពិពណ៌នា" error={errors.product?.description?.message} theme={theme} icon={<FiFileText />}
+                  inputProps={register("product.description")} placeholder="ភេសជ្ជៈ Coca Cola" />
+                <button type="button" onClick={() => { setShowDescription(false); setValue("product.description", ""); }}
+                  className={`mt-2 text-xs ${theme.muted} hover:text-red-500`}>
+                  − លុបការពិពណ៌នា
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => setShowDescription(true)}
+                className={`inline-flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-semibold transition hover:border-red-400 hover:text-red-500 dark:border-white/10 dark:hover:border-red-500/60 dark:hover:text-red-400 ${theme.muted}`}>
+                <FiFileText className="text-sm" /> + បន្ថែមការពិពណ៌នា (ស្រេចចិត្ត)
+              </button>
+            )}
           </div>
+
+          {/* Image — compact */}
           <div className="mt-4">
-            <ImageInput label="Main Product Image" uniqueId="product-main" theme={theme}
+            <ImageInput label="រូបភាពផលិតផល(ស្រេចចិត្ត)" uniqueId="product-main" theme={theme}
               previewFile={selectedProductImage}
               onChange={(file) => setValue("product.imageFile", file, { shouldValidate: true })} />
           </div>
         </FormSection>
-
-        <FormSection title="2. Product Variants" subtitle="Add can, bottle, box, or other variants. Each variant has units, and each unit has its own price rules." icon={<FiLayers />} theme={theme}>
+        <FormSection title="២. មុខទំនិញ" icon={<FiLayers />} theme={theme}>
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold">Variants</p>
+            <div> 
               <p className={`mt-1 text-xs ${theme.muted}`}>
-                Example: Coca Cola 330ml Can and Coca Cola 330ml Bottle.
+                ឧទាហរណ៍: Coca-Cola 330ml កំប៉ុង និង Coca-Cola 330ml ដប ។
               </p>
             </div>
             <button type="button" onClick={handleAddVariant}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600">
               <FiPlus />
-              Add Variant
+              បន្ថែមមុខទំនិញ
             </button>
           </div>
 
@@ -352,22 +376,22 @@ export default function ProductSetupFormModal({
           {variantFields.length === 0 && (
             <div className={`flex flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center ${theme.softCard}`}>
               <FiPackage className="text-4xl text-red-500" />
-              <p className="mt-3 text-sm font-semibold">No variants added</p>
-              <p className={`mt-1 text-xs ${theme.muted}`}>Click Add Variant to start product setup.</p>
+              <p className="mt-3 text-sm font-semibold">មិនទាន់មានមុខទំនិញ</p>
+              <p className={`mt-1 text-xs ${theme.muted}`}>ចុច «បន្ថែមមុខទំនិញ» ដើម្បីចាប់ផ្ដើម ។</p>
             </div>
           )}
 
           {variantFields.length > 0 && (
             <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-white/10">
-              <table className="w-full min-w-[920px] text-sm">
+              <table className="w-full min-w-230 text-sm">
                 <thead className="bg-red-600 text-white">
                   <tr>
-                    <th className="px-4 py-3 text-left">Variant</th>
-                    <th className="px-4 py-3 text-left">Package / Size</th>
-                    <th className="px-4 py-3 text-left">Units</th>
-                    <th className="px-4 py-3 text-left">Price</th>
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-center">Actions</th>
+                    <th className="px-4 py-3 text-left">មុខទំនិញ</th>
+                    <th className="px-4 py-3 text-left">ខ្ចប់ / ទំហំ</th>
+                    <th className="px-4 py-3 text-left">ខ្នាតទំនិញ</th>
+                    <th className="px-4 py-3 text-left">តម្លៃ</th>
+                    <th className="px-4 py-3 text-left">ស្ថានភាព</th>
+                    <th className="px-4 py-3 text-center">សកម្មភាព</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -376,20 +400,20 @@ export default function ProductSetupFormModal({
                     return (
                       <tr key={variantField.id} className="border-t border-zinc-200 dark:border-white/10">
                         <td className="px-4 py-3">
-                          <p className="font-semibold">{variant.variant_name || `Variant #${variantIndex + 1}`}</p>
+                          <p className="font-semibold">{variant.variant_name || `មុខទំនិញ #${variantIndex + 1}`}</p>
                           <p className={`mt-1 text-xs ${theme.muted}`}>{variant.variant_code || "-"}</p>
                         </td>
                         <td className="px-4 py-3">
                           <p>{variant.package_type || "-"}</p>
                           <p className={`mt-1 text-xs ${theme.muted}`}>
-                            {[variant.size_value, variant.size_unit].filter(Boolean).join(" ") || "No size"}
+                            {[variant.size_value, variant.size_unit].filter(Boolean).join(" ") || "គ្មានទំហំ"}
                           </p>
                         </td>
                         <td className="px-4 py-3">{getVariantUnitSummary(variant)}</td>
                         <td className="px-4 py-3 font-semibold">{getVariantPriceSummary(variant)}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${variant.status ? "bg-emerald-500/10 text-emerald-500" : "bg-zinc-500/10 text-zinc-400"}`}>
-                            {variant.status ? "Active" : "Inactive"}
+                            {variant.status ? "ដំណើរការ" : "មិនដំណើរការ"}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -397,12 +421,12 @@ export default function ProductSetupFormModal({
                             <button type="button" onClick={() => handleOpenVariant(variantIndex)}
                               className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700">
                               <FiEdit2 />
-                              Edit
+                              កែ
                             </button>
                             <button type="button" onClick={() => removeVariant(variantIndex)}
                               className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
                               <FiTrash2 />
-                              Remove
+                              លុប
                             </button>
                           </div>
                         </td>
@@ -418,8 +442,7 @@ export default function ProductSetupFormModal({
 
       {activeVariantIndex !== null && variantFields[activeVariantIndex] && (
         <ModalShell
-          title={pendingNewVariantIndex !== null ? "Add Variant" : "Edit Variant"}
-          subtitle="Set variant information, units, and price rules for this product."
+          title={pendingNewVariantIndex !== null ? "បន្ថែមមុខទំនិញ" : "កែមុខទំនិញ"}
           theme={theme}
           onClose={handleCloseVariantModal}
           width="max-w-6xl"
@@ -427,12 +450,12 @@ export default function ProductSetupFormModal({
             <>
               <button type="button" onClick={handleCloseVariantModal}
                 className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
-                Cancel
+                បោះបង់
               </button>
               <button type="button" onClick={handleSaveVariantModal}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600">
                 <FiSave />
-                Save Variant
+                រក្សាទុកមុខទំនិញ
               </button>
             </>
           }
@@ -482,6 +505,9 @@ function VariantSetupCard({
   onDeleteUnit,
   onRemoveVariant,
 }) {
+  const confirm = useConfirm();
+  const [showSize, setShowSize] = useState(false);
+  const [showColor, setShowColor] = useState(false);
   const [quickUnitOpen, setQuickUnitOpen] = useState(false);
   const [quickUnit, setQuickUnit] = useState({
     unit_code: "",
@@ -506,6 +532,69 @@ function VariantSetupCard({
   const variantImage = watch(`variants.${variantIndex}.imageFile`);
   const variantUnits = watch(`variants.${variantIndex}.units`) || [];
   const allPriceRules = watch(`variants.${variantIndex}.priceRules`) || [];
+
+  const productName = watch("product.name") || "";
+  const variantNameValue = watch(`variants.${variantIndex}.variant_name`) || "";
+  const packageTypeVal = watch(`variants.${variantIndex}.package_type`) || "";
+  const sizeValueVal = watch(`variants.${variantIndex}.size_value`) || "";
+  const sizeUnitVal = watch(`variants.${variantIndex}.size_unit`) || "";
+
+  const autoSuffix = [
+    sizeValueVal ? `${sizeValueVal}${sizeUnitVal}` : "",
+    packageTypeVal,
+  ].filter(Boolean).join(" ");
+
+  const [isAutoName, setIsAutoName] = useState(true);
+  const [isAutoUnit, setIsAutoUnit] = useState(true);
+  const [thresholdUnitIdx, setThresholdUnitIdx] = useState(null);
+  const prevLargestIdxRef = useRef(null);
+
+  useEffect(() => {
+    const nonBase = variantUnits
+      .map((u, i) => ({ ...u, idx: i }))
+      .filter(u => !u.is_base_unit && Number(u.conversion_qty) > 1 && u.unit_id);
+    const largest = nonBase.length > 0
+      ? nonBase.reduce((a, b) => Number(b.conversion_qty) > Number(a.conversion_qty) ? b : a)
+      : null;
+    const newIdx = largest ? largest.idx : null;
+    if (newIdx !== prevLargestIdxRef.current) {
+      prevLargestIdxRef.current = newIdx;
+      setThresholdUnitIdx(newIdx);
+      if (newIdx !== null) {
+        setValue(`variants.${variantIndex}.low_stock_threshold`, 0);
+      }
+    }
+  }, [variantUnits]);
+
+  useEffect(() => {
+    if (!isAutoName) return;
+    const newName = productName
+      ? (autoSuffix ? `${productName} ${autoSuffix}` : productName)
+      : autoSuffix;
+    setValue(`variants.${variantIndex}.variant_name`, newName, { shouldValidate: false });
+  }, [autoSuffix, productName, isAutoName, variantIndex, setValue]);
+
+  // Auto-match base unit when Package Type changes (only if unit is still in "auto" mode)
+  useEffect(() => {
+    if (!isAutoUnit) return;
+    const baseUnitIndex = (watch(`variants.${variantIndex}.units`) || [])
+      .findIndex((u) => u.is_base_unit);
+    if (baseUnitIndex === -1) return;
+    if (!packageTypeVal) return;
+    const matched = units.find(
+      (u) => (u.unit_name || u.unitName || u.unit_code || "").toLowerCase() === packageTypeVal.toLowerCase()
+    );
+    if (matched) {
+      setValue(`variants.${variantIndex}.units.${baseUnitIndex}.unit_id`, String(matched.id), { shouldValidate: true });
+    }
+  }, [packageTypeVal, isAutoUnit, variantIndex, units, setValue, watch]);
+
+  const variantSuffix = (() => {
+    const prefix = productName + " ";
+    if (variantNameValue.startsWith(prefix)) return variantNameValue.slice(prefix.length);
+    if (variantNameValue.trim() === productName.trim()) return "";
+    return variantNameValue;
+  })();
   const variantErrors = errors.variants?.[variantIndex];
 
   const getUnitPackageType = (unitId) => {
@@ -527,7 +616,7 @@ function VariantSetupCard({
     const name = unit?.unit_name || unit?.unitName || unit?.unit_code;
     return name
       ? `${name} (×${unitItem?.conversion_qty || 1})`
-      : `Unit Row #${index + 1}`;
+      : `ខ្នាតទំនិញ #${index + 1}`;
   };
 
   const handleAddUnit = () => {
@@ -611,69 +700,173 @@ function VariantSetupCard({
     <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h4 className="text-sm font-bold">Variant #{variantIndex + 1}</h4>
-          <p className={`mt-1 text-xs ${theme.muted}`}>
-            Configure variant image, units, and price rules per unit.
-          </p>
+          <h4 className="text-sm font-bold">មុខទំនិញ #{variantIndex + 1}</h4>
         </div>
         {onRemoveVariant && (
           <button type="button" onClick={onRemoveVariant}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
             <FiTrash2 />
-            Remove Variant
+            លុបមុខទំនិញ
           </button>
         )}
       </div>
 
+      {/* Status hidden — always Active on creation */}
+      <input type="hidden" {...register(`variants.${variantIndex}.status`)} defaultValue="true" />
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <FormInput label="Variant Code" required error={variantErrors?.variant_code?.message} theme={theme} icon={<FiHash />}
-          inputProps={register(`variants.${variantIndex}.variant_code`)} placeholder="PV-COCA-330ML-CAN" />
-        <FormInput label="Variant Name" required error={variantErrors?.variant_name?.message} theme={theme} icon={<FiPackage />}
-          inputProps={register(`variants.${variantIndex}.variant_name`)} placeholder="Coca Cola 330ml Can" />
-        <FormInput label="Package Type" error={variantErrors?.package_type?.message} theme={theme} icon={<FiBox />}
-          inputProps={register(`variants.${variantIndex}.package_type`)} placeholder="Auto from base unit, e.g. can" />
-        <FormInput label="Color" sanitize="text" error={variantErrors?.color?.message} theme={theme} icon={<FiTag />}
-          inputProps={register(`variants.${variantIndex}.color`)} placeholder="red" />
-        <FormInput label="Size Value" sanitize="number" allowDecimal={true} error={variantErrors?.size_value?.message} theme={theme} icon={<FiHash />}
-          inputProps={register(`variants.${variantIndex}.size_value`)} placeholder="330" />
-        <FormInput label="Size Unit" sanitize="text" error={variantErrors?.size_unit?.message} theme={theme} icon={<FiTag />}
-          inputProps={register(`variants.${variantIndex}.size_unit`)} placeholder="ml" />
-        <FormInput label="Low Stock Threshold (Base Unit)" type="number" sanitize="number" allowDecimal={false} error={variantErrors?.low_stock_threshold?.message} theme={theme} icon={<FiHash />}
-          inputProps={register(`variants.${variantIndex}.low_stock_threshold`)} />
-        <p className={`-mt-2 text-xs leading-5 ${theme.muted}`}>
-          Count this in the base unit, e.g. Can or Bottle. Case is only a converted unit.
-        </p>
-        <FormSelect label="Status" theme={theme} icon={<FiCheckCircle />}
-          value={watch(`variants.${variantIndex}.status`) ? "1" : "0"}
-          onChange={(value) => setValue(`variants.${variantIndex}.status`, value === "1", { shouldValidate: true })}
-          options={[{ value: "1", label: "Active" }, { value: "0", label: "Inactive" }]} />
+        {/* Variant Code — read-only style, auto-generated */}
+        <div>
+          <label className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
+            លេខកូដមុខទំនិញ <span className="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-500 dark:bg-white/10">auto</span>
+          </label>
+          <div className="relative">
+            <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
+            <input {...register(`variants.${variantIndex}.variant_code`)}
+              className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} opacity-70`} />
+          </div>
+          {variantErrors?.variant_code?.message && <p className="mt-1.5 text-xs text-red-400">{variantErrors.variant_code.message}</p>}
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <label className={`block text-xs font-semibold ${theme.muted}`}>
+              ឈ្មោះមុខទំនិញ <span className="ml-1 text-red-400">*</span>
+            </label>
+            {isAutoName ? (
+              <button
+                type="button"
+                onClick={() => setIsAutoName(false)}
+                className="inline-flex h-7 items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 text-[11px] font-bold text-emerald-600 transition hover:bg-emerald-500/15 dark:text-emerald-400"
+              >
+                ស្វ័យប្រវត្តិ
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAutoName(true)}
+                className={`inline-flex h-7 items-center rounded-full border px-3 text-[11px] font-bold transition ${theme.muted} hover:border-emerald-500/40 hover:text-emerald-500`}
+              >
+                ↺ ស្វ័យប្រវត្តិ
+              </button>
+            )}
+          </div>
+          <div className={`flex h-11 overflow-hidden rounded-xl border transition focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-500/20 ${variantErrors?.variant_name?.message ? "border-red-500" : "border-zinc-200 dark:border-white/10"}`}>
+            {productName && (
+              <span className="flex shrink-0 items-center border-r border-zinc-200 bg-zinc-100 px-3 text-xs font-semibold text-zinc-500 dark:border-white/10 dark:bg-white/10 dark:text-zinc-400">
+                {productName}
+              </span>
+            )}
+            <input
+              placeholder={isAutoName ? "បំពេញសណ្ឋានទំនិញ & ទំហំ" : "ឧ. Can 330ml, ថង់ 5kg"}
+              value={variantSuffix}
+              readOnly={isAutoName}
+              onChange={(e) => {
+                setIsAutoName(false);
+                const suffix = e.target.value;
+                setValue(
+                  `variants.${variantIndex}.variant_name`,
+                  productName ? `${productName} ${suffix}`.trim() : suffix,
+                  { shouldValidate: true }
+                );
+              }}
+              className={`min-w-0 flex-1 bg-transparent px-3 text-sm outline-none ${isAutoName ? "cursor-default text-zinc-500 dark:text-zinc-400" : "text-zinc-900 dark:text-zinc-100"}`}
+            />
+          </div>
+          {variantErrors?.variant_name?.message && (
+            <p className="mt-1.5 text-xs text-red-400">{variantErrors.variant_name.message}</p>
+          )}
+          <p className={`mt-1.5 text-xs ${theme.muted}`}>
+            {isAutoName ? "ឈ្មោះបង្កើតស្វ័យប្រវត្តិពី សណ្ឋានទំនិញ និង ទំហំ។" : "កំពុងកែដោយខ្លួនឯង។ ចុច ↺ ស្វ័យប្រវត្តិ ដើម្បីបង្កើតវិញ។"}
+          </p>
+        </div>
+
+        {/* Package Type — select + custom */}
+        <PackageTypeCombobox
+          label="សណ្ឋានទំនិញ"
+          required
+          error={variantErrors?.package_type?.message}
+          theme={theme}
+          value={watch(`variants.${variantIndex}.package_type`) || ""}
+          onChange={(v) => setValue(`variants.${variantIndex}.package_type`, v, { shouldValidate: true })}
+        />
+
+        {/* Size — collapsible */}
+        <div>
+          {showSize ? (
+            <div>
+              <label className={`mb-2 block text-xs font-semibold ${theme.muted}`}>ទំហំ</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
+                  <input {...register(`variants.${variantIndex}.size_value`)} placeholder="330"
+                    className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
+                </div>
+                <SizeUnitSelect value={sizeUnitVal} onChange={(v) => setValue(`variants.${variantIndex}.size_unit`, v)} theme={theme} />
+              </div>
+              <button type="button" onClick={() => { setShowSize(false); setValue(`variants.${variantIndex}.size_value`, ""); setValue(`variants.${variantIndex}.size_unit`, ""); }}
+                className={`mt-1 text-xs ${theme.muted} hover:text-red-500`}>
+                − លុបទំហំ
+              </button>
+            </div>
+          ) : (
+            <div className="flex h-full items-end pb-1">
+              <button type="button" onClick={() => setShowSize(true)}
+                className={`inline-flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-semibold transition hover:border-red-400 hover:text-red-500 dark:border-white/10 dark:hover:border-red-500/60 dark:hover:text-red-400 ${theme.muted}`}>
+                <FiHash className="text-sm" /> + បន្ថែមទំហំ (ស្រេចចិត្ត)
+              </button>
+            </div>
+          )}
+        </div>
+
       </div>
 
-      <div className="mt-4">
-        <ImageInput label="Variant Image" uniqueId={`variant-${variantIndex}`} theme={theme}
-          previewFile={variantImage}
-          onChange={(file) => setValue(`variants.${variantIndex}.imageFile`, file, { shouldValidate: true })} />
+      {/* Optional fields row — Color + Image together */}
+      <div className="mt-4 flex flex-wrap gap-6">
+        <div>
+          {showColor ? (
+            <div className="w-52">
+              <FormInput label="ពណ៌" sanitize="text" error={variantErrors?.color?.message} theme={theme} icon={<FiTag />}
+                inputProps={register(`variants.${variantIndex}.color`)} placeholder="ក្រហម" />
+              <button type="button" onClick={() => { setShowColor(false); setValue(`variants.${variantIndex}.color`, ""); }}
+                className={`mt-1 text-xs ${theme.muted} hover:text-red-500`}>
+                − លុបពណ៌
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setShowColor(true)}
+              className={`inline-flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-semibold transition hover:border-red-400 hover:text-red-500 dark:border-white/10 dark:hover:border-red-500/60 dark:hover:text-red-400 ${theme.muted}`}>
+              <FiTag className="text-sm" /> + បន្ថែមពណ៌ (ស្រេចចិត្ត)
+            </button>
+          )}
+        </div>
+
+        <div className="w-full min-w-[280px] sm:min-w-[420px]">
+          <ImageInput label="រូបភាពមុខទំនិញ *" uniqueId={`variant-${variantIndex}`} theme={theme}
+            previewFile={variantImage}
+            onChange={(file) => setValue(`variants.${variantIndex}.imageFile`, file, { shouldValidate: true })} />
+          {variantErrors?.imageFile && (
+            <p className="mt-1 text-xs text-red-500">{variantErrors.imageFile.message}</p>
+          )}
+        </div>
       </div>
 
       {/* UNITS — each with nested price rules */}
       <div className="mt-6">
         <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h5 className="text-sm font-bold">Units &amp; Prices</h5>
-            <p className={`mt-1 text-xs ${theme.muted}`}>
-              Each unit (Can, Case...) has its own prices. Example: 1 Case = 24 Can.
-            </p>
+            <h5 className="text-sm font-bold">ខ្នាតទំនិញ &amp; តម្លៃ</h5>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setQuickUnitOpen(true)}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700">
-              <FiPlus />
-              Manage Units
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-zinc-500 px-3 text-xs font-semibold text-white hover:bg-zinc-600">
+              <FiSettings />
+              ប្រភេទខ្នាតទំនិញ
             </button>
             <button type="button" onClick={handleAddUnit}
               className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 text-xs font-semibold text-white hover:bg-emerald-600">
               <FiPlus />
-              Add Unit Row
+              បន្ថែមខ្នាតទំនិញ
             </button>
           </div>
         </div>
@@ -705,6 +898,13 @@ function VariantSetupCard({
           <p className="mb-3 text-xs text-red-400">{variantErrors.priceRules.message}</p>
         )}
 
+        {units.length === 0 && (
+          <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-600 dark:text-amber-400">
+            <FiInfo className="mt-0.5 shrink-0" />
+            <span>មិនទាន់មានប្រភេទខ្នាតទំនិញ ។ ចុច <strong>⚙ ប្រភេទខ្នាតទំនិញ</strong> ខាងលើ ដើម្បីបង្កើតខ្នាតទំនិញជាមុន — ឧ. Can, Bottle, Piece, Box ។</span>
+          </div>
+        )}
+
         <div className="space-y-4">
           {unitFields.map((unitField, unitIndex) => {
             const unitErrors = variantErrors?.units?.[unitIndex];
@@ -729,53 +929,57 @@ function VariantSetupCard({
                     <button type="button" onClick={() => handleRemoveUnit(unitIndex, unitLocalKey)}
                       className="inline-flex h-8 items-center gap-1 rounded-lg bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
                       <FiTrash2 />
-                      Remove Unit
+                      លុបខ្នាតទំនិញ
                     </button>
                   )}
                 </div>
 
                 {/* UNIT FIELDS */}
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_1fr_2fr]">
-                  <SearchableDropdown label="Unit" required error={unitErrors?.unit_id?.message} theme={theme} icon={<FiLayers />}
+                  <SearchableDropdown label="ខ្នាតទំនិញ" required error={unitErrors?.unit_id?.message} theme={theme} icon={<FiLayers />}
                     value={watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`)}
                     onChange={(v) => {
                       setValue(`variants.${variantIndex}.units.${unitIndex}.unit_id`, v, { shouldValidate: true });
                       if (watch(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`)) {
+                        setIsAutoUnit(false); // user manually picked base unit — stop auto-match
                         autoFillPackageType(v);
                       }
                     }}
-                    placeholder="Select unit"
+                    placeholder="ជ្រើសរើសខ្នាតទំនិញ"
                     options={[
                       ...units.map((u) => ({
                         value: String(u.id),
-                        label: u.unit_name || u.unitName || u.unit_code || `Unit #${u.id}`,
+                        label: u.unit_name || u.unitName || u.unit_code || `ខ្នាតទំនិញ #${u.id}`,
                       })),
                     ]} />
                   <input type="hidden" {...register(`variants.${variantIndex}.units.${unitIndex}.unit_id`)} />
-                  <FormInput label="Conversion Qty" required type="number" sanitize="number" allowDecimal={true} error={unitErrors?.conversion_qty?.message} theme={theme} icon={<FiHash />}
-                    inputProps={{
-                      ...register(`variants.${variantIndex}.units.${unitIndex}.conversion_qty`),
-                      onChange: (e) => {
-                        register(`variants.${variantIndex}.units.${unitIndex}.conversion_qty`).onChange(e);
-                        const qty = Number(e.target.value || 1);
-                        const base = `variants.${variantIndex}.units.${unitIndex}`;
-                        if (qty === 1) {
-                          setValue(`${base}.is_base_unit`, true, { shouldValidate: true });
-                          setValue(`${base}.is_default_sale_unit`, true, { shouldValidate: true });
-                          setValue(`${base}.is_default_purchase_unit`, false, { shouldValidate: true });
-                        } else {
-                          setValue(`${base}.is_base_unit`, false, { shouldValidate: true });
-                          setValue(`${base}.is_default_sale_unit`, false, { shouldValidate: true });
-                          setValue(`${base}.is_default_purchase_unit`, true, { shouldValidate: true });
-                        }
-                      },
-                    }} />
+                  <div>
+                    <FormInput label="ចំនួនបម្លែង" required type="number" sanitize="number" allowDecimal={true} error={unitErrors?.conversion_qty?.message} theme={theme} icon={<FiHash />}
+                      hint="ឧ. 1 Can = 1 · 1 Case = 24 Cans"
+                      inputProps={{
+                        ...register(`variants.${variantIndex}.units.${unitIndex}.conversion_qty`),
+                        onChange: (e) => {
+                          register(`variants.${variantIndex}.units.${unitIndex}.conversion_qty`).onChange(e);
+                          const qty = Number(e.target.value || 1);
+                          const base = `variants.${variantIndex}.units.${unitIndex}`;
+                          if (qty === 1) {
+                            setValue(`${base}.is_base_unit`, true, { shouldValidate: true });
+                            setValue(`${base}.is_default_sale_unit`, true, { shouldValidate: true });
+                            setValue(`${base}.is_default_purchase_unit`, false, { shouldValidate: true });
+                          } else {
+                            setValue(`${base}.is_base_unit`, false, { shouldValidate: true });
+                            setValue(`${base}.is_default_sale_unit`, false, { shouldValidate: true });
+                            setValue(`${base}.is_default_purchase_unit`, true, { shouldValidate: true });
+                          }
+                        },
+                      }} />
+                  </div>
                   <div>
                     <p className={`mb-2 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
-                      <FiInfo /> Unit Options
+                      <FiInfo /> ជម្រើសខ្នាតទំនិញ
                     </p>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <CheckBox label="Base Unit" helper="Smallest stock unit, e.g. Can"
+                      <CheckBox label="ខ្នាតទំនិញស្តុក" helper="តាមដានស្តុកក្នុងខ្នាតទំនិញនេះ"
                         checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`)}
                         onChange={(c) => {
                           setValue(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`, c, { shouldValidate: true });
@@ -783,13 +987,13 @@ function VariantSetupCard({
                             autoFillPackageType(watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`));
                           }
                         }} />
-                      <CheckBox label="Default Sale" helper="Default unit for selling"
+                      <CheckBox label="លក់ក្នុង POS" helper="ប្រើស្វ័យប្រវត្ដិពេលលក់ដល់អតិថិជន"
                         checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`)}
                         onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`, c, { shouldValidate: true })} />
-                      <CheckBox label="Default Purchase" helper="Default unit for buying"
+                      <CheckBox label="ទិញពីអ្នកផ្គត់ផ្គង់" helper="ប្រើស្វ័យប្រវត្ដិពេលបញ្ជាទិញស្តុក"
                         checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_purchase_unit`)}
                         onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_purchase_unit`, c, { shouldValidate: true })} />
-                      <CheckBox label="Active" helper="Can use this unit"
+                      <CheckBox label="ដំណើរការ" helper="អាចប្រើខ្នាតទំនិញនេះ"
                         checked={watch(`variants.${variantIndex}.units.${unitIndex}.status`)}
                         onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.status`, c, { shouldValidate: true })} />
                     </div>
@@ -800,18 +1004,18 @@ function VariantSetupCard({
                 <div className="mt-4 rounded-xl border border-zinc-200 p-3 dark:border-white/10">
                   <div className="mb-3 flex items-center justify-between">
                     <p className="text-xs font-bold">
-                      Prices for {unitLabel(unitItem, unitIndex)}
+                      តម្លៃសម្រាប់ {unitLabel(unitItem, unitIndex)}
                     </p>
                     <button type="button" onClick={() => handleAddPriceForUnit(unitLocalKey)}
                       className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-500 px-3 text-xs font-semibold text-white hover:bg-emerald-600">
                       <FiPlus />
-                      Add Price
+                      បន្ថែមតម្លៃ
                     </button>
                   </div>
 
                   {rulesForUnit.length === 0 && (
                     <p className={`rounded-lg border border-dashed px-3 py-3 text-center text-xs ${theme.muted}`}>
-                      No price for this unit yet. Click "Add Price".
+                      មិនទាន់មានតម្លៃ ។ ចុច «បន្ថែមតម្លៃ» ។
                     </p>
                   )}
 
@@ -823,23 +1027,24 @@ function VariantSetupCard({
                       return (
                         <div key={rf.id} className={`rounded-lg border p-3 ${theme.section}`}>
                           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                            <FormSelectRHF label="Applies To" required error={ruleErrors?.applies_to?.message} theme={theme} icon={<FiTag />}
+                            <FormSelectRHF label="ប្រើសម្រាប់" required error={ruleErrors?.applies_to?.message} theme={theme} icon={<FiTag />}
                               value={watch(`variants.${variantIndex}.priceRules.${idx}.applies_to`)}
                               onChange={(value) => setValue(`variants.${variantIndex}.priceRules.${idx}.applies_to`, value, { shouldValidate: true })}
                               inputProps={register(`variants.${variantIndex}.priceRules.${idx}.applies_to`)}
                               options={[
-                                { value: "retail", label: "Retail" },
-                                { value: "wholesale", label: "Wholesale" },
-                                { value: "both", label: "Both" },
+                                { value: "retail",    label: "លក់រាយ" },
+                                { value: "wholesale", label: "លក់ដុំ" },
+                                { value: "both",      label: "ទាំងពីរ" },
                               ]} />
-                            <FormInput label="Min Qty" required type="number" sanitize="number" allowDecimal={false} error={ruleErrors?.min_qty?.message} theme={theme} icon={<FiHash />}
+                            <FormInput label="ចំនួនយ៉ាងតិច" required type="number" sanitize="number" allowDecimal={false} error={ruleErrors?.min_qty?.message} theme={theme} icon={<FiHash />}
+                              hint="ឧ. កំណត់ចំនួនដែលត្រូវលក់"
                               inputProps={register(`variants.${variantIndex}.priceRules.${idx}.min_qty`)} />
-                            <FormSelect label="Currency" required theme={theme} icon={<FiDollarSign />}
+                            <FormSelect label="រូបិយប័ណ្ណ" required theme={theme} icon={<FiDollarSign />}
                               value={inputCurrency || "USD"}
                               onChange={(value) => handlePriceInputChange(idx, "input_currency", value)}
                               options={[{ value: "USD", label: "USD ($)" }, { value: "KHR", label: "KHR (៛)" }]} />
                             <FormInputControlled
-                              label={`Input ${inputCurrency || "USD"}`}
+                              label={`បញ្ចូល ${inputCurrency || "USD"}`}
                               required type="number" sanitize="number" allowDecimal={true} error={ruleErrors?.input_price?.message} theme={theme}
                               icon={inputCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />}
                               value={watch(`variants.${variantIndex}.priceRules.${idx}.input_price`)}
@@ -856,13 +1061,13 @@ function VariantSetupCard({
                           <div className="mt-3 flex items-center justify-between">
                             <p className={`text-[11px] ${theme.muted}`}>
                               {Number(activeExchangeRate || 0) > 0
-                                ? `Rate: 1 USD = ${Number(activeExchangeRate).toLocaleString()}៛ · ${activeKhrRounding}`
-                                : "No active exchange rate"}
+                                ? `អត្រា: 1 USD = ${Number(activeExchangeRate).toLocaleString()}៛ · ${activeKhrRounding}`
+                                : "គ្មានអត្រាប្ដូររូបិយប័ណ្ណ"}
                             </p>
                             <button type="button" onClick={() => removePriceRule(idx)}
                               className="inline-flex h-7 items-center gap-1 rounded-lg bg-red-500 px-2.5 text-[11px] font-semibold text-white hover:bg-red-600">
                               <FiTrash2 />
-                              Remove Price
+                              លុបតម្លៃ
                             </button>
                           </div>
                         </div>
@@ -873,6 +1078,81 @@ function VariantSetupCard({
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-4">
+          {(() => {
+            const stored = Number(watch(`variants.${variantIndex}.low_stock_threshold`) || 0);
+
+            const baseUnit = variantUnits.find(u => u.is_base_unit);
+            const baseUnitObj = units.find(u => String(u.id) === String(baseUnit?.unit_id));
+            const baseUnitName = baseUnitObj?.unit_name || baseUnitObj?.unitName || baseUnitObj?.unit_code || "ខ្នាតមូលដ្ឋាន";
+
+            const unitOptions = variantUnits
+              .map((u, i) => {
+                if (!u.unit_id) return null;
+                const uObj = units.find(uu => String(uu.id) === String(u.unit_id));
+                const name = uObj?.unit_name || uObj?.unitName || uObj?.unit_code || "ខ្នាត";
+                return { value: String(i), label: `${name} (×${u.conversion_qty})` };
+              })
+              .filter(Boolean);
+
+            const hasMultiple = unitOptions.length > 1;
+            const autoNonBase = variantUnits
+              .map((u, i) => ({ ...u, idx: i }))
+              .filter(u => !u.is_base_unit && Number(u.conversion_qty) > 1 && u.unit_id);
+            const autoUnit = autoNonBase.length > 0
+              ? autoNonBase.reduce((a, b) => Number(b.conversion_qty) > Number(a.conversion_qty) ? b : a)
+              : null;
+            const effectiveIdx = thresholdUnitIdx !== null
+              ? thresholdUnitIdx
+              : (autoUnit ? autoUnit.idx : variantUnits.findIndex(u => u.is_base_unit));
+            const threshUnit = effectiveIdx >= 0 ? variantUnits[effectiveIdx] : null;
+            const convQty = Number(threshUnit?.conversion_qty || 1);
+
+            const displayVal = convQty > 1 ? stored / convQty : stored;
+            const displayStr = stored === 0 ? "" : (Number.isInteger(displayVal) ? String(displayVal) : displayVal.toFixed(2));
+
+            const selectedIdx = String(effectiveIdx >= 0 ? effectiveIdx : 0);
+
+            return (
+              <>
+                <div className={hasMultiple ? "flex items-end gap-2" : ""}>
+                  <div className={hasMultiple ? "flex-1" : ""}>
+                    <FormInputControlled
+                      label="ជូនដំណឹងស្តុក"
+                      sanitize="number"
+                      allowDecimal={true}
+                      error={variantErrors?.low_stock_threshold?.message}
+                      theme={theme}
+                      icon={<FiHash />}
+                      value={displayStr}
+                      onChange={(v) => {
+                        const newStored = Math.round(Number(v || 0) * convQty);
+                        setValue(`variants.${variantIndex}.low_stock_threshold`, newStored || 0);
+                      }}
+                    />
+                  </div>
+                  {hasMultiple && (
+                    <div className="w-40 shrink-0">
+                      <FormSelect
+                        label="ខ្នាត"
+                        theme={theme}
+                        value={selectedIdx}
+                        onChange={(v) => setThresholdUnitIdx(Number(v))}
+                        options={unitOptions}
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className={`mt-1 text-xs leading-5 ${theme.muted}`}>
+                  {stored > 0 && convQty > 1
+                    ? `= ${stored} ${baseUnitName}`
+                    : `រាប់ក្នុង${baseUnitName} ។`}
+                </p>
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>
@@ -914,9 +1194,8 @@ export function QuickCreateUnitBox({
   const handleSave = async () => {
     setUnitError("");
     const finalUnitName = quickUnit.unit_name.trim();
-    const finalUnitCode = quickUnit.unit_code.trim() || generateUnitCode(finalUnitName);
-    if (!finalUnitName) { alert("Please input unit name."); return; }
-    if (!finalUnitCode) { alert("Unit code could not be generated."); return; }
+    if (!finalUnitName) { alert("សូមបញ្ចូលឈ្មោះខ្នាតទំនិញ ។"); return; }
+    const finalUnitCode = quickUnit.unit_code.trim() || generateUnitCode(finalUnitName) || `UNIT${Date.now().toString().slice(-5)}`;
     const duplicateUnit = units.find((unit) => {
       const unitCode = String(unit.unit_code || unit.unitCode || "").toUpperCase();
       const unitName = String(unit.unit_name || unit.unitName || "").trim().toLowerCase();
@@ -928,7 +1207,7 @@ export function QuickCreateUnitBox({
     });
 
     if (duplicateUnit) {
-      setUnitError(`Unit "${finalUnitName}" already exists. Please edit the existing unit or use another name.`);
+      setUnitError(`ខ្នាតទំនិញ "${finalUnitName}" មានរួចហើយ ។ សូមកែខ្នាតទំនិញដែលមានស្រាប់ ឬប្រើឈ្មោះផ្សេង ។`);
       return;
     }
 
@@ -953,15 +1232,15 @@ export function QuickCreateUnitBox({
       const validationMessage =
         error?.response?.data?.message ||
         Object.values(error?.response?.data?.errors || {})?.flat()?.[0] ||
-        "Unit could not be saved. Please check the unit name/code.";
+        "មិនអាចរក្សាទុកខ្នាតទំនិញបានទេ ។ សូមពិនិត្យឈ្មោះ/លេខកូដខ្នាតទំនិញ ។";
 
       setUnitError(validationMessage);
     }
   };
 
   const handleDelete = async (unit) => {
-    const confirmed = window.confirm(`Delete unit "${unit.unit_name || unit.unitName || unit.unit_code}"?`);
-    if (!confirmed) return;
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបខ្នាតទំនិញ "${unit.unit_name || unit.unitName || unit.unit_code}" មែនទេ?`);
+    if (!ok) return;
     if (!onDeleteUnit) { alert("Delete unit handler is missing."); return; }
     await onDeleteUnit(unit.id);
     if (editingUnitId === unit.id) resetForm();
@@ -971,24 +1250,24 @@ export function QuickCreateUnitBox({
     <div className={`mb-4 rounded-xl border p-4 ${theme.softCard}`}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold">{editingUnitId ? "Update Unit" : "Create New Unit"}</p>
+          <p className="text-sm font-bold">{editingUnitId ? "ធ្វើបច្ចុប្បន្នភាពខ្នាតទំនិញ" : "បង្កើតខ្នាតទំនិញថ្មី"}</p>
           <p className={`mt-1 text-xs ${theme.muted}`}>
-            Unit code auto generates from Unit Name. Example: Small Bottle → SMALL_BOTTLE.
+            លេខកូដស្វ័យប្រវត្ដិ ។ ឧ: Small Bottle → SMALL_BOTTLE ។ ឈ្មោះខ្មែរ → UNIT12345 ។
           </p>
         </div>
         <div className="flex gap-2">
           {editingUnitId && (
             <button type="button" onClick={resetForm}
-              className="rounded-lg bg-zinc-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-600">New</button>
+              className="rounded-lg bg-zinc-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-600">ថ្មី</button>
           )}
           <button type="button" onClick={onClose}
-            className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">Close</button>
+            className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">បិទ</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
         <label className="block md:col-span-1">
-          <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>Unit Name *</span>
+          <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>ឈ្មោះខ្នាតទំនិញ *</span>
           <input value={quickUnit.unit_name}
             onChange={(e) => {
               const n = e.target.value;
@@ -1003,27 +1282,27 @@ export function QuickCreateUnitBox({
             className={`h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
         </label>
         <label className="block md:col-span-1">
-          <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>Unit Code</span>
+          <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>លេខកូដខ្នាតទំនិញ</span>
           <input value={quickUnit.unit_code}
             onChange={(e) => setQuickUnit((p) => ({ ...p, unit_code: generateUnitCode(e.target.value) }))}
             placeholder="CASE"
             className={`h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
         </label>
         <label className="block md:col-span-1">
-          <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>Unit Type</span>
-          <div className={`flex h-11 items-center rounded-xl border px-3 text-sm capitalize ${theme.softCard}`}>
-            {getSuggestedUnitType()}
+          <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>ប្រភេទខ្នាតទំនិញ</span>
+          <div className={`flex h-11 items-center rounded-xl border px-3 text-sm ${theme.softCard}`}>
+            {unitTypeDisplay(getSuggestedUnitType())}
           </div>
         </label>
         <div className="md:col-span-1">
           <SearchableDropdown
-            label="Status"
+            label="ស្ថានភាព"
             theme={theme}
             value={quickUnit.status}
             onChange={(value) => setQuickUnit((previous) => ({ ...previous, status: value }))}
             options={[
-              { value: "active", label: "Active" },
-              { value: "inactive", label: "Inactive" },
+              { value: "active", label: "ដំណើរការ" },
+              { value: "inactive", label: "មិនដំណើរការ" },
             ]}
             searchable={false}
           />
@@ -1031,7 +1310,7 @@ export function QuickCreateUnitBox({
         <div className="flex items-end">
           <button type="button" disabled={isCreatingUnit || isUpdatingUnit} onClick={handleSave}
             className="h-11 w-full rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
-            {editingUnitId ? (isUpdatingUnit ? "Updating..." : "Update Unit") : (isCreatingUnit ? "Creating..." : "Save Unit")}
+            {editingUnitId ? (isUpdatingUnit ? "កំពុងធ្វើបច្ចុប្បន្នភាព..." : "ធ្វើបច្ចុប្បន្នភាព") : (isCreatingUnit ? "កំពុងបង្កើត..." : "រក្សាទុកខ្នាតទំនិញ")}
           </button>
         </div>
       </div>
@@ -1046,13 +1325,13 @@ export function QuickCreateUnitBox({
         <input type="checkbox" checked={Boolean(quickUnit.allow_decimal)}
           onChange={(e) => setQuickUnit((p) => ({ ...p, allow_decimal: e.target.checked }))}
           className="h-4 w-4 rounded" />
-        Allow decimal quantity
+        អនុញ្ញាតបរិមាណទសភាគ
       </label>
 
       <div className="mt-4">
-        <p className="mb-2 text-xs font-bold">Existing Units</p>
+        <p className="mb-2 text-xs font-bold">ខ្នាតទំនិញដែលមានស្រាប់</p>
         {units.length === 0 ? (
-          <div className={`rounded-xl border px-4 py-3 text-xs ${theme.softCard}`}>No units found.</div>
+          <div className={`rounded-xl border px-4 py-3 text-xs ${theme.softCard}`}>មិនទាន់មានខ្នាតទំនិញ ។</div>
         ) : (
           <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
             {units.map((unit) => (
@@ -1060,15 +1339,15 @@ export function QuickCreateUnitBox({
                 <div>
                   <p className="text-sm font-semibold">{unit.unit_name || unit.unitName || "-"}</p>
                   <p className={`mt-1 text-xs ${theme.muted}`}>
-                    Code: {unit.unit_code || "-"} · Type: {unit.unit_type || "piece"} · {unit.allow_decimal ? "Decimal" : "No decimal"}
+                    លេខកូដ: {unit.unit_code || "-"} · ប្រភេទ: {unitTypeDisplay(unit.unit_type || "piece")} · {unit.allow_decimal ? "ទសភាគ" : "គ្មានទសភាគ"}
                   </p>
                 </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => handleEdit(unit)}
-                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">Edit</button>
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">កែ</button>
                   <button type="button" disabled={isDeletingUnit} onClick={() => handleDelete(unit)}
                     className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60">
-                    {isDeletingUnit ? "Deleting..." : "Delete"}
+                    {isDeletingUnit ? "កំពុងលុប..." : "លុប"}
                   </button>
                 </div>
               </div>
@@ -1076,7 +1355,7 @@ export function QuickCreateUnitBox({
           </div>
         )}
         <p className={`mt-2 text-[11px] leading-4 ${theme.muted}`}>
-          Note: Delete may fail if this unit is already used by product variant units.
+          ចំណាំ: ការលុបអាចបរាជ័យ ប្រសិនបើខ្នាតទំនិញនេះត្រូវបានប្រើដោយ មុខទំនិញ ។
         </p>
       </div>
     </div>
@@ -1108,40 +1387,42 @@ function ImageInput({ label, theme, previewFile, onChange, uniqueId = "" }) {
     if (fileInput) fileInput.value = "";
   };
   return (
-    <label className="block">
+    <div>
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
       <div className="rounded-2xl border border-dashed border-zinc-300 bg-white/0 p-4 transition hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/5">
+          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
             {previewUrl ? <img src={previewUrl} alt="Selected" className="h-full w-full object-cover" /> : <FiImage className="text-3xl text-red-500" />}
           </div>
+          <input id={inputId} type="file" accept="image/*" className="hidden"
+            onChange={(e) => onChange(e.target.files?.[0] || null)} />
           <div className="min-w-0 flex-1">
-            <input id={inputId} type="file" accept="image/*" className="hidden"
-              onChange={(e) => onChange(e.target.files?.[0] || null)} />
             <div className="flex flex-wrap gap-2">
               <label htmlFor={inputId}
-                className="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl bg-red-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700">
-                Choose Image
+                className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700">
+                <FiImage className="text-lg" /> {previewUrl ? "ប្ដូររូបភាព" : "ជ្រើសរើសរូបភាព"}
               </label>
               {previewUrl && (
                 <button type="button" onClick={handleRemoveImage}
-                  className="inline-flex h-11 items-center justify-center rounded-xl border border-red-200 bg-white px-5 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">
-                  Remove Image
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+                  <FiXCircle className="text-base" /> លុប
                 </button>
               )}
             </div>
-            <p className={`mt-3 text-sm ${theme.muted}`}>PNG, JPG, JPEG up to your backend limit.</p>
-            {fileName && <p className="mt-2 truncate text-xs font-semibold text-emerald-500">Selected: {fileName}</p>}
+            <p className={`mt-3 truncate text-sm ${theme.muted}`}>
+              {fileName || "PNG, JPG, JPEG"}
+            </p>
+            {previewFile instanceof File && <p className="mt-1 text-xs text-zinc-400">{(previewFile.size / 1024 / 1024).toFixed(2)} MB</p>}
           </div>
         </div>
       </div>
-    </label>
+    </div>
   );
 }
 
 function FormInput({
   label, required = false, error = "", theme, icon, inputProps,
-  type = "text", placeholder = "", inputMode, sanitize = "none", allowDecimal = true,
+  type = "text", placeholder = "", inputMode, sanitize = "none", allowDecimal = true, hint,
 }) {
   const isNumberInput = sanitize === "number" || type === "number";
   const isTextOnly = sanitize === "text";
@@ -1180,8 +1461,57 @@ function FormInput({
           className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${error ? "border-red-500 focus:border-red-500" : ""}`}
         />
       </div>
+      {hint && <p className={`mt-1 text-xs ${theme.muted}`}>{hint}</p>}
       {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
     </label>
+  );
+}
+
+function PackageTypeCombobox({ label, required = false, error = "", theme, value = "", onChange }) {
+  const matchedType = PACKAGE_TYPES.find((t) => t.toLowerCase() === value.toLowerCase());
+  const [showCustom, setShowCustom] = useState(!!value && !matchedType);
+
+  const options = [
+    ...PACKAGE_TYPES.map((t) => ({ value: t, label: t })),
+    { value: "__other__", label: "ផ្សេងៗ (វាយខាងក្រោម)…" },
+  ];
+
+  const handleDropdownChange = (selected) => {
+    if (selected === "__other__") {
+      setShowCustom(true);
+      onChange("");
+    } else {
+      setShowCustom(false);
+      onChange(selected);
+    }
+  };
+
+  return (
+    <div>
+      <SearchableDropdown
+        label={label}
+        required={required}
+        error={error}
+        theme={theme}
+        icon={<FiBox />}
+        value={showCustom ? "__other__" : (matchedType || "")}
+        onChange={handleDropdownChange}
+        options={options}
+        searchable={false}
+      />
+      {showCustom && (
+        <div className="relative mt-2">
+          <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiBox /></span>
+          <input
+            autoFocus
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="វាយសណ្ឋានទំនិញផ្ទាល់ខ្លួន..."
+            className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1302,7 +1632,7 @@ function CheckBox({ label, helper, checked, onChange }) {
 
 function PreviewBox({ label, value, theme, highlight = false }) {
   return (
-    <div className={`rounded-xl border p-3 ${highlight ? "border-emerald-500/40 bg-emerald-500/[0.06]" : theme.softCard}`}>
+    <div className={`rounded-xl border p-3 ${highlight ? "border-emerald-500/40 bg-emerald-500/6" : theme.softCard}`}>
       <p className={`text-xs font-semibold ${theme.muted}`}>{label}</p>
       <p className="mt-1.5 font-bold">{value}</p>
     </div>

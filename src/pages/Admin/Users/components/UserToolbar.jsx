@@ -17,7 +17,7 @@ export default function UserToolbar({
           type="text"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search name, username, email, phone, role..."
+          placeholder="ស្វែងរកឈ្មោះ, username, email, ទូរស័ព្ទ, តួនាទី..."
           className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
         />
       </div>
@@ -28,7 +28,7 @@ export default function UserToolbar({
         className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
       >
         <FiPlusCircle className="text-lg" />
-        Add User
+        បន្ថែមអ្នកប្រើប្រាស់
       </button>
     </div>
   );

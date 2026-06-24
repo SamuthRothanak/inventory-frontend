@@ -44,6 +44,31 @@ export function formatSnake(value = "") {
 
 }
 
+const CONDITION_LABEL_KH = {
+  damaged:       "ខូចខាត",
+  expired:       "ផុតកំណត់",
+  wrong_item:    "ទំនិញខុស",
+  good:          "ល្អ",
+  over_supplied: "ដឹកលើស",
+  quality_issue: "បញ្ហាគុណភាព",
+  other:         "ផ្សេងទៀត",
+};
+
+const RESOLUTION_LABEL_KH = {
+  replacement: "ជំនួស",
+  refund:      "ការសង",
+  credit_note: "Credit Note",
+  none:        "គ្មាន",
+};
+
+export function formatCondition(value = "") {
+  return CONDITION_LABEL_KH[String(value || "").toLowerCase()] || formatSnake(value);
+}
+
+export function formatResolutionType(value = "") {
+  return RESOLUTION_LABEL_KH[String(value || "").toLowerCase()] || formatSnake(value);
+}
+
 
 
 export function formatMoney(value) {
@@ -356,62 +381,33 @@ export function getPurchaseItemSummary(purchase = {}) {
   const productsCount = Number(purchase.productsCount || 0);
   const purchaseLinesCount = Number(purchase.purchaseLinesCount || purchase.itemsCount || 0);
 
+  const lineCount = purchaseLinesCount || items.length;
+
   if (purchase.productSummary) {
     return {
       title: purchase.productSummary,
-      detail: purchaseLinesCount > 0 ? `${purchaseLinesCount} purchase line${purchaseLinesCount > 1 ? "s" : ""}` : "",
+      detail: lineCount > 0 ? `${lineCount} មុខទំនិញ` : "",
       hasDetail: true,
     };
   }
 
-      if (items.length === 0) {
-        return {
-          title: "",
-        detail: "",
-        hasDetail: false,
-      };
+  if (items.length === 0 && lineCount === 0) {
+    return {
+      title: "",
+      detail: "",
+      hasDetail: false,
+    };
   }
 
-  const grouped = items.reduce((summary, item) => {
-    const productName = item.productName || item.product_name || item.variantName || item.variant_name || "Unknown product";
-    const variantName = item.variantName || item.variant_name || item.variantCode || item.variant_code || productName;
-    const qty = Number(item.invoicedQty ?? item.invoiced_qty ?? item.qty ?? item.quantity ?? item.paidQty ?? item.paid_qty ?? 0);
-    const unit = item.unitName || item.unit_name || "";
-    const current = summary.get(productName) || {
-      name: productName,
-      qty: 0,
-      unit,
-      variants: new Set(),
-      lines: 0,
-    };
-
-    current.qty += qty;
-    current.unit = current.unit || unit;
-    current.variants.add(variantName);
-    current.lines += 1;
-    summary.set(productName, current);
-    return summary;
-  }, new Map());
-
-  const products = Array.from(grouped.values());
-  const lineCount = items.length || purchaseLinesCount;
-  const totalQty = products.reduce((total, item) => total + item.qty, 0);
-  const primaryUnit = products.length === 1 ? products[0].unit : "";
-  const qtyText = totalQty ? ` - ${totalQty}${primaryUnit ? ` ${primaryUnit}` : ""}` : "";
+  const names = items
+    .slice(0, 2)
+    .map((item) => item.variantName || item.variant_name || item.productName || item.product_name || "")
+    .filter(Boolean);
 
   return {
-    title: `${products.length} product${products.length > 1 ? "s" : ""}${qtyText}`,
-    detail: products
-      .slice(0, 2)
-      .map((item) => {
-        const variants = Array.from(item.variants).filter(Boolean);
-        const variantText = variants.length > 1 ? ` (${variants.length} variants)` : "";
-        const lineText = item.lines > 1 ? ` - ${item.lines} lines` : "";
-        return `${item.name}${variantText}${lineText}`;
-      })
-      .join(", ")
-      .concat(products.length > 2 ? ` +${products.length - 2} more` : lineCount > products.length ? "" : ""),
-    hasDetail: true,
+    title: `${lineCount} មុខទំនិញ`,
+    detail: names.join(", ").concat(items.length > 2 ? ` +${items.length - 2} ទៀត` : ""),
+    hasDetail: names.length > 0,
   };
 }
 

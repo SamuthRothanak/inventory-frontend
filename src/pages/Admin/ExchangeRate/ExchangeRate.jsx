@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import {
   FiActivity,
   FiCalendar,
@@ -52,7 +53,7 @@ function getErrorMessage(error) {
     return firstError || response.message;
   }
 
-  return response?.message || error?.message || "Something went wrong.";
+  return response?.message || error?.message || "មានបញ្ហាមួយបានកើតឡើង។";
 }
 
 function normalizeStatus(value) {
@@ -120,7 +121,7 @@ function ExchangeRateDropdown({
           onClick={() => setOpen((previous) => !previous)}
           className={`flex ${heightClass} w-full items-center justify-between ${roundedClass} border ${icon ? "pl-11" : "pl-4"} pr-4 text-left text-sm outline-none transition focus:ring-4 ${theme.select}`}
         >
-          <span className="truncate">{selectedOption?.label || "Select"}</span>
+          <span className="truncate">{selectedOption?.label || "ជ្រើសរើស"}</span>
           <FiChevronDown className={`ml-2 shrink-0 text-lg transition ${theme.muted} ${open ? "rotate-180" : ""}`} />
         </button>
 
@@ -132,7 +133,7 @@ function ExchangeRateDropdown({
                   autoFocus
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search..."
+                  placeholder="ស្វែងរក..."
                   className={`h-9 w-full rounded-xl border px-3 text-sm outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-500/20 ${searchInputClass}`}
                 />
               </div>
@@ -140,7 +141,7 @@ function ExchangeRateDropdown({
 
             <div className="max-h-60 overflow-y-auto py-1">
               {visibleOptions.length === 0 ? (
-                <div className={`px-4 py-3 text-sm ${theme.muted}`}>No options found</div>
+                <div className={`px-4 py-3 text-sm ${theme.muted}`}>រកមិនឃើញជម្រើស</div>
               ) : (
                 visibleOptions.map((option) => {
                   const isActive = String(option.value) === String(value);
@@ -212,21 +213,21 @@ const defaultFormValues = {
   status: "active",
 };
 
-const KHR_ROUNDING_OPTIONS = [
-  { value: "ceil", label: "Round Up (2010 → 2100)" },
-  { value: "round", label: "Nearest (2049 → 2000, 2050 → 2100)" },
-  { value: "floor", label: "Round Down (2090 → 2000)" },
-  { value: "none", label: "Exact (no rounding)" },
+const KHR_ROUNDING_OPTIONS_KM = [
+  { value: "ceil", label: "បង្គត់ឡើង (2010 -> 2100)" },
+  { value: "round", label: "បង្គត់ជិតបំផុត (2049 -> 2000, 2050 -> 2100)" },
+  { value: "floor", label: "បង្គត់ចុះ (2090 -> 2000)" },
+  { value: "none", label: "តម្លៃពិត (មិនបង្គត់)" },
 ];
 
 function roundingLabel(value) {
   const map = {
-    ceil: "Round Up",
-    round: "Nearest",
-    floor: "Round Down",
-    none: "Exact",
+    ceil: "បង្គត់ឡើង",
+    round: "បង្គត់ជិតបំផុត",
+    floor: "បង្គត់ចុះ",
+    none: "តម្លៃពិត",
   };
-  return map[value] || value || "Round Up";
+  return map[value] || value || "បង្គត់ឡើង";
 }
 
 export default function ExchangeRate() {
@@ -234,6 +235,7 @@ export default function ExchangeRate() {
   const isDark = outlet?.isDark ?? false;
   const queryClient = useQueryClient();
   const notify = useNotification();
+  const confirm = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -371,13 +373,13 @@ export default function ExchangeRate() {
     onSuccess: () => {
       invalidateExchangeRateQueries();
       notify.success(
-        "Exchange rate created",
-        "The new exchange rate has been saved."
+        "បានបង្កើតអត្រាប្តូរប្រាក់",
+        "អត្រាប្តូរប្រាក់ថ្មីត្រូវបានរក្សាទុក។"
       );
       closeForm();
     },
     onError: (error) => {
-      notify.error("Create failed", getErrorMessage(error));
+      notify.error("បង្កើតមិនបាន", getErrorMessage(error));
     },
   });
 
@@ -386,13 +388,13 @@ export default function ExchangeRate() {
     onSuccess: () => {
       invalidateExchangeRateQueries();
       notify.success(
-        "Exchange rate updated",
-        "The exchange rate has been updated."
+        "បានកែប្រែអត្រាប្តូរប្រាក់",
+        "អត្រាប្តូរប្រាក់ត្រូវបានកែប្រែ។"
       );
       closeForm();
     },
     onError: (error) => {
-      notify.error("Update failed", getErrorMessage(error));
+      notify.error("កែប្រែមិនបាន", getErrorMessage(error));
     },
   });
 
@@ -401,12 +403,12 @@ export default function ExchangeRate() {
     onSuccess: () => {
       invalidateExchangeRateQueries();
       notify.success(
-        "Exchange rate deleted",
-        "The exchange rate record has been deleted."
+        "បានលុបអត្រាប្តូរប្រាក់",
+        "ទិន្នន័យអត្រាប្តូរប្រាក់ត្រូវបានលុប។"
       );
     },
     onError: (error) => {
-      notify.error("Delete failed", getErrorMessage(error));
+      notify.error("លុបមិនបាន", getErrorMessage(error));
     },
   });
 
@@ -446,15 +448,9 @@ export default function ExchangeRate() {
     createMutation.mutate(values);
   };
 
-  const handleDelete = (rate) => {
-    const confirmed = window.confirm(
-      `Delete exchange rate ${formatRate(rate.usdToKhrRate)} KHR on ${formatDate(
-        rate.rateDate
-      )}?`
-    );
-
-    if (!confirmed) return;
-
+  const handleDelete = async (rate) => {
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបអត្រា ${formatRate(rate.usdToKhrRate)} រៀល នៅថ្ងៃ ${formatDate(rate.rateDate)}?`);
+    if (!ok) return;
     deleteMutation.mutate(rate.id);
   };
 
@@ -469,21 +465,21 @@ export default function ExchangeRate() {
   const errorMessage =
     actionError?.response?.data?.message ||
     actionError?.message ||
-    "Something went wrong.";
+    "មានបញ្ហាមួយបានកើតឡើង។";
 
   return (
     <section className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <SummaryCard
           theme={theme}
-          title="Active Rate"
+          title="អត្រាកំពុងប្រើ"
           value={
             activeRate
-              ? `1 USD = ${formatRate(activeRate.usdToKhrRate)}៛`
+              ? `1 USD = ${formatRate(activeRate.usdToKhrRate)} រៀល`
               : "-"
           }
           subtitle={
-            activeRate ? formatDate(activeRate.rateDate) : "No active rate"
+            activeRate ? formatDate(activeRate.rateDate) : "មិនទាន់មានអត្រាកំពុងប្រើ"
           }
           icon={<FiDollarSign className="text-[34px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
@@ -491,18 +487,18 @@ export default function ExchangeRate() {
 
         <SummaryCard
           theme={theme}
-          title="Total Rates"
+          title="អត្រាសរុប"
           value={exchangeRates.length}
-          subtitle="All exchange rate records"
+          subtitle="ទិន្នន័យអត្រាប្តូរប្រាក់ទាំងអស់"
           icon={<FiRefreshCcw className="text-[34px] text-blue-500" />}
           iconBg="bg-blue-500/10"
         />
 
         <SummaryCard
           theme={theme}
-          title="Inactive Records"
+          title="មិនដំណើរការ"
           value={inactiveCount}
-          subtitle="Not used by system"
+          subtitle="មិនត្រូវបានប្រើក្នុងប្រព័ន្ធ"
           icon={<FiXCircle className="text-[34px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
@@ -517,7 +513,7 @@ export default function ExchangeRate() {
 
             <input
               type="text"
-              placeholder="Search date, rate..."
+              placeholder="ស្វែងរកថ្ងៃ ឬអត្រាប្រាក់..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
@@ -530,9 +526,9 @@ export default function ExchangeRate() {
             onChange={setStatusFilter}
             theme={theme}
             options={[
-              { value: "all", label: "All Status" },
-              { value: "active", label: "Active" },
-              { value: "inactive", label: "Inactive" },
+              { value: "all", label: "ស្ថានភាពទាំងអស់" },
+              { value: "active", label: "ដំណើរការ" },
+              { value: "inactive", label: "មិនដំណើរការ" },
             ]}
           />
         </div>
@@ -544,7 +540,7 @@ export default function ExchangeRate() {
             className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[190px]"
           >
             <FiPlusCircle className="text-lg" />
-            Add Exchange Rate
+            បន្ថែមអត្រាប្តូរប្រាក់
           </button>
         </div>
       </div>
@@ -623,9 +619,9 @@ function ExchangeRateTable({
     >
       <div className="flex items-center justify-between px-5 py-4">
         <div>
-          <h3 className="text-base font-bold">Exchange Rate List</h3>
+          <h3 className="text-base font-bold">បញ្ជីអត្រាប្តូរប្រាក់</h3>
           <p className={`mt-1 text-sm ${theme.muted}`}>
-            Showing {rates.length} of {total} exchange rates
+            បង្ហាញ {rates.length} នៃ {total} អត្រា
           </p>
         </div>
       </div>
@@ -634,11 +630,11 @@ function ExchangeRateTable({
         <table className="min-w-[760px] w-full text-left">
           <thead>
             <tr className="bg-red-600 text-sm text-white">
-              <th className="px-5 py-4 font-bold">Date</th>
-              <th className="px-5 py-4 font-bold">USD to KHR</th>
-              <th className="px-5 py-4 font-bold">Rounding</th>
-              <th className="px-5 py-4 font-bold">Status</th>
-              <th className="px-5 py-4 text-right font-bold">Actions</th>
+              <th className="px-5 py-4 font-bold">កាលបរិច្ឆេទ</th>
+              <th className="px-5 py-4 font-bold">ដុល្លារ ទៅ រៀល</th>
+              <th className="px-5 py-4 font-bold">ការបង្គត់</th>
+              <th className="px-5 py-4 font-bold">ស្ថានភាព</th>
+              <th className="px-5 py-4 text-right font-bold">សកម្មភាព</th>
             </tr>
           </thead>
 
@@ -647,7 +643,7 @@ function ExchangeRateTable({
               <TableLoading
                 theme={theme}
                 colSpan={5}
-                text="Loading exchange rates..."
+                text="រង់ចាំបន្តិច..."
               />
             ) : rates.length === 0 ? (
               <tr>
@@ -655,7 +651,7 @@ function ExchangeRateTable({
                   colSpan={5}
                   className={`px-5 py-10 text-center ${theme.muted}`}
                 >
-                  No exchange rates found.
+                  រកមិនឃើញអត្រាប្តូរប្រាក់។
                 </td>
               </tr>
             ) : (
@@ -675,10 +671,10 @@ function ExchangeRateTable({
 
                   <td className="px-5 py-4">
                     <p className="font-extrabold">
-                      1 USD = {formatRate(rate.usdToKhrRate)}៛
+                      1 USD = {formatRate(rate.usdToKhrRate)} រៀល
                     </p>
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      Rate: {Number(rate.usdToKhrRate || 0)}
+                      អត្រា: {Number(rate.usdToKhrRate || 0)}
                     </p>
                   </td>
 
@@ -696,24 +692,18 @@ function ExchangeRateTable({
 
                   <td className="px-5 py-4">
                     <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onEdit(rate)}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
-                        title="Edit"
-                      >
-                        <FiEdit2 />
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={isDeleting}
-                        onClick={() => onDelete(rate)}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-                        title="Delete"
-                      >
-                        <FiTrash2 />
-                      </button>
+                      <Tooltip label="កែប្រែ">
+                        <button type="button" onClick={() => onEdit(rate)}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700">
+                          <FiEdit2 />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="លុប">
+                        <button type="button" disabled={isDeleting} onClick={() => onDelete(rate)}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60">
+                          <FiTrash2 />
+                        </button>
+                      </Tooltip>
                     </div>
                   </td>
                 </tr>
@@ -722,6 +712,18 @@ function ExchangeRateTable({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function Tooltip({ label, children }) {
+  return (
+    <div className="relative inline-flex group">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-zinc-700">
+        {label}
+        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-zinc-800 dark:border-t-zinc-700" />
+      </span>
     </div>
   );
 }
@@ -739,7 +741,7 @@ function StatusBadge({ status }) {
       ].join(" ")}
     >
       {isActive ? <FiCheckCircle /> : <FiXCircle />}
-      {isActive ? "Active" : "Inactive"}
+      {isActive ? "ដំណើរការ" : "មិនដំណើរការ"}
     </span>
   );
 }
@@ -817,12 +819,12 @@ function ExchangeRateFormModal({
     event.preventDefault();
 
     if (!form.rate_date) {
-      setError("Rate date is required.");
+      setError("សូមបញ្ចូលកាលបរិច្ឆេទអត្រាប្តូរប្រាក់។");
       return;
     }
 
     if (!form.usd_to_khr_rate || Number(form.usd_to_khr_rate) <= 0) {
-      setError("USD to KHR rate must be greater than 0.");
+      setError("អត្រា USD ទៅ KHR ត្រូវតែធំជាង 0។");
       return;
     }
 
@@ -846,17 +848,17 @@ function ExchangeRateFormModal({
         >
           <div>
             <h2 className="text-xl font-extrabold">
-              {isEdit ? "Edit Exchange Rate" : "Add Exchange Rate"}
+              {isEdit ? "កែប្រែអត្រាប្តូរប្រាក់" : "បន្ថែមអត្រាប្តូរប្រាក់"}
             </h2>
             <p className={`mt-1 text-sm ${theme.muted}`}>
-              Set USD to KHR rate for Products, Purchases, Sales, and Reports.
+              កំណត់អត្រា USD ទៅ KHR សម្រាប់ទំនិញ ការទិញ ការលក់ និងរបាយការណ៍។
             </p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close modal"
+            aria-label="បិទ"
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
           >
             <FiX className="text-xl" />
@@ -876,7 +878,7 @@ function ExchangeRateFormModal({
           <div className={`rounded-2xl border p-5 shadow-sm ${theme.softCard}`}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormInput
-                label="Rate Date"
+                label="កាលបរិច្ឆេទអត្រា"
                 required
                 type="date"
                 theme={theme}
@@ -886,7 +888,7 @@ function ExchangeRateFormModal({
               />
 
               <FormInput
-                label="USD to KHR Rate"
+                label="អត្រា USD ទៅ KHR"
                 required
                 theme={theme}
                 icon={<span className="text-base font-bold">៛</span>}
@@ -910,38 +912,38 @@ function ExchangeRateFormModal({
               />
 
               <FormSelect
-                label="Status"
+                label="ស្ថានភាព"
                 theme={theme}
                 icon={<FiActivity />}
                 value={form.status}
                 onChange={(value) => updateForm("status", value)}
                 options={[
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Inactive" },
+                  { value: "active", label: "ដំណើរការ" },
+                  { value: "inactive", label: "មិនដំណើរការ" },
                 ]}
               />
 
               <FormSelect
-                label="KHR Rounding"
+                label="ការបង្គត់ប្រាក់រៀល"
                 theme={theme}
                 icon={<FiActivity />}
                 value={form.khr_rounding}
                 onChange={(value) => updateForm("khr_rounding", value)}
-                options={KHR_ROUNDING_OPTIONS}
+                options={KHR_ROUNDING_OPTIONS_KM}
               />
 
               <div className={`rounded-xl border p-4 ${theme.softCard}`}>
                 <p className={`text-xs font-semibold ${theme.muted}`}>
-                  Preview
+                  មើលជាមុន
                 </p>
 
                 <p className="mt-2 text-2xl font-extrabold">
-                  1 USD = {formatRate(form.usd_to_khr_rate)}៛
+                  1 USD = {formatRate(form.usd_to_khr_rate)} រៀល
                 </p>
 
                 <p className={`mt-1 text-xs ${theme.muted}`}>
-                  Rounding: <strong>{form.khr_rounding}</strong>. Used for
-                  product prices &amp; purchase costs.
+                  ការបង្គត់: <strong>{roundingLabel(form.khr_rounding)}</strong>។
+                  ប្រើសម្រាប់តម្លៃទំនិញ និងថ្លៃដើមទិញ។
                 </p>
               </div>
             </div>
@@ -953,7 +955,7 @@ function ExchangeRateFormModal({
               onClick={onClose}
               className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
             >
-              Cancel
+              បោះបង់
             </button>
 
             <button
@@ -964,11 +966,11 @@ function ExchangeRateFormModal({
               <FiCheckCircle />
               {isSaving
                 ? isEdit
-                  ? "Updating..."
-                  : "Saving..."
+                  ? "កំពុងកែប្រែ..."
+                  : "កំពុងរក្សាទុក..."
                 : isEdit
-                ? "Update Rate"
-                : "Save Rate"}
+                ? "កែប្រែអត្រា"
+                : "រក្សាទុកអត្រា"}
             </button>
           </div>
         </form>

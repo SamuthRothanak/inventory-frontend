@@ -1,6 +1,7 @@
-import React from "react";
+﻿import React from "react";
 import {
   FiCheckCircle,
+  FiCheckSquare,
   FiChevronLeft,
   FiChevronRight,
   FiEdit2,
@@ -8,6 +9,7 @@ import {
   FiSearch,
   FiTag,
   FiTrash2,
+  FiX,
   FiXCircle,
 } from "react-icons/fi";
 
@@ -25,9 +27,18 @@ export default function ProductTable({
   isLoading,
   isError,
   isDeleting,
+  bulkSelectMode = false,
+  selectedProductIds = [],
+  bulkDeleteIsPending = false,
   onViewProduct,
   onEditProduct,
   onDeleteProduct,
+  onToggleStatus,
+  onOpenBulkSelect,
+  onCancelBulkSelect,
+  onToggleSelect,
+  onToggleSelectAll,
+  onBulkDelete,
 }) {
   const totalPages = Number(pagination?.lastPage || 1);
   const currentPage = Number(pagination?.currentPage || page || 1);
@@ -35,6 +46,11 @@ export default function ProductTable({
   const to = Number(pagination?.to || 0);
 
   const pageNumbers = getPageNumbers(currentPage, totalPages);
+  const tableColSpan = bulkSelectMode ? 7 : 6;
+  const pageProductIds = products.map((p) => Number(p.id));
+  const allVisibleSelected =
+    pageProductIds.length > 0 &&
+    pageProductIds.every((id) => selectedProductIds.some((sid) => Number(sid) === id));
 
   return (
     <div
@@ -43,48 +59,92 @@ export default function ProductTable({
       <div className="flex flex-col gap-3 border-b border-zinc-200 px-5 py-4 dark:border-white/10 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className={`text-base font-semibold ${theme.pageTitle}`}>
-            Product List
+            បញ្ជីផលិតផល
           </h2>
 
           <p className={`mt-1 text-xs ${theme.muted}`}>
             {isLoading
-              ? "Loading products..."
-              : `Showing ${from || 0}-${to || products.length} of ${totalProducts} products`}
+              ? "រង់ចាំបន្តិច..."
+              : `បង្ហាញ ${from || 0}-${to || products.length} នៃ ${totalProducts} ផលិតផល`}
           </p>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          {bulkSelectMode ? (
+            <>
+              <button
+                type="button"
+                onClick={onCancelBulkSelect}
+                disabled={bulkDeleteIsPending}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-xs font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              >
+                <FiX />
+                បោះបង់
+              </button>
+              <button
+                type="button"
+                onClick={onBulkDelete}
+                disabled={selectedProductIds.length === 0 || bulkDeleteIsPending}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FiTrash2 />
+                {bulkDeleteIsPending
+                  ? "កំពុងលុប..."
+                  : `លុបដែលបានជ្រើស (${selectedProductIds.length})`}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenBulkSelect}
+              disabled={products.length === 0 || isLoading || isError}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-xs font-semibold text-red-500 shadow-sm transition hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <FiCheckSquare />
+              ជ្រើសរើសច្រើន
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1080px]">
+        <table className="w-full min-w-220">
           <thead className="bg-red-600 text-white">
             <tr>
+              {bulkSelectMode && (
+                <th className="w-14 px-5 py-4 text-left text-sm font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={onToggleSelectAll}
+                    aria-label="ជ្រើសផលិតផលទាំងអស់លើទំព័រនេះ"
+                    className="h-4 w-4 rounded border-white/60 text-red-500 focus:ring-red-500"
+                  />
+                </th>
+              )}
+
               <th className="px-4 py-4 text-left text-sm font-semibold">
-                Product
+                ផលិតផល
               </th>
 
               <th className="px-4 py-4 text-left text-sm font-semibold">
-                Category
+                ប្រភេទ
               </th>
 
               <th className="px-4 py-4 text-center text-sm font-semibold">
-                Variants
+                មុខទំនិញ
               </th>
 
               <th className="px-4 py-4 text-left text-sm font-semibold">
-                Units
-              </th>
-
-              <th className="px-4 py-4 text-left text-sm font-semibold">
-                Price Range
+                តម្លៃលក់
               </th>
 
               <th className="px-4 py-4 text-center text-sm font-semibold">
-                Status
+                ស្ថានភាព
               </th>
 
               <th className="px-4 py-4 text-center text-sm font-semibold">
-                Actions
+                សកម្មភាព
               </th>
             </tr>
           </thead>
@@ -93,14 +153,14 @@ export default function ProductTable({
             {isLoading ? (
               <TableLoading
                 theme={theme}
-                colSpan={7}
-                text="Loading products..."
+                colSpan={tableColSpan}
+                text="រង់ចាំបន្តិច..."
               />
             ) : isError ? (
               <tr className={`border-t ${theme.row}`}>
-                <td colSpan="7" className="px-4 py-14 text-center">
+                <td colSpan={tableColSpan} className="px-4 py-14 text-center">
                   <p className="text-sm font-semibold text-red-500">
-                    Failed to load products.
+                    មិនអាចផ្ទុកផលិតផល។
                   </p>
                 </td>
               </tr>
@@ -114,8 +174,19 @@ export default function ProductTable({
                 return (
                   <tr
                     key={product.id}
-                    className={`border-t transition ${theme.row}`}
+                    className={`border-t transition ${theme.row} ${bulkSelectMode && selectedProductIds.some((id) => Number(id) === Number(product.id)) ? "bg-red-500/5" : ""}`}
                   >
+                    {bulkSelectMode && (
+                      <td className="px-5 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedProductIds.some((id) => Number(id) === Number(product.id))}
+                          onChange={() => onToggleSelect(product.id)}
+                          aria-label={`ជ្រើស ${product.name}`}
+                          className="h-4 w-4 rounded border-zinc-300 text-red-500 focus:ring-red-500 dark:border-white/20"
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <ProductThumb product={product} />
@@ -141,29 +212,8 @@ export default function ProductTable({
                       <span
                         className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                       >
-                        {variantsCount} variants
+                        {variantsCount} មុខទំនិញ
                       </span>
-                    </td>
-
-                    <td className="px-4 py-4">
-                      <div className="flex max-w-[220px] flex-wrap gap-1.5">
-                        {units.length > 0 ? (
-                          units.map((unit) => (
-                            <span
-                              key={`${product.id}-${unit}`}
-                              className={`rounded-full border px-2.5 py-1 text-xs ${theme.badge}`}
-                            >
-                              {unit}
-                            </span>
-                          ))
-                        ) : (
-                          <span
-                            className={`rounded-full border px-2.5 py-1 text-xs ${theme.badge}`}
-                          >
-                            -
-                          </span>
-                        )}
-                      </div>
                     </td>
 
                     <td className="px-4 py-4">
@@ -176,45 +226,48 @@ export default function ProductTable({
                           </p>
 
                           <p className={`mt-1 text-xs ${theme.subText}`}>
-                            {priceRulesCount} price rules
+                            {priceRulesCount} តម្លៃ
                           </p>
                         </div>
                       </div>
                     </td>
 
                     <td className="px-4 py-4 text-center">
-                      <StatusBadge status={product.status} />
+                      <StatusBadge status={product.status} onClick={() => onToggleStatus?.(product)} />
                     </td>
 
                     <td className="px-4 py-4">
                       <div className="flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => onViewProduct(product)}
-                          title="View product"
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
-                        >
-                          <FiEye size={16} />
-                        </button>
+                        <Tooltip label="មើលផលិតផល">
+                          <button
+                            type="button"
+                            onClick={() => onViewProduct(product)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600"
+                          >
+                            <FiEye size={16} />
+                          </button>
+                        </Tooltip>
 
-                        <button
-                          type="button"
-                          onClick={() => onEditProduct(product)}
-                          title="Edit product"
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
-                        >
-                          <FiEdit2 size={16} />
-                        </button>
+                        <Tooltip label="កែផលិតផល">
+                          <button
+                            type="button"
+                            onClick={() => onEditProduct(product)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                          >
+                            <FiEdit2 size={16} />
+                          </button>
+                        </Tooltip>
 
-                        <button
-                          type="button"
-                          disabled={isDeleting}
-                          onClick={() => onDeleteProduct(product)}
-                          title="Delete product"
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <FiTrash2 size={16} />
-                        </button>
+                        <Tooltip label="លុបផលិតផល">
+                          <button
+                            type="button"
+                            disabled={isDeleting}
+                            onClick={() => onDeleteProduct(product)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <FiTrash2 size={16} />
+                          </button>
+                        </Tooltip>
                       </div>
                     </td>
                   </tr>
@@ -222,7 +275,7 @@ export default function ProductTable({
               })
             ) : (
               <tr className={`border-t ${theme.row}`}>
-                <td colSpan="7" className="px-4 py-14 text-center">
+                <td colSpan={tableColSpan} className="px-4 py-14 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <div
                       className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}
@@ -233,11 +286,11 @@ export default function ProductTable({
                     <p
                       className={`mt-4 text-sm font-semibold ${theme.pageTitle}`}
                     >
-                      No products found
+                      រកមិនឃើញផលិតផល
                     </p>
 
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      Try changing your search keyword or filters.
+                      ព្យាយាមប្តូរពាក្យស្វែងរក ឬតម្រង។
                     </p>
                   </div>
                 </td>
@@ -250,7 +303,7 @@ export default function ProductTable({
       {!isLoading && !isError && totalPages > 1 && (
         <div className="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 dark:border-white/10 md:flex-row md:items-center md:justify-between">
           <p className={`text-xs ${theme.muted}`}>
-            Page {currentPage} of {totalPages}
+            ទំព័រ {currentPage} នៃ {totalPages}
           </p>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -261,7 +314,7 @@ export default function ProductTable({
               className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
             >
               <FiChevronLeft />
-              Previous
+              មុន
             </button>
 
             {pageNumbers.map((item, index) =>
@@ -295,7 +348,7 @@ export default function ProductTable({
               onClick={() => onPageChange(currentPage + 1)}
               className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
             >
-              Next
+              បន្ទាប់
               <FiChevronRight />
             </button>
           </div>
@@ -357,7 +410,7 @@ function getProductPriceRange(product) {
     Number.isNaN(minNumber) ||
     Number.isNaN(maxNumber)
   ) {
-    return "No price";
+    return "គ្មានតម្លៃ";
   }
 
   if (minNumber === maxNumber) {
@@ -409,7 +462,7 @@ function getPageNumbers(currentPage, totalPages) {
   ];
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, onClick }) {
   const normalized = String(status ?? "").toLowerCase();
 
   const isActive =
@@ -418,11 +471,14 @@ function StatusBadge({ status }) {
     status === 1 ||
     status === true;
 
-  const label = isActive ? "Active" : "Inactive";
+  const label = isActive ? "ដំណើរការ" : "មិនដំណើរការ";
 
   return (
-    <span
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+    <button
+      type="button"
+      onClick={onClick}
+      title={isActive ? "ចុចដើម្បីផ្លាស់ប្ដូរទៅ មិនដំណើរការ" : "ចុចដើម្បីផ្លាស់ប្ដូរទៅ ដំណើរការ"}
+      className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:opacity-70 ${
         isActive
           ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
           : "bg-red-500/10 text-red-500 dark:text-red-400"
@@ -430,6 +486,18 @@ function StatusBadge({ status }) {
     >
       {isActive ? <FiCheckCircle /> : <FiXCircle />}
       {label}
-    </span>
+    </button>
+  );
+}
+
+function Tooltip({ label, children }) {
+  return (
+    <div className="relative inline-flex group">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-zinc-700">
+        {label}
+        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-zinc-800 dark:border-t-zinc-700" />
+      </span>
+    </div>
   );
 }

@@ -1,10 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import {
-  ShoppingCart, Trash2, Minus, Plus, Receipt, Printer,
-  Wallet, Percent, Truck, Tag, Phone, Globe,
+  ShoppingCart, Trash2, Minus, Plus, Receipt,
+  Wallet, Percent, Truck, Tag, Phone, Globe, Pencil,
 } from "./posIcons";
 import { EmptyState } from "./ui";
-import { usd, khr, EXCHANGE_RATE, SALE_CHANNELS, DELIVERY_OPTIONS, cn } from "./posData";
+import { usd, khr, SALE_CHANNELS, DELIVERY_OPTIONS, cn } from "./posData";
 
 export default function CurrentSalePanel({
   saleMode, selectedCustomer, totalItems, cart, subtotal,
@@ -14,7 +14,11 @@ export default function CurrentSalePanel({
   saleChannel, setSaleChannel,
   deliveryFeeUsd, total,
   onUpdateQty, onRemove, onClear, onHold, onOpenPayment,
+  requiresCustomer,
+  exchangeRate,
+  note, onNoteChange,
 }) {
+  const [showNote, setShowNote] = useState(false);
   const channelIcon = {
     pos:         <Tag className="h-3 w-3" />,
     phone_order: <Phone className="h-3 w-3" />,
@@ -31,7 +35,7 @@ export default function CurrentSalePanel({
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-500 text-white shadow-sm shadow-red-200">
               <ShoppingCart className="h-3.5 w-3.5" />
             </div>
-            <span className="font-bold text-slate-900 text-sm">Current Sale</span>
+            <span className="font-bold text-slate-900 text-sm">ការលក់បច្ចុប្បន្ន</span>
             {totalItems > 0 && (
               <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm shadow-red-200">
                 {totalItems}
@@ -40,29 +44,36 @@ export default function CurrentSalePanel({
           </div>
           {/* Sale channel tabs */}
           <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-100 p-0.5">
-            {SALE_CHANNELS.map((ch) => (
-              <button
-                key={ch.value}
-                type="button"
-                onClick={() => setSaleChannel(ch.value)}
-                title={ch.label}
-                className={cn(
-                  "flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold transition",
-                  saleChannel === ch.value
-                    ? "bg-white text-red-500 shadow-sm"
-                    : "text-slate-400 hover:text-slate-700"
-                )}
-              >
-                {channelIcon[ch.value]}
-                <span className="hidden sm:inline">{ch.label}</span>
-              </button>
-            ))}
+            {SALE_CHANNELS.map((ch) => {
+              const isPhoneOrder = ch.value === "phone_order";
+              const canUsePhoneOrder = saleMode === "wholesale" && selectedCustomer;
+              const isDisabled = isPhoneOrder && !canUsePhoneOrder;
+              return (
+                <button
+                  key={ch.value}
+                  type="button"
+                  onClick={() => !isDisabled && setSaleChannel(ch.value)}
+                  title={isDisabled ? "Wholesale + customer ត្រូវការ" : ch.label}
+                  className={cn(
+                    "flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold transition",
+                    isDisabled
+                      ? "cursor-not-allowed opacity-30"
+                      : saleChannel === ch.value
+                      ? "bg-white text-red-500 shadow-sm"
+                      : "text-slate-400 hover:text-slate-700"
+                  )}
+                >
+                  {channelIcon[ch.value]}
+                  <span className="hidden sm:inline">{ch.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
         <p className="mt-1 truncate text-[10px] text-slate-400 pl-9">
           {saleMode === "wholesale" && selectedCustomer
             ? `${selectedCustomer.shopName} · ${selectedCustomer.phone}`
-            : "Walk-in customer"}
+            : "ភ្ញៀវដើរចូល"}
         </p>
       </div>
 
@@ -71,8 +82,8 @@ export default function CurrentSalePanel({
         {cart.length === 0 ? (
           <EmptyState
             icon={<ShoppingCart className="h-5 w-5" />}
-            title="Cart is empty"
-            description="Tap a product to add it."
+            title="រទេះទំនិញទទេ"
+            description="ចុចលើទំនិញដើម្បីបន្ថែម"
           />
         ) : (
           cart.map((item, index) => (
@@ -97,7 +108,7 @@ export default function CurrentSalePanel({
                   <span className="rounded bg-slate-200 px-1 py-0.5 text-[9px] font-semibold text-slate-600 leading-none">
                     {item.unitName}
                   </span>
-                  <span className="truncate text-[9px] text-slate-400">{usd(item.unitPrice)}/ea</span>
+                  <span className="truncate text-[9px] text-slate-400">{usd(item.unitPrice)}</span>
                 </div>
               </div>
 
@@ -125,11 +136,10 @@ export default function CurrentSalePanel({
                 <p className="text-sm font-extrabold text-slate-900">{usd(item.lineTotal)}</p>
               </div>
 
-              {/* Remove — visible on hover */}
               <button
                 type="button"
                 onClick={() => onRemove(item.id)}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-200 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500"
               >
                 <Trash2 className="h-3 w-3" />
               </button>
@@ -143,35 +153,55 @@ export default function CurrentSalePanel({
 
         {/* Discount */}
         <div className="px-3 pt-3 pb-2">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-            <Percent className="h-3 w-3" /> Discount
+          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            <Percent className="h-3 w-3" /> បញ្ចុះតម្លៃ
           </div>
+          {/* Type chips */}
           <div className="flex gap-1.5">
-            <select
-              value={discountType}
-              onChange={(e) => { setDiscountType(e.target.value); setDiscountValue(""); }}
-              className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100"
-            >
-              <option value="none">No Discount</option>
-              <option value="percent">% Off</option>
-              <option value="amount">$ Amount</option>
-            </select>
-            {discountType !== "none" && (
-              <input
-                type="number"
-                min="0"
-                value={discountValue}
-                onChange={(e) => setDiscountValue(e.target.value)}
-                placeholder={discountType === "percent" ? "5" : "1.00"}
-                className="h-9 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100"
-              />
-            )}
-            {discountType !== "none" && discountAmount > 0 && (
-              <span className="flex h-9 items-center rounded-xl bg-emerald-50 px-2.5 text-xs font-bold text-emerald-600">
-                −{usd(discountAmount)}
-              </span>
-            )}
+            {[
+              { value: "none",    label: "គ្មាន" },
+              { value: "percent", label: "%" },
+              { value: "amount",  label: "$" },
+              { value: "khr",     label: "៛" },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { setDiscountType(opt.value); setDiscountValue(""); }}
+                className={cn(
+                  "h-8 flex-1 rounded-lg text-xs font-bold transition-all",
+                  discountType === opt.value
+                    ? "bg-red-500 text-white shadow-sm shadow-red-200"
+                    : "border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
+          {/* Amount input */}
+          {discountType !== "none" && (
+            <div className="mt-2 flex items-center gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                  {discountType === "percent" ? "%" : discountType === "khr" ? "៛" : "$"}
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  placeholder={discountType === "percent" ? "5" : discountType === "khr" ? "4000" : "1.00"}
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-7 pr-3 text-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100"
+                />
+              </div>
+              {discountAmount > 0 && (
+                <span className="shrink-0 rounded-xl bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-600">
+                  −{usd(discountAmount)}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="mx-3 h-px bg-slate-100" />
@@ -180,7 +210,7 @@ export default function CurrentSalePanel({
         <div className="px-3 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              <Truck className="h-3 w-3" /> Delivery
+              <Truck className="h-3 w-3" /> ដឹកជញ្ជូន
             </div>
             <button
               type="button"
@@ -231,28 +261,28 @@ export default function CurrentSalePanel({
         <div className="px-3 py-2.5">
           <div className="space-y-1 text-xs">
             <div className="flex justify-between text-slate-500">
-              <span>Subtotal</span>
+              <span>តម្លៃមុនបញ្ចុះ</span>
               <span className="font-semibold text-slate-800">{usd(subtotal)}</span>
             </div>
             {discountAmount > 0 && (
               <div className="flex justify-between text-emerald-600">
-                <span>Discount</span>
+                <span>បញ្ចុះ</span>
                 <span className="font-semibold">−{usd(discountAmount)}</span>
               </div>
             )}
             {deliveryRequired && deliveryFeeUsd > 0 && (
               <div className="flex justify-between text-slate-500">
-                <span>Delivery</span>
+                <span>ដឹកជញ្ជូន</span>
                 <span className="font-semibold text-slate-800">+{usd(deliveryFeeUsd)}</span>
               </div>
             )}
           </div>
           {/* Grand Total */}
           <div className="mt-2.5 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5">
-            <span className="text-sm font-bold text-slate-700">Grand Total</span>
+            <span className="text-sm font-bold text-slate-700">សរុបទាំងអស់</span>
             <div className="text-right">
               <p className="text-xl font-extrabold text-slate-900">{usd(total)}</p>
-              <p className="text-[10px] text-slate-400">{khr(total * EXCHANGE_RATE)}</p>
+              <p className="text-[10px] text-slate-400">{khr(total * exchangeRate)}</p>
             </div>
           </div>
         </div>
@@ -268,13 +298,19 @@ export default function CurrentSalePanel({
               disabled={cart.length === 0}
               className="flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Receipt className="h-3.5 w-3.5" /> Hold
+              <Receipt className="h-3.5 w-3.5" /> ផ្អាក
             </button>
             <button
               type="button"
-              className="flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50 hover:border-slate-300"
+              onClick={() => setShowNote((v) => !v)}
+              className={cn(
+                "flex h-9 items-center justify-center gap-1 rounded-xl border text-[11px] font-semibold transition",
+                note
+                  ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+              )}
             >
-              <Printer className="h-3.5 w-3.5" /> Print
+              <Pencil className="h-3.5 w-3.5" /> មតិ{note ? " •" : ""}
             </button>
             <button
               type="button"
@@ -282,18 +318,36 @@ export default function CurrentSalePanel({
               disabled={cart.length === 0}
               className="flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Trash2 className="h-3.5 w-3.5" /> Clear
+              <Trash2 className="h-3.5 w-3.5" /> សម្អាត
             </button>
           </div>
 
+          {showNote && (
+            <textarea
+              value={note}
+              onChange={(e) => onNoteChange(e.target.value)}
+              placeholder="បន្ថែមកំណត់ចំណាំ..."
+              rows={2}
+              className="w-full resize-none rounded-xl border border-blue-200 bg-blue-50/50 px-3 py-2 text-xs text-slate-700 outline-none placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+            />
+          )}
+
+          {requiresCustomer && cart.length > 0 && (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+              <span className="text-[10px] font-semibold text-amber-700">
+                ការលក់ដុំត្រូវការអតិថិជន — សូមជ្រើសរើសខាងលើ
+              </span>
+            </div>
+          )}
+
           <button
             type="button"
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || requiresCustomer}
             onClick={onOpenPayment}
             className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-red-500 to-rose-500 text-sm font-extrabold text-white shadow-md shadow-red-200 transition hover:from-red-600 hover:to-rose-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
           >
             <Wallet className="h-4 w-4" />
-            Pay Now — {usd(total)}
+            បង់ថ្លៃ — {usd(total)}
           </button>
         </div>
       </div>

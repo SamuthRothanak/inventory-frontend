@@ -1,4 +1,5 @@
-import React from "react";
+﻿import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   FiCheckCircle,
   FiCreditCard,
@@ -9,14 +10,14 @@ import {
   FiShoppingCart,
   FiTruck,
 } from "react-icons/fi";
-import { STATUS } from "../utils/purchaseConstants";
-import { formatCurrencyPair, formatDateOnly, formatPaymentMode, formatSnake } from "../utils/purchaseUtils";
+import { getStockMovementsApi } from "../../../../services/inventory.service";
+import { STATUS, STATUS_LABEL } from "../utils/purchaseConstants";
+import { extractApiData, formatCondition, formatCurrencyPair, formatDateOnly, formatPaymentMode, formatResolutionType } from "../utils/purchaseUtils";
 import { EmptyState, FormSection, InfoLine, ModalShell, StatusBadge, SummaryMiniBox } from "./PurchaseCommon";
 
 export function ViewPurchaseModal({
   purchase,
   purchaseReturns,
-  stockMovements,
   theme,
   getStatusClass,
   getStatusIcon,
@@ -34,7 +35,20 @@ export function ViewPurchaseModal({
     ...(Array.isArray(purchase.returns) ? purchase.returns : []),
     ...purchaseReturns.filter((item) => item.purchaseId === purchase.id),
   ];
-  const relatedMovements = stockMovements.filter((item) => item.purchaseId === purchase.id);
+
+  const movementsQuery = useQuery({
+    queryKey: ["stock-movements", "purchase", purchase.id],
+    queryFn: () => getStockMovementsApi({ ref_type: "purchase", ref_id: purchase.id, per_page: 100 }),
+    enabled: Boolean(purchase.id),
+    staleTime: 1000 * 30,
+  });
+  const relatedMovements = extractApiData(movementsQuery.data).map((item) => ({
+    id: item.id,
+    variantName: item.product_variant?.variant_name || item.product_variant?.name || "-",
+    qtyBase: Number(item.qty_base || 0),
+    note: item.note || "",
+  }));
+  const PAYMENT_STATUS_KH = { paid: "បានបង់", unpaid: "មិនទាន់បង់", partial: "បង់មួយផ្នែក" };
   const claimItems = purchase.items.filter((item) => Number(item.claimQty || 0) > 0);
   const totalClaimQty = claimItems.reduce((total, item) => total + Number(item.claimQty || 0), 0);
   const claimUnit = claimItems[0]?.unitName || "unit";
@@ -102,15 +116,15 @@ export function ViewPurchaseModal({
   const hasSupplierDeduction = totalDeductionUsd > 0 || totalDeductionKhr > 0;
   const deductionLabel =
     (resolvedCreditUsd > 0 || resolvedCreditKhr > 0) && (resolvedRefundUsd > 0 || resolvedRefundKhr > 0)
-      ? "Refund + Credit Deduction"
+      ? "ការសង + ការបញ្ចុះ Credit"
       : resolvedCreditUsd > 0 || resolvedCreditKhr > 0
-        ? "Credit Deduction"
-        : "Supplier Refund";
+        ? "ការបញ្ចុះ Credit"
+        : "ការសងពី អ្នកផ្គត់ផ្គង់";
 
   return (
     <ModalShell
-      title={`Purchase Detail: ${purchase.purchaseNo}`}
-      subtitle="View purchase information, items, supplier claims, and inventory handoff."
+      title={`ព័ត៌មានការទិញ: ${purchase.purchaseNo}`}
+      subtitle="មើលព័ត៌មានការទិញ, ទំនិញ, ការទាមទារ អ្នកផ្គត់ផ្គង់ និងការចូលស្តុក។"
       theme={theme}
       onClose={onClose}
       width="max-w-7xl"
@@ -121,7 +135,7 @@ export function ViewPurchaseModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Close
+            បិទ
           </button>
           {canCreateClaim && (
             <button
@@ -129,7 +143,7 @@ export function ViewPurchaseModal({
               onClick={onReturn}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700"
             >
-              <FiRotateCcw /> Supplier Claim / Return
+              <FiRotateCcw /> ការទាមទារ / ត្រឡប់ទំនិញ
             </button>
           )}
           {replacementReturn && (
@@ -138,7 +152,7 @@ export function ViewPurchaseModal({
               onClick={() => onReceiveReplacement?.(replacementReturn)}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700"
             >
-              <FiTruck /> Receive Replacement
+              <FiTruck /> ទទួលទំនិញជំនួស
             </button>
           )}
           {moneyReturn && (
@@ -149,17 +163,17 @@ export function ViewPurchaseModal({
             >
               <FiDollarSign />
               {normalizeResolutionType(moneyReturn.resolutionType || moneyReturn.resolution_type) === "refund"
-                ? "Mark Refund Received"
-                : "Resolve Credit Note"}
+                ? "បញ្ជាក់ការសង"
+                : "បញ្ចប់ Credit Note"}
             </button>
           )}
-          {purchase.paymentMode === "pay_after_check" && purchase.paymentStatus !== "paid" && effectiveStatus !== STATUS.CANCELLED && (
+          {(purchase.paymentMode === "pay_after_check" || purchase.paymentMode === "partial_prepaid") && purchase.paymentStatus !== "paid" && effectiveStatus !== STATUS.CANCELLED && (
             <button
               type="button"
               onClick={onRecordPayment}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-amber-600"
             >
-              <FiCreditCard /> Record Payment
+              <FiCreditCard /> កត់ការទូទាត់
             </button>
           )}
           <button
@@ -168,38 +182,38 @@ export function ViewPurchaseModal({
             disabled={!canOpenInventory}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <FiCheckCircle /> Open in Inventory
+            <FiCheckCircle /> បើក ស្តុក
           </button>
         </>
       }
     >
       <div className="space-y-6">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <FormSection title="Purchase Overview" subtitle="Supplier, invoice date, status and payment mode." icon={<FiShoppingCart />} theme={theme}>
+          <FormSection title="ទិដ្ឋភាពទូទៅ" subtitle="អ្នកផ្គត់ផ្គង់, កាលបរិច្ឆេទ, ស្ថានភាព និងរបៀបទូទាត់។" icon={<FiShoppingCart />} theme={theme}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <InfoLine label="Purchase No" value={purchase.purchaseNo} />
+              <InfoLine label="លេខការទិញ" value={purchase.purchaseNo} />
               <div>
-                <p className="text-xs font-semibold text-zinc-500">Status</p>
+                <p className="text-xs font-semibold text-zinc-500">ស្ថានភាព</p>
                 <div className="mt-1">
                 <StatusBadge status={effectiveStatus} getStatusClass={getStatusClass} getStatusIcon={getStatusIcon} />
                 </div>
               </div>
-              <InfoLine label="Supplier" value={purchase.supplierName} />
-              <InfoLine label="Purchase Date" value={purchase.purchaseDate} />
-              <InfoLine label="Payment Mode" value={formatPaymentMode(purchase.paymentMode)} />
-              <InfoLine label="Payment Status" value={purchase.paymentStatus} />
-              <InfoLine label="Exchange Rate Used" value={`1 USD = KHR ${Number(purchase.exchangeRateUsed || 0).toLocaleString()}`} />
+              <InfoLine label="អ្នកផ្គត់ផ្គង់" value={purchase.supplierName} />
+              <InfoLine label="កាលបរិច្ឆេទទិញ" value={purchase.purchaseDate} />
+              <InfoLine label="របៀបទូទាត់" value={formatPaymentMode(purchase.paymentMode)} />
+              <InfoLine label="ស្ថានភាពទូទាត់" value={PAYMENT_STATUS_KH[purchase.paymentStatus] || purchase.paymentStatus} />
+              <InfoLine label="អត្រាប្ដូររូបិយប័ណ្ណ" value={`1 USD = KHR ${Number(purchase.exchangeRateUsed || 0).toLocaleString()}`} />
             </div>
           </FormSection>
 
-          <FormSection title="Payment Summary" subtitle="Invoice total and balance." icon={<FiDollarSign />} theme={theme}>
+          <FormSection title="សង្ខេបការទូទាត់" subtitle="ចំនួនកម្មង់ និងប្រាក់នៅសល់។" icon={<FiDollarSign />} theme={theme}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <SummaryMiniBox theme={theme} label="Subtotal" value={formatCurrencyPair(purchase.subtotalUsd ?? purchase.subtotal, purchase.subtotalKhr)} />
-              <SummaryMiniBox theme={theme} label="Discount" value={formatCurrencyPair(purchase.discountTotalUsd ?? purchase.discountTotal, purchase.discountTotalKhr)} />
-              <SummaryMiniBox theme={theme} label="Delivery Fee" value={formatCurrencyPair(purchase.deliveryFeeUsd ?? purchase.deliveryFee, purchase.deliveryFeeKhr)} />
-              <SummaryMiniBox theme={theme} label="Paid" value={formatCurrencyPair(purchase.paidAmountUsd ?? purchase.paidAmount, purchase.paidAmountKhr)} />
-              <SummaryMiniBox theme={theme} label="Balance" value={formatCurrencyPair(purchase.balanceAmountUsd ?? purchase.balanceAmount, purchase.balanceAmountKhr)} strong />
-              <SummaryMiniBox theme={theme} label="Grand Total" value={formatCurrencyPair(purchase.grandTotalUsd ?? purchase.grandTotal, purchase.grandTotalKhr)} strong />
+              <SummaryMiniBox theme={theme} label="តម្លៃមុនបញ្ចុះ" value={formatCurrencyPair(purchase.subtotalUsd ?? purchase.subtotal, purchase.subtotalKhr)} />
+              <SummaryMiniBox theme={theme} label="បញ្ចុះតម្លៃ" value={formatCurrencyPair(purchase.discountTotalUsd ?? purchase.discountTotal, purchase.discountTotalKhr)} />
+              <SummaryMiniBox theme={theme} label="ថ្លៃដឹក" value={formatCurrencyPair(purchase.deliveryFeeUsd ?? purchase.deliveryFee, purchase.deliveryFeeKhr)} />
+              <SummaryMiniBox theme={theme} label="បានបង់" value={formatCurrencyPair(purchase.paidAmountUsd ?? purchase.paidAmount, purchase.paidAmountKhr)} />
+              <SummaryMiniBox theme={theme} label="នៅសល់" value={formatCurrencyPair(purchase.balanceAmountUsd ?? purchase.balanceAmount, purchase.balanceAmountKhr)} strong />
+              <SummaryMiniBox theme={theme} label="តម្លៃសរុប" value={formatCurrencyPair(purchase.grandTotalUsd ?? purchase.grandTotal, purchase.grandTotalKhr)} strong />
               {hasSupplierDeduction && (
                 <>
                   <div className="col-span-2 border-t border-dashed border-zinc-200 dark:border-white/10" />
@@ -211,7 +225,7 @@ export function ViewPurchaseModal({
                   />
                   <SummaryMiniBox
                     theme={theme}
-                    label="Net Cost"
+                    label="តម្លៃសុទ្ធ"
                     value={formatCurrencyPair(netCostUsd, netCostKhr)}
                     strong
                     colorClass="text-emerald-500"
@@ -221,7 +235,7 @@ export function ViewPurchaseModal({
             </div>
           </FormSection>
 
-          <FormSection title="Flow Status" subtitle="Recommended user action." icon={<FiInfo />} theme={theme}>
+          <FormSection title="ស្ថានភាពលំហូរ" subtitle="សកម្មភាពណែនាំ។" icon={<FiInfo />} theme={theme}>
             <FlowTimeline status={effectiveStatus} theme={theme} paymentMode={purchase.paymentMode} hasClaimStep={totalClaimQty > 0 || effectiveStatus === STATUS.PENDING_CLAIM} />
             <div
               className={`mt-4 rounded-xl p-4 text-sm leading-6 ${
@@ -232,31 +246,37 @@ export function ViewPurchaseModal({
                     : "bg-red-500/10 text-red-600 dark:text-red-400"
               }`}
             >
-              {effectiveStatus === STATUS.PENDING_RECEIVE && "Next: receive goods and enter damaged / accepted quantity."}
-              {effectiveStatus === STATUS.PENDING_CLAIM && (hasRemainingStockIn ? "Next: confirm accepted quantity in Inventory, and create supplier claim for damaged goods." : "Next: create supplier claim for damaged prepaid goods.")}
-              {effectiveStatus === STATUS.PENDING_STOCK_IN && "Next: open this purchase in Inventory and confirm stock in one time. Only accepted quantity enters inventory."}
-              {effectiveStatus === STATUS.RECEIVED && "Completed: this purchase already entered stock."}
-              {effectiveStatus === STATUS.DRAFT && "Next: continue editing and save purchase."}
-              {effectiveStatus === STATUS.CANCELLED && "This purchase was cancelled."}
+              {effectiveStatus === STATUS.PENDING_RECEIVE && "បន្ទាប់: ទទួលទំនិញ និងបំពេញចំនួនខូច / ទទួលយក។"}
+              {effectiveStatus === STATUS.PENDING_CLAIM && (hasRemainingStockIn ? "បន្ទាប់: បញ្ជាក់ចំនួនទទួលយកក្នុង ស្តុក, និងបង្កើតការទាមទារ អ្នកផ្គត់ផ្គង់ សម្រាប់ទំនិញខូច។" : "បន្ទាប់: បង្កើតការទាមទារ អ្នកផ្គត់ផ្គង់ សម្រាប់ទំនិញខូចដែលបានបង់ជាមុន ។")}
+              {effectiveStatus === STATUS.PENDING_STOCK_IN && (purchase.paymentMode === "partial_prepaid" && purchase.paymentStatus !== "paid"
+                ? "បន្ទាប់: បើកការទិញក្នុងស្តុក និងកត់ការទូទាត់ balance ដែលនៅសល់។"
+                : "បន្ទាប់: បើកការទិញនេះក្នុង ស្តុក ហើយបញ្ជាក់ចូលស្តុកម្ដង — តែចំនួនទទួលយកប៉ុណ្ណោះ។")}
+              {effectiveStatus === STATUS.RECEIVED && "បានបញ្ចប់: ការទិញនេះបានចូលស្តុករួចហើយ។"}
+              {effectiveStatus === STATUS.DRAFT && "បន្ទាប់: បន្តកែ ហើយរក្សាទុកការទិញ។"}
+              {effectiveStatus === STATUS.CANCELLED && "ការទិញនេះត្រូវបានលុបចោល។"}
             </div>
           </FormSection>
         </div>
 
-        <FormSection title="Purchase Items" subtitle="Invoiced, paid, received, damaged, accepted, claim and expiry quantity." icon={<FiPackage />} theme={theme}>
+        <FormSection title="ទំនិញការទិញ" subtitle="ចំនួនកម្មង់, បង់, ទទួល, ខូច, ទទួលយក, ទាមទារ និងផុតកំណត់។" icon={<FiPackage />} theme={theme}>
           <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-white/10">
             <table className="w-full min-w-[1180px] text-sm">
               <thead className="bg-red-600 text-white">
                 <tr>
-                  <th className="px-3 py-3 text-left">Product</th>
-                  <th className="px-3 py-3 text-left">Invoiced</th>
-                  <th className="px-3 py-3 text-left">Paid</th>
-                  <th className="px-3 py-3 text-left">Received</th>
-                  <th className="px-3 py-3 text-left">Accepted</th>
-                  <th className="px-3 py-3 text-left">Damaged</th>
-                  <th className="px-3 py-3 text-left">Claim</th>
-                  <th className="px-3 py-3 text-left">Inventory Qty</th>
-                  <th className="px-3 py-3 text-left">Expiry</th>
-                  <th className="px-3 py-3 text-left">Total</th>
+                  <th className="px-3 py-3 text-left">ទំនិញ</th>
+                  <th className="px-3 py-3 text-left">តម្លៃដើម</th>
+                  <th className="px-3 py-3 text-left">វិក្កយបត្រ</th>
+                  <th className="px-3 py-3 text-left">បង់</th>
+                  <th className="px-3 py-3 text-left">ទទួល</th>
+                  <th className="px-3 py-3 text-left">ទទួលយក</th>
+                  <th className="px-3 py-3 text-left">ខូចខាត</th>
+                  <th className="px-3 py-3 text-left">ទាមទារ</th>
+                  {purchase.paymentMode === "partial_prepaid" && (
+                    <th className="px-3 py-3 text-left">ទឹកប្រាក់នៅខ្វះ</th>
+                  )}
+                  <th className="px-3 py-3 text-left">ចំនួន ស្តុក</th>
+                  <th className="px-3 py-3 text-left">ផុតកំណត់</th>
+                  <th className="px-3 py-3 text-left">សរុប</th>
                 </tr>
               </thead>
               <tbody>
@@ -268,12 +288,30 @@ export function ViewPurchaseModal({
                         {item.variantCode} - {item.unitName} = {item.conversionQty} {item.baseUnit}
                       </p>
                     </td>
+                    <td className="px-3 py-3">
+                      <p className="font-semibold">${Number(item.unitCost ?? item.unitCostUsd ?? 0).toFixed(2)}</p>
+                      <p className={`text-xs ${theme.muted}`}>ក្នុង {item.unitName}</p>
+                    </td>
                     <td className="px-3 py-3">{item.invoicedQty} {item.unitName}</td>
                     <td className="px-3 py-3">{item.paidQty} {item.unitName}</td>
                     <td className="px-3 py-3">{item.receivedQty} {item.unitName}</td>
                     <td className="px-3 py-3 text-emerald-500">{item.acceptedQty} {item.unitName}</td>
                     <td className="px-3 py-3 text-amber-500">{item.damagedQty} {item.unitName}</td>
                     <td className="px-3 py-3 text-red-500">{item.claimQty} {item.unitName}</td>
+                    {purchase.paymentMode === "partial_prepaid" && (() => {
+                      const purchaseGrandUsd = Number(purchase.grandTotalUsd ?? purchase.grandTotal ?? 0);
+                      const purchaseBalUsd = Number(purchase.balanceAmountUsd ?? purchase.balanceAmount ?? purchaseGrandUsd);
+                      const purchaseBalKhr = Number(purchase.balanceAmountKhr ?? 0);
+                      const itemTotalUsd = Number(item.lineTotalUsd ?? item.lineTotal ?? 0);
+                      const ratio = purchaseGrandUsd > 0 ? itemTotalUsd / purchaseGrandUsd : 0;
+                      const balUsd = Math.max(0, ratio * purchaseBalUsd);
+                      const balKhr = Math.max(0, ratio * purchaseBalKhr);
+                      return (
+                        <td className={`px-3 py-3 font-semibold ${balUsd > 0.001 ? "text-amber-500" : "text-emerald-500"}`}>
+                          {formatCurrencyPair(balUsd, balKhr)}
+                        </td>
+                      );
+                    })()}
                     <td className="px-3 py-3">{Number(item.acceptedQty || 0) * Number(item.conversionQty || 1)} {item.baseUnit}</td>
                     <td className="px-3 py-3">{formatDateOnly(item.expiredDate)}</td>
                     <td className="px-3 py-3 font-semibold">{formatCurrencyPair(item.lineTotalUsd ?? item.lineTotal, item.lineTotalKhr)}</td>
@@ -285,16 +323,16 @@ export function ViewPurchaseModal({
         </FormSection>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <FormSection title="Supplier Claims / Purchase Returns" subtitle="Replacement, refund, or credit workflow for damaged prepaid goods." icon={<FiRotateCcw />} theme={theme}>
+          <FormSection title="ការទាមទារ / ត្រឡប់ទំនិញ" subtitle="ការដោះស្រាយ — ជំនួស, ការសង, ឬ Credit Note ពីអ្នកផ្គត់ផ្គង់ ។" icon={<FiRotateCcw />} theme={theme}>
             {relatedReturns.length === 0 ? (
               <EmptyState
                 theme={theme}
                 icon={<FiRotateCcw />}
-                title={totalClaimQty > 0 ? `Claim needed: ${totalClaimQty} ${claimUnit}` : "No supplier claim"}
+                title={totalClaimQty > 0 ? `ត្រូវការទាមទារ: ${totalClaimQty} ${claimUnit}` : "គ្មានការទាមទារ"}
                 description={
                   totalClaimQty > 0
-                    ? "Create a supplier claim/return for replacement, refund, or credit. This purchase is not resolved yet."
-                    : "No purchase return or supplier claim has been created for this purchase."
+                    ? "បង្កើតការទាមទារ អ្នកផ្គត់ផ្គង់ សម្រាប់ជំនួស, ការសង, ឬ Credit — ការទិញនេះមិនទាន់ដោះស្រាយ។"
+                    : "គ្មានការត្រឡប់ ឬការទាមទារ អ្នកផ្គត់ផ្គង់ សម្រាប់ការទិញនេះ។"
                 }
               />
             ) : (
@@ -304,7 +342,7 @@ export function ViewPurchaseModal({
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-bold">{item.purchaseReturnNo}</p>
-                        <p className={`mt-1 text-xs ${theme.muted}`}>{formatSnake(item.returnReason)} - {formatSnake(item.resolutionType)}</p>
+                        <p className={`mt-1 text-xs ${theme.muted}`}>{formatCondition(item.returnReason)} · {formatResolutionType(item.resolutionType)}</p>
                       </div>
                       <StatusBadge status={item.status} getStatusClass={getPurchaseReturnStatusClass} getStatusIcon={getPurchaseReturnStatusIcon} />
                     </div>
@@ -317,7 +355,7 @@ export function ViewPurchaseModal({
                           onClick={() => onReceiveReplacement?.(item)}
                           className="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-purple-700"
                         >
-                          <FiTruck /> Receive Replacement
+                          <FiTruck /> ទទួលទំនិញជំនួស
                         </button>
                       )}
                     {["refund", "credit_note"].includes(normalizeResolutionType(item.resolutionType || item.resolution_type)) &&
@@ -329,8 +367,8 @@ export function ViewPurchaseModal({
                         >
                           <FiDollarSign />
                           {normalizeResolutionType(item.resolutionType || item.resolution_type) === "refund"
-                            ? "Mark Refund Received"
-                            : "Resolve Credit Note"}
+                            ? "បញ្ជាក់ការសង"
+                            : "បញ្ចប់ Credit Note"}
                         </button>
                       )}
                   </div>
@@ -339,16 +377,16 @@ export function ViewPurchaseModal({
             )}
           </FormSection>
 
-          <FormSection title="Stock Movements" subtitle="Generated after Inventory confirmation." icon={<FiPackage />} theme={theme}>
+          <FormSection title="ចលនាស្តុក" subtitle="បង្កើតបន្ទាប់ពីបញ្ជាក់ ស្តុក។" icon={<FiPackage />} theme={theme}>
             {relatedMovements.length === 0 ? (
               <EmptyState
                 theme={theme}
                 icon={<FiPackage />}
-                title={acceptedBaseQty > 0 ? `Waiting Inventory: ${acceptedBaseQty} ${acceptedBaseUnit}` : "No stock movement"}
+                title={acceptedBaseQty > 0 ? `រង់ចាំ ស្តុក: ${acceptedBaseQty} ${acceptedBaseUnit}` : "គ្មានចលនាស្តុក"}
                 description={
                   acceptedBaseQty > 0
-                    ? "Accepted quantity is ready, but stock movement is generated only after Inventory confirmation."
-                    : "Stock movement will appear after Inventory confirmation."
+                    ? "ចំនួនទទួលយករួចរាល់, ប៉ុន្តែចលនាស្តុកនឹងបង្កើតតែបន្ទាប់ពីបញ្ជាក់ ស្តុក ប៉ុណ្ណោះ។"
+                    : "ចលនាស្តុកនឹងបង្ហាញបន្ទាប់ពីបញ្ជាក់ ស្តុក។"
                 }
               />
             ) : (
@@ -356,7 +394,7 @@ export function ViewPurchaseModal({
                 {relatedMovements.map((item) => (
                   <div key={item.id} className={`rounded-2xl border p-4 ${theme.softCard}`}>
                     <p className="text-sm font-bold">{item.variantName}</p>
-                    <p className="mt-1 text-sm text-emerald-500">+{item.qtyBase} {item.baseUnit}</p>
+                    <p className="mt-1 text-sm text-emerald-500">+{item.qtyBase}</p>
                     <p className={`mt-1 text-xs ${theme.muted}`}>{item.note}</p>
                   </div>
                 ))}
@@ -402,7 +440,7 @@ export function FlowTimeline({ status, theme, paymentMode = "", hasClaimStep = f
             >
               {done ? <FiCheckCircle /> : index + 1}
             </div>
-            <p className={`text-sm ${isCompletedStep ? "font-bold text-emerald-500" : active ? "font-bold text-red-500" : theme.muted}`}>{step}</p>
+            <p className={`text-sm ${isCompletedStep ? "font-bold text-emerald-500" : active ? "font-bold text-red-500" : theme.muted}`}>{STATUS_LABEL[step] ?? step}</p>
           </div>
         );
       })}

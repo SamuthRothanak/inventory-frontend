@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  FiBell,
   FiMoon,
   FiSun,
   FiChevronDown,
@@ -28,29 +27,30 @@ import { useMutation } from "@tanstack/react-query";
 
 import { logoutApi } from "../services/auth.service";
 import { useAuthStore } from "../store/authStore";
+import NotificationBell from "./Admin/Notifications/components/NotificationBell";
 
 const mainMenus = [
-  { label: "Dashboard", icon: FiGrid, path: "/home", end: true },
-  { label: "Categories", icon: FiTag, path: "/home/categories" },
-  { label: "Products", icon: FiBox, path: "/home/products" },
-  { label: "Suppliers", icon: FiTruck, path: "/home/suppliers" },
-  { label: "Purchases", icon: FiShoppingCart, path: "/home/purchases" },
-  { label: "Inventory", icon: FiArchive, path: "/home/inventory" },
-  { label: "Customer", icon: FiUsers, path: "/home/customer" },
-  { label: "Sales", icon: FiDollarSign, path: "/home/sales" },
-  { label: "Reports", icon: FiFileText, path: "/home/reports" },
+  { label: "ផ្ទាំងគ្រប់គ្រង", icon: FiGrid,         path: "/home", end: true },
+  { label: "ប្រភេទទំនិញ",     icon: FiTag,          path: "/home/categories" },
+  { label: "គ្រប់គ្រងផលិតផល", icon: FiBox,          path: "/home/products" },
+  { label: "គ្រប់គ្រងអ្នកផ្គត់ផ្គង់", icon: FiTruck,        path: "/home/suppliers" },
+  { label: "គ្រប់គ្រងការទិញ", icon: FiShoppingCart, path: "/home/purchases" },
+  { label: "គ្រប់គ្រងស្តុក",      icon: FiArchive,      path: "/home/inventory" },
+  { label: "គ្រប់គ្រងអតិថិជន",   icon: FiUsers,        path: "/home/customer" },
+  { label: "គ្រប់គ្រងការលក់",    icon: FiDollarSign,   path: "/home/sales" },
+  { label: "របាយការណ៍",       icon: FiFileText,     path: "/home/reports" },
 ];
 
 const adminMenus = [
-  { label: "Users", icon: FiUser, path: "/home/users" },
-  { label: "Role & Permission", icon: FiShield, path: "/home/roles" },
+  { label: "អ្នកប្រើប្រាស់",  icon: FiUser,   path: "/home/users" },
+  { label: "តួនាទី & សិទ្ធិ", icon: FiShield, path: "/home/roles" },
 ];
 
 const systemMenus = [
-  { label: "Settings", icon: FiSettings, path: "/home/settings" },
-  { label: "Exchange Rate", icon: FiRefreshCcw, path: "/home/exchange-rate" },
-  { label: "Backup Data", icon: FiDatabase, path: "/home/backup-data" },
-  { label: "Audit Log", icon: FiActivity, path: "/home/audit-log" },
+  { label: "ការកំណត់",          icon: FiSettings,   path: "/home/settings" },
+  { label: "អត្រាប្តូរប្រាក់",  icon: FiRefreshCcw, path: "/home/exchange-rate" },
+  { label: "បម្រុងទុកទិន្ន័យ", icon: FiDatabase,   path: "/home/backup-data" },
+  { label: "កំណត់ហេតុ",         icon: FiActivity,   path: "/home/audit-log" },
 ];
 
 function MenuLink({ item, collapsed, isDark }) {
@@ -87,7 +87,7 @@ function MenuLink({ item, collapsed, isDark }) {
           </span>
 
           {!collapsed && (
-            <span className="min-w-0 flex-1 truncate leading-none">
+            <span className="min-w-0 flex-1 truncate leading-snug pb-1">
               {item.label}
             </span>
           )}
@@ -133,7 +133,7 @@ function MenuGroup({
           </span>
 
           {!collapsed && (
-            <span className="min-w-0 truncate leading-none">{title}</span>
+            <span className="min-w-0 truncate leading-snug pb-1">{title}</span>
           )}
         </div>
 
@@ -223,7 +223,7 @@ export default function Home() {
       (item) => pathname === item.path || pathname.startsWith(item.path + "/"),
     );
 
-    return found ? found.label : "Dashboard";
+    return found ? found.label : "ផ្ទាំងគ្រប់គ្រង";
   }, [location.pathname]);
 
   const theme = {
@@ -285,7 +285,7 @@ export default function Home() {
                         theme.title,
                       ].join(" ")}
                     >
-                      Hak Ly Mart
+                      Hak Ley Mart
                     </h2>
                     <p
                       className={[
@@ -293,7 +293,7 @@ export default function Home() {
                         theme.subTitle,
                       ].join(" ")}
                     >
-                      Admin
+                      ហាក់ ឡីម៉ាត
                     </p>
                   </div>
                 )}
@@ -313,7 +313,7 @@ export default function Home() {
               </div>
 
               <MenuGroup
-                title="Administration"
+                title="គ្រប់គ្រងអ្នកប្រើ"
                 icon={FiShield}
                 items={adminMenus}
                 open={openAdmin}
@@ -323,7 +323,7 @@ export default function Home() {
               />
 
               <MenuGroup
-                title="System"
+                title="ប្រព័ន្ធ"
                 icon={FiSliders}
                 items={systemMenus}
                 open={openSystem}
@@ -347,7 +347,7 @@ export default function Home() {
 
                 {!collapsed && (
                   <span>
-                    {logoutMutation.isPending ? "Logging out..." : "Logout"}
+                    {logoutMutation.isPending ? "កំពុងចេញ..." : "ចេញ"}
                   </span>
                 )}
               </button>
@@ -357,7 +357,7 @@ export default function Home() {
               type="button"
               onClick={() => setCollapsed(!collapsed)}
               className={[
-                "absolute -right-4 top-[92px] z-20 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition",
+                "absolute -right-4  top-[70px]  z-20 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition",
                 theme.toggle,
               ].join(" ")}
             >
@@ -379,22 +379,14 @@ export default function Home() {
             ].join(" ")}
           >
             <div className="min-w-0">
-              <h1 className={`truncate text-2xl font-extrabold ${theme.title}`}>
+              <h1 className={`truncate text-2xl font-extrabold leading-snug pb-1 ${theme.title}`}>
                 {pageTitle}
               </h1>
 
-              <p className={`mt-0.5 text-sm ${theme.subTitle}`}>
-                Management panel
-              </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
-              >
-                <FiBell className="text-[18px]" />
-              </button>
+              <NotificationBell isDark={isDark} />
 
               <button
                 type="button"

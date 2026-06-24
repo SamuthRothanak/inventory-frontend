@@ -1,16 +1,27 @@
 import { z } from "zod";
 
 export const priceRuleSchema = z.object({
-  local_unit_key: z.string().min(1, "Unit reference is required."),
+  local_unit_key: z.string().min(1, "សូមបញ្ជាក់ ខ្នាតទំនិញ ។"),
   applies_to: z.enum(["retail", "wholesale", "both"], {
-    message: "Applies to must be retail, wholesale, or both.",
+    message: "សូមជ្រើស ប្រើសម្រាប់ ។",
   }),
-  min_qty: z.coerce.number().min(1, "Min qty must be at least 1."),
-  unit_price_usd: z.coerce.number().min(0, "USD price cannot be negative."),
-  unit_price_khr: z.coerce.number().min(0, "KHR price cannot be negative."),
-  input_currency: z.enum(["USD", "KHR"]),
-  input_price: z.coerce.number().min(0, "Input price cannot be negative."),
-  status: z.enum(["active", "inactive"]),
+  min_qty: z.coerce.number().min(1, "ចំនួនយ៉ាងតិច ត្រូវ ≥ 1 ។"),
+  unit_price_usd: z.coerce.number().min(0, "តម្លៃ USD មិនអាចអវិជ្ជមាន ។"),
+  unit_price_khr: z.coerce.number().min(0, "តម្លៃ KHR មិនអាចអវិជ្ជមាន ។"),
+  input_currency: z.enum(["USD", "KHR"], { message: "សូមជ្រើសរូបិយប័ណ្ណ ។" }),
+  input_price: z.coerce.number().min(0.01, "សូមបំពេញតម្លៃ (> 0) ។"),
+  status: z.enum(["active", "inactive"], { message: "ស្ថានភាព មិនត្រឹមត្រូវ ។" }),
+});
+
+export const standalonePriceRuleSchema = z.object({
+  product_variant_unit_id: z.string().min(1, "ខ្នាតទំនិញ ត្រូវការ ។"),
+  applies_to: z.enum(["retail", "wholesale", "both"], {
+    message: "សូមជ្រើស ប្រើសម្រាប់ ។",
+  }),
+  min_qty: z.coerce.number().min(1, "ចំនួនយ៉ាងតិច ត្រូវ ≥ 1 ។"),
+  input_currency: z.enum(["USD", "KHR"], { message: "សូមជ្រើសរូបិយប័ណ្ណ ។" }),
+  input_price: z.coerce.number().min(0.01, "សូមបំពេញតម្លៃ (> 0) ។"),
+  status: z.enum(["active", "inactive"], { message: "ស្ថានភាព មិនត្រឹមត្រូវ ។" }),
 });
 
 export const priceRuleDefaultValues = {

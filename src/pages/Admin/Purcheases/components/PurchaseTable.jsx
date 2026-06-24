@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import {
   FiCheckCircle,
   FiDollarSign,
@@ -107,6 +107,7 @@ export function PurchaseTable({
   handleResolveSupplierClaim,
   handleConfirmStockIn,
   handleCancelPurchase,
+  simplified = false,
 }) {
   if (purchases.length === 0) {
     return (
@@ -114,8 +115,8 @@ export function PurchaseTable({
         <EmptyState
           theme={theme}
           icon={<FiSearch />}
-          title="No purchases found"
-          description="Try changing your search keyword or filters."
+          title="រកមិនឃើញការទិញ"
+          description="ព្យាយាមប្តូរការស្វែងរក ឬតម្រង។"
         />
       </div>
     );
@@ -124,11 +125,11 @@ export function PurchaseTable({
   return (
     <div className="w-full">
       <div className="grid grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,1.45fr)_minmax(0,1.15fr)_11rem] items-center gap-4 bg-red-600 px-5 py-3 text-sm font-semibold text-white">
-        <div>Purchase / Supplier</div>
-        <div>Payment</div>
-        <div>Claim / Flow</div>
-        <div>Total / Status</div>
-        <div className="text-center">Actions</div>
+        <div>ការទិញ / អ្នកផ្គត់ផ្គង់</div>
+        <div>ការទូទាត់</div>
+        <div>ទំនិញ / ខូចខាត</div>
+        <div>សរុប / ស្ថានភាព</div>
+        <div className="text-center">សកម្មភាព</div>
       </div>
 
       <div className="divide-y divide-zinc-200 dark:divide-white/10">
@@ -143,8 +144,9 @@ export function PurchaseTable({
           const stockConfirmed = hasAcceptedStockConfirmed(purchase);
           const claimStillOpen = effectiveStatus === STATUS.PENDING_CLAIM && hasClaimQty(purchase);
           const netCostInfo = getNetCostAfterDeduction(purchase, purchaseReturns);
-          const problemColor =
-            getClaimRequiredCount(purchase) > 0
+          const problemColor = problemLabel?.includes("បានដោះស្រាយ")
+            ? "text-emerald-500"
+            : getClaimRequiredCount(purchase) > 0
               ? "text-red-500"
               : getDamagedCount(purchase) > 0
                 ? "text-amber-500"
@@ -166,21 +168,21 @@ export function PurchaseTable({
                     <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${theme.badge}`}>
                       {purchase.purchaseDate}
                     </span>
-                    <span className={`text-xs ${theme.muted}`}>By {purchase.createdBy}</span>
+                    <span className={`text-xs ${theme.muted}`}>ដោយ {purchase.createdBy}</span>
                   </div>
                 </div>
               </div>
 
               <div className="min-w-0">
                 <p className="text-sm font-bold">{formatPaymentMode(purchase.paymentMode)}</p>
-                <p className={`mt-1 text-xs font-semibold capitalize ${
+                <p className={`mt-1 text-xs font-semibold ${
                   purchase.paymentStatus === "paid" ? "text-emerald-500" :
                   purchase.paymentStatus === "partial" ? "text-amber-500" :
                   "text-red-500"
-                }`}>{purchase.paymentStatus}</p>
+                }`}>{{ paid: "បានបង់", partial: "បង់មួយផ្នែក", unpaid: "មិនទាន់បង់" }[purchase.paymentStatus] ?? purchase.paymentStatus}</p>
                 {purchase.paymentStatus === "partial" && (
                   <p className={`mt-1 break-words text-xs ${theme.muted}`}>
-                    Paid {formatCurrencyPair(purchase.paidAmountUsd ?? purchase.paidAmount, purchase.paidAmountKhr)}
+                    បានបង់ {formatCurrencyPair(purchase.paidAmountUsd ?? purchase.paidAmount, purchase.paidAmountKhr)}
                   </p>
                 )}
               </div>
@@ -192,21 +194,21 @@ export function PurchaseTable({
                 {itemSummary.detail && itemSummary.detail !== "-" && <p className={`mt-1 truncate text-xs ${theme.muted}`}>{itemSummary.detail}</p>}
                 {stockConfirmed && (
                   <p className="mt-2 text-xs font-semibold text-emerald-500">
-                    Accepted stock already confirmed
+                    ស្តុកបានទទួលស្គាល់ហើយ
                   </p>
                 )}
                 {claimStillOpen && (
                   <p className="mt-1 text-xs font-semibold text-red-500">
-                    Claim still needs supplier resolution
+                    ការទាមទារត្រូវការឆ្លើយតបពី អ្នកផ្គត់ផ្គង់
                   </p>
                 )}
                 {problemLabel && <p className={`mt-2 text-sm font-semibold ${problemColor}`}>{problemLabel}</p>}
                 {hasBalance && (
                   <p className={`mt-1 break-words text-xs ${theme.muted}`}>
-                    Balance {formatCurrencyPair(balanceUsd, balanceKhr)}
+                    នៅសល់ {formatCurrencyPair(balanceUsd, balanceKhr)}
                   </p>
                 )}
-                {!hasFlowDetail && <p className={`text-xs ${theme.muted}`}>View purchase for product lines</p>}
+                {!hasFlowDetail && <p className={`text-xs ${theme.muted}`}>បើក ដើម្បីមើលមុខទំនិញ</p>}
               </div>
 
               <div className="min-w-0">
@@ -215,19 +217,21 @@ export function PurchaseTable({
                 </p>
                 {Number(purchase.subtotalUsd ?? purchase.subtotal ?? 0) !== Number(purchase.grandTotalUsd ?? purchase.grandTotal ?? 0) && (
                   <p className={`mt-1 break-words text-xs ${theme.muted}`}>
-                    Subtotal {formatCurrencyPair(purchase.subtotalUsd ?? purchase.subtotal, purchase.subtotalKhr)}
+                    រង {formatCurrencyPair(purchase.subtotalUsd ?? purchase.subtotal, purchase.subtotalKhr)}
                   </p>
                 )}
                 {netCostInfo && (
                   <p className="mt-1 break-words text-xs font-semibold text-emerald-500">
-                    Net {formatCurrencyPair(netCostInfo.netUsd, netCostInfo.netKhr)}
+                    សុទ្ធ {formatCurrencyPair(netCostInfo.netUsd, netCostInfo.netKhr)}
                   </p>
                 )}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <StatusBadge status={effectiveStatus} getStatusClass={getStatusClass} getStatusIcon={getStatusIcon} />
-                  <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}>
-                    {getNextActionLabel(purchase)}
-                  </span>
+                  {!simplified && (
+                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}>
+                      {getNextActionLabel(purchase)}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -244,6 +248,7 @@ export function PurchaseTable({
                 handleConfirmStockIn={handleConfirmStockIn}
                 handleCancelPurchase={handleCancelPurchase}
                 compact
+                simplified={simplified}
               />
             </div>
           );
@@ -270,6 +275,7 @@ export function PurchaseMobileCard({
   handleResolveSupplierClaim,
   handleConfirmStockIn,
   handleCancelPurchase,
+  simplified = false,
 }) {
   const itemSummary = getPurchaseItemSummary(purchase);
 
@@ -287,20 +293,20 @@ export function PurchaseMobileCard({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <SummaryMiniBox theme={theme} label="Payment" value={formatPaymentMode(purchase.paymentMode)} />
+        <SummaryMiniBox theme={theme} label="ការទូទាត់" value={formatPaymentMode(purchase.paymentMode)} />
         <SummaryMiniBox
           theme={theme}
-          label="Total"
+          label="សរុប"
           value={formatCurrencyPair(purchase.grandTotalUsd ?? purchase.grandTotal, purchase.grandTotalKhr)}
           strong
         />
-        {itemSummary.title && <SummaryMiniBox theme={theme} label="Products" value={itemSummary.title} />}
-        <SummaryMiniBox theme={theme} label="Next" value={nextActionLabel} />
+        {itemSummary.title && <SummaryMiniBox theme={theme} label="ផលិតផល" value={itemSummary.title} />}
+        <SummaryMiniBox theme={theme} label="បន្ទាប់" value={nextActionLabel} />
       </div>
 
       {(problemLabel || itemSummary.detail) && (
         <div className="mt-4 rounded-xl bg-zinc-500/10 p-3">
-          <p className="text-xs font-semibold">Purchase note</p>
+          <p className="text-xs font-semibold">កំណត់ចំណាំ</p>
           {itemSummary.detail && <p className={`mt-1 text-xs ${theme.muted}`}>{itemSummary.detail}</p>}
           {problemLabel && <p className="mt-2 text-xs font-semibold text-red-500">{problemLabel}</p>}
         </div>
@@ -319,6 +325,7 @@ export function PurchaseMobileCard({
           handleResolveSupplierClaim={handleResolveSupplierClaim}
           handleConfirmStockIn={handleConfirmStockIn}
           handleCancelPurchase={handleCancelPurchase}
+          simplified={simplified}
         />
       </div>
     </div>
@@ -338,6 +345,7 @@ export function ActionButtons({
   handleConfirmStockIn,
   handleCancelPurchase,
   compact = false,
+  simplified = false,
 }) {
   const iconButton = compact
     ? "inline-flex h-10 w-10 items-center justify-center rounded-xl text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40"
@@ -384,57 +392,79 @@ export function ActionButtons({
 
   return (
     <div className={`flex flex-wrap items-center ${compact ? "justify-end gap-2" : "gap-2"}`}>
-      <button type="button" title="View purchase" aria-label="View purchase" onClick={() => openViewModal(purchase)} className={`${iconButton} bg-amber-500 hover:bg-amber-600`}>
-        <FiEye size={17} />
-      </button>
+      <Tooltip label="មើលការទិញ">
+        <button type="button" onClick={() => openViewModal(purchase)} className={`${iconButton} bg-amber-500 hover:bg-amber-600`}>
+          <FiEye size={17} />
+        </button>
+      </Tooltip>
 
       {canEdit && (
-        <button type="button" title="Edit purchase" aria-label="Edit purchase" onClick={() => openEditModal(purchase)} className={`${iconButton} bg-blue-600 hover:bg-blue-700`}>
-          <FiEdit2 size={17} />
-        </button>
+        <Tooltip label="កែការទិញ">
+          <button type="button" onClick={() => openEditModal(purchase)} className={`${iconButton} bg-blue-600 hover:bg-blue-700`}>
+            <FiEdit2 size={17} />
+          </button>
+        </Tooltip>
       )}
 
-      {effectiveStatus === STATUS.PENDING_RECEIVE && (
-        <button type="button" title="Receive goods" aria-label="Receive goods" onClick={() => openReceiveGoodsModal(purchase)} className={`${iconButton} bg-indigo-600 hover:bg-indigo-700`}>
-          <FiTruck size={17} />
-        </button>
+      {!simplified && effectiveStatus === STATUS.PENDING_RECEIVE && (
+        <Tooltip label="ទទួលទំនិញ">
+          <button type="button" onClick={() => openReceiveGoodsModal(purchase)} className={`${iconButton} bg-indigo-600 hover:bg-indigo-700`}>
+            <FiTruck size={17} />
+          </button>
+        </Tooltip>
       )}
 
-      {canOpenInventory && (
-        <button type="button" title="Open Inventory" aria-label="Open Inventory" onClick={() => handleConfirmStockIn(purchase)} className={`${iconButton} bg-emerald-500 hover:bg-emerald-600`}>
-          <FiCheckCircle size={17} />
-        </button>
+      {!simplified && canOpenInventory && (
+        <Tooltip label="បញ្ជាក់ស្តុកចូល">
+          <button type="button" onClick={() => handleConfirmStockIn(purchase)} className={`${iconButton} bg-emerald-500 hover:bg-emerald-600`}>
+            <FiCheckCircle size={17} />
+          </button>
+        </Tooltip>
       )}
 
-      {replacementClaim && (
-        <button type="button" title="Receive Supplier Replacement" aria-label="Receive Supplier Replacement" onClick={() => handleReceiveReplacement?.(purchase, replacementClaim)} className={`${iconButton} bg-indigo-600 hover:bg-indigo-700`}>
-          <FiTruck size={17} />
-        </button>
+      {!simplified && replacementClaim && (
+        <Tooltip label="ទទួលជំនួស អ្នកផ្គត់ផ្គង់">
+          <button type="button" onClick={() => handleReceiveReplacement?.(purchase, replacementClaim)} className={`${iconButton} bg-indigo-600 hover:bg-indigo-700`}>
+            <FiTruck size={17} />
+          </button>
+        </Tooltip>
       )}
 
-      {moneyClaim && (
-        <button
-          type="button"
-          title={normalizeResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type) === "refund" ? "Mark Refund Received" : "Resolve Credit Note"}
-          aria-label={normalizeResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type) === "refund" ? "Mark Refund Received" : "Resolve Credit Note"}
-          onClick={() => handleResolveSupplierClaim?.(purchase, moneyClaim)}
-          className={`${iconButton} bg-emerald-600 hover:bg-emerald-700`}
-        >
-          <FiDollarSign size={17} />
-        </button>
+      {!simplified && moneyClaim && (
+        <Tooltip label={normalizeResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type) === "refund" ? "កត់ការសងបានទទួល" : "ដោះស្រាយ Credit Note"}>
+          <button type="button" onClick={() => handleResolveSupplierClaim?.(purchase, moneyClaim)} className={`${iconButton} bg-emerald-600 hover:bg-emerald-700`}>
+            <FiDollarSign size={17} />
+          </button>
+        </Tooltip>
       )}
 
-      {canClaim && effectiveStatus !== STATUS.PENDING_STOCK_IN && (
-        <button type="button" title="Create Supplier Claim" aria-label="Create Supplier Claim" onClick={() => openPurchaseReturnModal(purchase)} className={`${iconButton} bg-purple-600 hover:bg-purple-700`}>
-          <FiRotateCcw size={17} />
-        </button>
+      {!simplified && canClaim && effectiveStatus !== STATUS.PENDING_STOCK_IN && (
+        <Tooltip label="បង្កើតការទាមទារ អ្នកផ្គត់ផ្គង់">
+          <button type="button" onClick={() => openPurchaseReturnModal(purchase)} className={`${iconButton} bg-purple-600 hover:bg-purple-700`}>
+            <FiRotateCcw size={17} />
+          </button>
+        </Tooltip>
       )}
 
       {canCancel && (
-        <button type="button" title="Cancel purchase" aria-label="Cancel purchase" onClick={() => handleCancelPurchase(purchase)} className={`${iconButton} bg-orange-500 hover:bg-orange-600`}>
-          <FiXCircle size={17} />
-        </button>
+        <Tooltip label="លុបចោលការទិញ">
+          <button type="button" onClick={() => handleCancelPurchase(purchase)} className={`${iconButton} bg-rose-600 hover:bg-rose-700`}>
+            <FiXCircle size={17} />
+          </button>
+        </Tooltip>
       )}
+    </div>
+  );
+}
+
+export function Tooltip({ label, children }) {
+  return (
+    <div className="relative inline-flex group">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-zinc-700">
+        {label}
+        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-zinc-800 dark:border-t-zinc-700" />
+      </span>
     </div>
   );
 }
