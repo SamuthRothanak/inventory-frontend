@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   FiActivity,
+  FiCalendar,
   FiDatabase,
   FiFilter,
   FiLayers,
@@ -30,15 +31,44 @@ export default function AuditLog() {
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [quickDate, setQuickDate] = useState("all");
+
+  const fmtDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const handleQuickDate = (value) => {
+    setQuickDate(value);
+    setPage(1);
+    const today = new Date();
+    if (value === "all") {
+      setDateFrom(""); setDateTo("");
+    } else if (value === "today") {
+      setDateFrom(fmtDate(today)); setDateTo(fmtDate(today));
+    } else if (value === "week") {
+      const from = new Date(today); from.setDate(today.getDate() - 6);
+      setDateFrom(fmtDate(from)); setDateTo(fmtDate(today));
+    } else if (value === "month") {
+      const from = new Date(today.getFullYear(), today.getMonth(), 1);
+      setDateFrom(fmtDate(from)); setDateTo(fmtDate(today));
+    }
+  };
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["activity-logs", { search, moduleFilter, actionFilter, perPage, page }],
+    queryKey: ["activity-logs", { search, moduleFilter, actionFilter, perPage, page, dateFrom, dateTo }],
     queryFn: () =>
       getActivityLogsApi({
-        search:   search.trim() || undefined,
-        module:   moduleFilter !== "all" ? moduleFilter : undefined,
-        action:   actionFilter !== "all" ? actionFilter : undefined,
-        per_page: perPage,
+        search:     search.trim() || undefined,
+        module:     moduleFilter !== "all" ? moduleFilter : undefined,
+        action:     actionFilter !== "all" ? actionFilter : undefined,
+        date_from:  dateFrom || undefined,
+        date_to:    dateTo || undefined,
+        per_page:   perPage,
         page,
       }),
     staleTime: 30_000,
@@ -70,37 +100,48 @@ export default function AuditLog() {
   const handlePerPageChange = (value) => { setPerPage(value); setPage(1); };
   const handleSearch = (e) => { setSearch(e.target.value); setPage(1); };
 
+  const dateInputClass = isDark
+    ? "border-white/10 bg-[#18181b] text-white focus:border-red-500 focus:ring-red-500/20"
+    : "border-zinc-200 bg-white text-zinc-900 focus:border-red-500 focus:ring-red-500/20";
+
+  const QUICK_DATES = [
+    { label: "ទាំងអស់", value: "all" },
+    { label: "ថ្ងៃនេះ", value: "today" },
+    { label: "៧ ថ្ងៃ",  value: "week" },
+    { label: "ខែនេះ",   value: "month" },
+  ];
+
   return (
     <div className={`space-y-6 px-5 pb-8 pt-6 ${pageText}`}>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <AuditLogSummaryCard
-          title="Total Activities"
+          title="សកម្មភាពសរុប"
           value={isLoading ? "..." : total}
-          caption="All modules"
+          caption="គ្រប់ម៉ូឌុល"
           icon={<FiActivity />}
           tone="red"
           isDark={isDark}
         />
         <AuditLogSummaryCard
-          title="Today"
+          title="ថ្ងៃនេះ"
           value={isLoading ? "..." : todayCount}
-          caption="Latest system actions"
+          caption="សកម្មភាពប្រព័ន្ធថ្មីៗ"
           icon={<FiShield />}
           tone="emerald"
           isDark={isDark}
         />
         <AuditLogSummaryCard
-          title="Modules"
+          title="ផ្នែក"
           value={isLoading ? "..." : moduleCount}
-          caption="Tracked areas"
+          caption="ផ្នែកដែលមានសកម្មភាព"
           icon={<FiLayers />}
           tone="blue"
           isDark={isDark}
         />
         <AuditLogSummaryCard
-          title="Critical Actions"
+          title="សកម្មភាពសំខាន់"
           value={isLoading ? "..." : criticalCount}
-          caption="Delete / cancel / void"
+          caption="លុប / បោះបង់ / void"
           icon={<FiRefreshCcw />}
           tone="amber"
           isDark={isDark}
@@ -113,7 +154,7 @@ export default function AuditLog() {
           <input
             value={search}
             onChange={handleSearch}
-            placeholder="Search activity, user, module, reference..."
+            placeholder="ស្វែងរកសកម្មភាព អ្នកប្រើ ម៉ូឌុល យោង..."
             className={`h-14 w-full rounded-2xl border pl-14 pr-4 text-sm outline-none transition focus:ring-4 ${inputClass}`}
           />
         </div>
@@ -141,19 +182,55 @@ export default function AuditLog() {
         />
       </div>
 
+      <div className={`flex flex-wrap items-center gap-3 rounded-2xl border p-4 ${isDark ? "border-white/10 bg-[#18181b]" : "border-zinc-200 bg-white"}`}>
+        <FiCalendar className="shrink-0 text-lg text-zinc-400" />
+        <div className="flex flex-wrap gap-2">
+          {QUICK_DATES.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => handleQuickDate(opt.value)}
+              className={`h-9 rounded-xl px-4 text-sm font-semibold transition border ${
+                quickDate === opt.value
+                  ? "bg-red-600 text-white border-red-600"
+                  : isDark
+                    ? "border-white/10 text-zinc-300 hover:bg-white/10"
+                    : "border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => { setDateFrom(e.target.value); setQuickDate("custom"); setPage(1); }}
+            className={`h-9 rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${dateInputClass}`}
+          />
+          <span className={`text-sm ${isDark ? "text-zinc-400" : "text-zinc-400"}`}>→</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => { setDateTo(e.target.value); setQuickDate("custom"); setPage(1); }}
+            className={`h-9 rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${dateInputClass}`}
+          />
+        </div>
+      </div>
+
       <AuditLogTable
         rows={rows}
         isDark={isDark}
         onView={setSelectedLog}
         isLoading={isLoading}
         isError={isError}
-        onRefresh={refetch}
       />
 
       {lastPage > 1 && (
         <div className="flex items-center justify-between gap-4">
           <p className={`text-sm ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
-            Page {meta.current_page} of {lastPage} — {total} records
+            ទំព័រ {meta.current_page} នៃ {lastPage} — {total} កំណត់ត្រា
           </p>
           <div className="flex items-center gap-2">
             <button

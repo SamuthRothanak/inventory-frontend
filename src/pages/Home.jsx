@@ -30,27 +30,27 @@ import { useAuthStore } from "../store/authStore";
 import NotificationBell from "./Admin/Notifications/components/NotificationBell";
 
 const mainMenus = [
-  { label: "ផ្ទាំងគ្រប់គ្រង", icon: FiGrid,         path: "/home", end: true },
-  { label: "ប្រភេទទំនិញ",     icon: FiTag,          path: "/home/categories" },
-  { label: "គ្រប់គ្រងផលិតផល", icon: FiBox,          path: "/home/products" },
-  { label: "គ្រប់គ្រងអ្នកផ្គត់ផ្គង់", icon: FiTruck,        path: "/home/suppliers" },
-  { label: "គ្រប់គ្រងការទិញ", icon: FiShoppingCart, path: "/home/purchases" },
-  { label: "គ្រប់គ្រងស្តុក",      icon: FiArchive,      path: "/home/inventory" },
-  { label: "គ្រប់គ្រងអតិថិជន",   icon: FiUsers,        path: "/home/customer" },
-  { label: "គ្រប់គ្រងការលក់",    icon: FiDollarSign,   path: "/home/sales" },
-  { label: "របាយការណ៍",       icon: FiFileText,     path: "/home/reports" },
+  { label: "ផ្ទាំងគ្រប់គ្រង",       icon: FiGrid,         path: "/home", end: true,     permission: "dashboard.view" },
+  { label: "ប្រភេទទំនិញ",           icon: FiTag,          path: "/home/categories",     permission: "categories.view" },
+  { label: "គ្រប់គ្រងផលិតផល",       icon: FiBox,          path: "/home/products",       permission: "products.view" },
+  { label: "គ្រប់គ្រងអ្នកផ្គត់ផ្គង់", icon: FiTruck,        path: "/home/suppliers",      permission: "suppliers.view" },
+  { label: "គ្រប់គ្រងការទិញ",       icon: FiShoppingCart, path: "/home/purchases",      permission: "purchases.view" },
+  { label: "គ្រប់គ្រងស្តុក",         icon: FiArchive,      path: "/home/inventory",      permission: "stock.view" },
+  { label: "គ្រប់គ្រងអតិថិជន",       icon: FiUsers,        path: "/home/customer",       permission: "customers.view" },
+  { label: "គ្រប់គ្រងការលក់",       icon: FiDollarSign,   path: "/home/sales",          permission: "sales.view" },
+  { label: "របាយការណ៍",             icon: FiFileText,     path: "/home/reports",        permission: "reports.sales" },
 ];
 
 const adminMenus = [
-  { label: "អ្នកប្រើប្រាស់",  icon: FiUser,   path: "/home/users" },
-  { label: "តួនាទី & សិទ្ធិ", icon: FiShield, path: "/home/roles" },
+  { label: "អ្នកប្រើប្រាស់",  icon: FiUser,   path: "/home/users", permission: "users.view" },
+  { label: "តួនាទី & សិទ្ធិ", icon: FiShield, path: "/home/roles", permission: "roles.view" },
 ];
 
 const systemMenus = [
-  { label: "ការកំណត់",          icon: FiSettings,   path: "/home/settings" },
-  { label: "អត្រាប្តូរប្រាក់",  icon: FiRefreshCcw, path: "/home/exchange-rate" },
-  { label: "បម្រុងទុកទិន្ន័យ", icon: FiDatabase,   path: "/home/backup-data" },
-  { label: "កំណត់ហេតុ",         icon: FiActivity,   path: "/home/audit-log" },
+  { label: "ការកំណត់",          icon: FiSettings,   path: "/home/settings",       permission: "settings.view" },
+  { label: "អត្រាប្តូរប្រាក់",  icon: FiRefreshCcw, path: "/home/exchange-rate",  permission: "exchange-rate.view" },
+  { label: "បម្រុងទុកទិន្ន័យ", icon: FiDatabase,   path: "/home/backup-data",    permission: "backups.view" },
+  { label: "កំណត់ហេតុ",         icon: FiActivity,   path: "/home/audit-log",      permission: "audit-log.view" },
 ];
 
 function MenuLink({ item, collapsed, isDark }) {
@@ -168,6 +168,11 @@ export default function Home() {
   const location = useLocation();
 
   const clearAuth = useAuthStore((state) => state.clearAuth);
+  const can       = useAuthStore((state) => state.can);
+
+  const visibleMain   = mainMenus.filter((m) => can(m.permission));
+  const visibleAdmin  = adminMenus.filter((m) => can(m.permission));
+  const visibleSystem = systemMenus.filter((m) => can(m.permission));
 
   const logoutMutation = useMutation({
     mutationFn: logoutApi,
@@ -302,7 +307,7 @@ export default function Home() {
 
             <div className="scrollbar-hide flex-1 overflow-y-auto px-3 py-4">
               <div className="space-y-1">
-                {mainMenus.map((item) => (
+                {visibleMain.map((item) => (
                   <MenuLink
                     key={item.path}
                     item={item}
@@ -312,25 +317,29 @@ export default function Home() {
                 ))}
               </div>
 
-              <MenuGroup
-                title="គ្រប់គ្រងអ្នកប្រើ"
-                icon={FiShield}
-                items={adminMenus}
-                open={openAdmin}
-                setOpen={setOpenAdmin}
-                collapsed={collapsed}
-                isDark={isDark}
-              />
+              {visibleAdmin.length > 0 && (
+                <MenuGroup
+                  title="គ្រប់គ្រងអ្នកប្រើ"
+                  icon={FiShield}
+                  items={visibleAdmin}
+                  open={openAdmin}
+                  setOpen={setOpenAdmin}
+                  collapsed={collapsed}
+                  isDark={isDark}
+                />
+              )}
 
-              <MenuGroup
-                title="ប្រព័ន្ធ"
-                icon={FiSliders}
-                items={systemMenus}
-                open={openSystem}
-                setOpen={setOpenSystem}
-                collapsed={collapsed}
-                isDark={isDark}
-              />
+              {visibleSystem.length > 0 && (
+                <MenuGroup
+                  title="ប្រព័ន្ធ"
+                  icon={FiSliders}
+                  items={visibleSystem}
+                  open={openSystem}
+                  setOpen={setOpenSystem}
+                  collapsed={collapsed}
+                  isDark={isDark}
+                />
+              )}
             </div>
 
             <div className={`border-t p-3 ${theme.border}`}>

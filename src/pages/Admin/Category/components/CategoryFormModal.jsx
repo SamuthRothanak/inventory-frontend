@@ -439,7 +439,7 @@ function FormImageInput({
             />
 
             <p className={`mt-3 truncate text-sm ${theme.muted}`}>
-              {file?.name || "PNG, JPG, JPEG"}
+              {file?.name || "JPG, PNG, WEBP · Max 2 MB"}
             </p>
 
             {file && (

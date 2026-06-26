@@ -1,6 +1,6 @@
 import React from "react";
-import { FiEye, FiRefreshCw } from "react-icons/fi";
-import { actionTone, formatDateTime, formatJsonPreview, moduleLabel } from "../utils/auditLogFormat";
+import { FiEye } from "react-icons/fi";
+import { actionLabel, actionTone, formatDateTime, formatJsonPreview, moduleLabel, translateDescription } from "../utils/auditLogFormat";
 
 function badgeClass(tone, isDark) {
   const tones = {
@@ -14,38 +14,28 @@ function badgeClass(tone, isDark) {
   return tones[tone] || tones.amber;
 }
 
-export default function AuditLogTable({ rows = [], isDark = false, onView, isLoading = false, isError = false, onRefresh }) {
+export default function AuditLogTable({ rows = [], isDark = false, onView, isLoading = false, isError = false }) {
   const muted = isDark ? "text-zinc-400" : "text-zinc-500";
   const border = isDark ? "border-white/10" : "border-zinc-200";
 
   return (
     <div className={`overflow-hidden rounded-2xl border shadow-sm ${border} ${isDark ? "bg-[#18181b]" : "bg-white"}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-        <div>
-          <h2 className="text-xl font-extrabold">Activity Log List</h2>
-          <p className={`mt-1 text-sm ${muted}`}>Showing {rows.length} activity records</p>
-        </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className={`flex h-9 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition ${isDark ? "border-white/10 hover:bg-white/10" : "border-zinc-200 hover:bg-zinc-50"}`}
-        >
-          <FiRefreshCw className={isLoading ? "animate-spin" : ""} size={14} />
-          Refresh
-        </button>
+      <div className="p-5">
+        <h2 className="text-xl font-extrabold">បញ្ជីកំណត់ហេតុ</h2>
+        <p className={`mt-1 text-sm ${muted}`}>បង្ហាញ {rows.length} កំណត់ត្រាសកម្មភាព</p>
       </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-[1180px] w-full text-left">
           <thead>
             <tr className="bg-red-600 text-sm font-bold text-white">
-              <th className="px-6 py-4">Time / User</th>
-              <th className="px-6 py-4">Module / Action</th>
-              <th className="px-6 py-4">Reference</th>
-              <th className="px-6 py-4">Description</th>
-              <th className="px-6 py-4">Changes</th>
-              <th className="px-6 py-4">IP Address</th>
-              <th className="px-6 py-4 text-center">Actions</th>
+              <th className="px-6 py-4">ពេល / អ្នកប្រើ</th>
+              <th className="px-6 py-4">ផ្នែក</th>
+              <th className="px-6 py-4">ឯកសារ</th>
+              <th className="px-6 py-4">ពិពណ៌នា</th>
+              <th className="px-6 py-4">ផ្លាស់ប្ដូរ</th>
+              <th className="px-6 py-4">IP</th>
+              <th className="px-6 py-4 text-center">មើល</th>
             </tr>
           </thead>
           <tbody>
@@ -62,7 +52,7 @@ export default function AuditLogTable({ rows = [], isDark = false, onView, isLoa
             ) : isError ? (
               <tr>
                 <td colSpan={7} className="px-6 py-16 text-center">
-                  <p className="font-semibold text-red-500">Could not load activity logs.</p>
+                  <p className="font-semibold text-red-500">មិនអាចផ្ទុកកំណត់ហេតុបានទេ។</p>
                 </td>
               </tr>
             ) : rows.length ? (
@@ -76,8 +66,8 @@ export default function AuditLogTable({ rows = [], isDark = false, onView, isLoa
                     </td>
                     <td className="w-36 px-6 py-4 align-middle">
                       <p className="text-sm font-bold">{moduleLabel(row.module)}</p>
-                      <span className={`mt-1.5 inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize ${badgeClass(tone, isDark)}`}>
-                        {row.action}
+                      <span className={`mt-1.5 inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ${badgeClass(tone, isDark)}`}>
+                        {actionLabel(row.action)}
                       </span>
                     </td>
                     <td className="w-32 px-6 py-4 align-middle">
@@ -91,14 +81,14 @@ export default function AuditLogTable({ rows = [], isDark = false, onView, isLoa
                       )}
                     </td>
                     <td className="w-64 px-6 py-4 align-middle">
-                      <p className="line-clamp-2 text-sm leading-5">{row.description || "-"}</p>
+                      <p className="line-clamp-2 text-sm leading-5">{translateDescription(row.description)}</p>
                     </td>
                     <td className="w-44 px-6 py-4 align-middle">
                       <p className={`truncate text-xs ${muted}`}>
-                        <span className="font-semibold">Old: </span>{formatJsonPreview(row.old_values)}
+                        <span className="font-semibold">មុន: </span>{formatJsonPreview(row.old_values)}
                       </p>
                       <p className={`mt-1 truncate text-xs ${muted}`}>
-                        <span className="font-semibold">New: </span>{formatJsonPreview(row.new_values)}
+                        <span className="font-semibold">ក្រោយ: </span>{formatJsonPreview(row.new_values)}
                       </p>
                     </td>
                     <td className="w-28 px-6 py-4 align-middle">
@@ -106,13 +96,13 @@ export default function AuditLogTable({ rows = [], isDark = false, onView, isLoa
                         {row.ip_address || "-"}
                       </span>
                     </td>
-                    <td className="w-16 px-4 py-4 align-middle">
+                    <td className="w-24 px-6 py-4 align-middle">
                       <div className="flex justify-center">
                         <button
                           type="button"
                           onClick={() => onView(row)}
                           className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white shadow-sm transition hover:bg-orange-600"
-                          title="View detail"
+                          title="មើលព័ត៌មានលម្អិត"
                         >
                           <FiEye size={15} />
                         </button>
@@ -124,7 +114,7 @@ export default function AuditLogTable({ rows = [], isDark = false, onView, isLoa
             ) : (
               <tr>
                 <td colSpan={7} className={`px-6 py-16 text-center ${muted}`}>
-                  No activity logs found.
+                  រកមិនឃើញកំណត់ហេតុទេ។
                 </td>
               </tr>
             )}

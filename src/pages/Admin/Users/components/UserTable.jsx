@@ -11,6 +11,7 @@
   FiSearch,
 } from "react-icons/fi";
 import { capitalize } from "../utils/userUtils";
+import PermissionGate from "../../../../components/PermissionGate";
 
 export default function UserTable({
   filteredUsers,
@@ -149,18 +150,22 @@ export default function UserTable({
 
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-center gap-2">
-                      <Tooltip label="កែអ្នកប្រើប្រាស់">
-                        <button type="button" onClick={() => openEditModal(item)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700">
-                          <FiEdit2 size={16} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label="លុបអ្នកប្រើប្រាស់">
-                        <button type="button" onClick={() => onDelete(item)} disabled={isDeletingId === item.id}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60">
-                          {isDeletingId === item.id ? <FiRefreshCw size={16} className="animate-spin" /> : <FiTrash2 size={16} />}
-                        </button>
-                      </Tooltip>
+                      <PermissionGate permission="users.update">
+                        <Tooltip label="កែអ្នកប្រើប្រាស់">
+                          <button type="button" onClick={() => openEditModal(item)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700">
+                            <FiEdit2 size={16} />
+                          </button>
+                        </Tooltip>
+                      </PermissionGate>
+                      <PermissionGate permission="users.delete">
+                        <Tooltip label="លុបអ្នកប្រើប្រាស់">
+                          <button type="button" onClick={() => onDelete(item)} disabled={isDeletingId === item.id}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60">
+                            {isDeletingId === item.id ? <FiRefreshCw size={16} className="animate-spin" /> : <FiTrash2 size={16} />}
+                          </button>
+                        </Tooltip>
+                      </PermissionGate>
                     </div>
                   </td>
                 </tr>

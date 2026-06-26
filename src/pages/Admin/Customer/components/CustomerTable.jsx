@@ -15,6 +15,7 @@
 } from "react-icons/fi";
 
 import TableLoading from "../../../../components/TableLoading";
+import PermissionGate from "../../../../components/PermissionGate";
 
 export default function CustomerTable({
   theme,
@@ -71,41 +72,43 @@ export default function CustomerTable({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {bulkSelectMode ? (
-            <>
-              <button
-                type="button"
-                onClick={onCancelBulkSelect}
-                disabled={bulkDeleteIsPending}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-xs font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
-              >
-                <FiX />
-                បោះបង់
-              </button>
+          <PermissionGate permission="customers.delete">
+            {bulkSelectMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onCancelBulkSelect}
+                  disabled={bulkDeleteIsPending}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-xs font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                >
+                  <FiX />
+                  បោះបង់
+                </button>
 
+                <button
+                  type="button"
+                  onClick={onBulkDelete}
+                  disabled={selectedCustomerIds.length === 0 || bulkDeleteIsPending}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <FiTrash2 />
+                  {bulkDeleteIsPending
+                    ? "កំពុងលុប..."
+                    : `លុបដែលបានជ្រើស (${selectedCustomerIds.length})`}
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
-                onClick={onBulkDelete}
-                disabled={selectedCustomerIds.length === 0 || bulkDeleteIsPending}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={onOpenBulkSelect}
+                disabled={customers.length === 0 || isLoading || isError}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-xs font-semibold text-red-500 shadow-sm transition hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <FiTrash2 />
-                {bulkDeleteIsPending
-                  ? "កំពុងលុប..."
-                  : `លុបដែលបានជ្រើស (${selectedCustomerIds.length})`}
+                <FiCheckSquare />
+                ជ្រើសរើសច្រើន
               </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={onOpenBulkSelect}
-              disabled={customers.length === 0 || isLoading || isError}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-xs font-semibold text-red-500 shadow-sm transition hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <FiCheckSquare />
-              ជ្រើសរើសច្រើន
-            </button>
-          )}
+            )}
+          </PermissionGate>
         </div>
       </div>
 
@@ -248,26 +251,30 @@ export default function CustomerTable({
                         </button>
                       </Tooltip>
 
-                      <Tooltip label="កែអតិថិជន">
-                        <button
-                          type="button"
-                          onClick={() => onEdit(item)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
-                        >
-                          <FiEdit2 size={16} />
-                        </button>
-                      </Tooltip>
+                      <PermissionGate permission="customers.update">
+                        <Tooltip label="កែអតិថិជន">
+                          <button
+                            type="button"
+                            onClick={() => onEdit(item)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                          >
+                            <FiEdit2 size={16} />
+                          </button>
+                        </Tooltip>
+                      </PermissionGate>
 
-                      <Tooltip label="លុបអតិថិជន">
-                        <button
-                          type="button"
-                          disabled={isDeleting}
-                          onClick={() => onDelete(item)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <FiTrash2 size={16} />
-                        </button>
-                      </Tooltip>
+                      <PermissionGate permission="customers.delete">
+                        <Tooltip label="លុបអតិថិជន">
+                          <button
+                            type="button"
+                            disabled={isDeleting}
+                            onClick={() => onDelete(item)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <FiTrash2 size={16} />
+                          </button>
+                        </Tooltip>
+                      </PermissionGate>
                     </div>
                   </td>
                 </tr>

@@ -40,7 +40,7 @@ function formatLatest(iso) {
     d.getDate() === today.getDate() &&
     d.getMonth() === today.getMonth() &&
     d.getFullYear() === today.getFullYear();
-  return isToday ? "Today" : d.toLocaleDateString("en-GB");
+  return isToday ? "ថ្ងៃនេះ" : d.toLocaleDateString("en-GB");
 }
 
 const summaryIcons = [<FiCalendar />, <FiArchive />, <FiHardDrive />, <FiShield />];
@@ -64,29 +64,29 @@ export default function BackupData() {
 
   const summaryCards = [
     {
-      title:    "Latest Backup",
+      title:    "បម្រុងទុកចុងក្រោយ",
       value:    formatLatest(stats.latest_backup),
       subtitle: stats.latest_backup
         ? new Date(stats.latest_backup).toLocaleString("en-GB")
-        : "No backup yet",
+        : "មិនទាន់មានទិន្នន័យបម្រុងទុក",
       tone: "emerald",
     },
     {
-      title:    "Backup Files",
+      title:    "ឯកសារបម្រុងទុក",
       value:    String(stats.backup_count ?? 0),
-      subtitle: "Stored locally",
+      subtitle: "រក្សាទុកក្នុង server",
       tone:     "blue",
     },
     {
-      title:    "Total Size",
+      title:    "ទំហំសរុប",
       value:    formatBytes(stats.total_size),
-      subtitle: "Database + uploads",
+      subtitle: "Database + រូបភាព",
       tone:     "amber",
     },
     {
-      title:    "Retention",
-      value:    `${stats.retention_days ?? 30} Days`,
-      subtitle: "Keep recent backups",
+      title:    "រយៈពេលរក្សា",
+      value:    `${stats.retention_days ?? 30} ថ្ងៃ`,
+      subtitle: "រក្សាទិន្នន័យបម្រុងទុកថ្មីៗ",
       tone:     "purple",
     },
   ];
@@ -143,7 +143,7 @@ export default function BackupData() {
   }
 
   async function handleDelete(row) {
-    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុប Backup "${row.file_name}" មែនទេ?`);
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបទិន្នន័យបម្រុងទុក "${row.file_name}" មែនទេ?`);
     if (!ok) return;
     deleteMutation.mutate(row.id);
   }
@@ -176,7 +176,7 @@ export default function BackupData() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search backup file or status..."
+          placeholder="ស្វែងរកឯកសារបម្រុងទុក ឬ ស្ថានភាព..."
           className={`h-14 w-full rounded-2xl border pl-14 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
         />
       </div>

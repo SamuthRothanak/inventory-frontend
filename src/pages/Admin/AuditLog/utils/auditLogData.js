@@ -1,29 +1,29 @@
 export const auditLogModules = [
-  { label: "All Modules",  value: "all" },
-  { label: "Auth",         value: "auth" },
-  { label: "Sales",        value: "sales" },
-  { label: "Purchases",    value: "purchases" },
-  { label: "Inventory",    value: "inventory" },
-  { label: "Products",     value: "products" },
-  { label: "Categories",   value: "categories" },
-  { label: "Users",        value: "users" },
-  { label: "Settings",     value: "settings" },
+  { label: "គ្រប់ផ្នែក",   value: "all" },
+  { label: "ការចូលប្រើ",    value: "auth" },
+  { label: "លក់",           value: "sales" },
+  { label: "ទិញ",           value: "purchases" },
+  { label: "ស្តុក",          value: "inventory" },
+  { label: "ផលិតផល",       value: "products" },
+  { label: "ប្រភេទ",        value: "categories" },
+  { label: "អ្នកប្រើ",      value: "users" },
+  { label: "ការកំណត់",      value: "settings" },
 ];
 
 export const auditLogActions = [
-  { label: "All Actions", value: "all" },
-  { label: "Login",       value: "login" },
-  { label: "Logout",      value: "logout" },
-  { label: "Created",     value: "created" },
-  { label: "Updated",     value: "updated" },
-  { label: "Deleted",     value: "deleted" },
-  { label: "Cancelled",   value: "cancelled" },
+  { label: "គ្រប់សកម្មភាព", value: "all" },
+  { label: "ចូល",           value: "login" },
+  { label: "ចេញ",           value: "logout" },
+  { label: "បានបង្កើត",    value: "created" },
+  { label: "បានកែ",         value: "updated" },
+  { label: "បានលុប",        value: "deleted" },
+  { label: "បានបោះបង់",    value: "cancelled" },
 ];
 
 export const pageSizeOptions = [
-  { label: "10 / page", value: 10 },
-  { label: "20 / page", value: 20 },
-  { label: "50 / page", value: 50 },
+  { label: "១០ / ទំព័រ", value: 10 },
+  { label: "២០ / ទំព័រ", value: 20 },
+  { label: "៥០ / ទំព័រ", value: 50 },
 ];
 
 export const auditLogRows = [

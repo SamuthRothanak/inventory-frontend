@@ -619,7 +619,7 @@ function ExchangeRateTable({
     >
       <div className="flex items-center justify-between px-5 py-4">
         <div>
-          <h3 className="text-base font-bold">បញ្ជីអត្រាប្តូរប្រាក់</h3>
+          <h3 className={`text-base font-bold ${theme.title}`}>បញ្ជីអត្រាប្តូរប្រាក់</h3>
           <p className={`mt-1 text-sm ${theme.muted}`}>
             បង្ហាញ {rates.length} នៃ {total} អត្រា
           </p>

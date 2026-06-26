@@ -28,6 +28,7 @@ import CategoryDropdown from "./components/CategoryDropdown";
 import { useNotification } from "../../../components/AppNotification";
 
 import { extractCategories, normalizeCategory } from "./utils/categoryUtils";
+import PermissionGate from "../../../components/PermissionGate";
 
 function useLockBodyScroll(isOpen) {
   useEffect(() => {
@@ -544,14 +545,16 @@ export default function Category() {
           />
         </div>
 
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
-        >
-          <FiPlusCircle className="text-lg" />
-          បន្ថែមប្រភេទ
-        </button>
+        <PermissionGate permission="categories.create">
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
+          >
+            <FiPlusCircle className="text-lg" />
+            បន្ថែមប្រភេទ
+          </button>
+        </PermissionGate>
       </div>
 
       <CategoryTable

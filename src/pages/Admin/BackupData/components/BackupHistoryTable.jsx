@@ -23,9 +23,15 @@ function StatusBadge({ status }) {
     failed:      "bg-red-500/10 text-red-500",
   };
 
+  const labels = {
+    completed:   "ជោគជ័យ",
+    in_progress: "កំពុងដំណើរការ",
+    failed:      "បរាជ័យ",
+  };
+
   return (
-    <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${styles[status] ?? styles.failed}`}>
-      {status?.replace("_", " ")}
+    <span className={`rounded-full px-3 py-1 text-xs font-bold ${styles[status] ?? styles.failed}`}>
+      {labels[status] ?? status}
     </span>
   );
 }
@@ -35,8 +41,8 @@ export default function BackupHistoryTable({ theme, rows = [], isLoading, onDown
     <div className={`overflow-hidden rounded-2xl border shadow-sm ${theme.card}`}>
       <div className="flex flex-wrap items-center justify-between gap-3 p-6">
         <div>
-          <h2 className="text-xl font-extrabold">Backup History</h2>
-          <p className={`mt-1 text-sm ${theme.muted}`}>Showing {rows.length} backup files</p>
+          <h2 className="text-xl font-extrabold">ប្រវត្តិបម្រុងទុក</h2>
+          <p className={`mt-1 text-sm ${theme.muted}`}>បង្ហាញ {rows.length} ឯកសារបម្រុងទុក</p>
         </div>
       </div>
 
@@ -44,12 +50,12 @@ export default function BackupHistoryTable({ theme, rows = [], isLoading, onDown
         <table className="min-w-[900px] w-full text-left">
           <thead>
             <tr className="bg-red-600 text-sm font-bold text-white">
-              <th className="px-6 py-4">File Name</th>
-              <th className="px-6 py-4">Size</th>
-              <th className="px-6 py-4">Created By</th>
-              <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4">Date</th>
-              <th className="px-6 py-4 text-center">Actions</th>
+              <th className="px-6 py-4">ឈ្មោះឯកសារ</th>
+              <th className="px-6 py-4">ទំហំ</th>
+              <th className="px-6 py-4">បង្កើតដោយ</th>
+              <th className="px-6 py-4">ស្ថានភាព</th>
+              <th className="px-6 py-4">កាលបរិច្ឆេទ</th>
+              <th className="px-6 py-4 text-center">សកម្មភាព</th>
             </tr>
           </thead>
           <tbody>
@@ -70,7 +76,7 @@ export default function BackupHistoryTable({ theme, rows = [], isLoading, onDown
                     <p className="font-bold text-sm">{row.file_name}</p>
                   </td>
                   <td className="px-6 py-5 font-semibold text-sm">{formatBytes(row.file_size)}</td>
-                  <td className="px-6 py-5 text-sm">{row.created_by?.name ?? "System"}</td>
+                  <td className="px-6 py-5 text-sm">{row.created_by?.name ?? "ប្រព័ន្ធ"}</td>
                   <td className="px-6 py-5">
                     <StatusBadge status={row.status} />
                   </td>
@@ -79,7 +85,7 @@ export default function BackupHistoryTable({ theme, rows = [], isLoading, onDown
                     <div className="flex justify-center gap-2">
                       <button
                         type="button"
-                        title="Download"
+                        title="ទាញយក"
                         onClick={() => onDownload(row)}
                         disabled={row.status !== "completed"}
                         className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -88,7 +94,7 @@ export default function BackupHistoryTable({ theme, rows = [], isLoading, onDown
                       </button>
                       <button
                         type="button"
-                        title="Restore from this backup"
+                        title="ស្ដារពីទិន្នន័យបម្រុងទុកនេះ"
                         onClick={() => onRestore(row)}
                         disabled={row.status !== "completed"}
                         className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -97,7 +103,7 @@ export default function BackupHistoryTable({ theme, rows = [], isLoading, onDown
                       </button>
                       <button
                         type="button"
-                        title="Delete"
+                        title="លុប"
                         onClick={() => onDelete(row)}
                         className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500 text-white hover:bg-red-600"
                       >
@@ -110,7 +116,7 @@ export default function BackupHistoryTable({ theme, rows = [], isLoading, onDown
             ) : (
               <tr>
                 <td colSpan={6} className={`px-6 py-16 text-center ${theme.muted}`}>
-                  No backup files found. Create your first backup above.
+                  រកមិនឃើញឯកសារបម្រុងទុក។ សូមបង្កើតបម្រុងទុកដំបូងខាងលើ។
                 </td>
               </tr>
             )}

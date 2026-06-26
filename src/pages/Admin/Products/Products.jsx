@@ -96,6 +96,7 @@ import SummaryCard from "./components/SummaryCard";
 import FilterSelect from "./components/FilterSelect";
 
 import { extractApiData } from "./utils/productHelpers";
+import PermissionGate from "../../../components/PermissionGate";
 import { extractActiveRate } from "./utils/productExchangeRate";
 import {
   getSingleProductFromResponse,
@@ -1200,14 +1201,16 @@ export default function Products() {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row xl:shrink-0">
-          <button
-            type="button"
-            onClick={openAddProductForm}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
-          >
-            <FiPlusCircle className="text-lg" />
-            បន្ថែមផលិតផល
-          </button>
+          <PermissionGate permission="products.create">
+            <button
+              type="button"
+              onClick={openAddProductForm}
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
+            >
+              <FiPlusCircle className="text-lg" />
+              បន្ថែមផលិតផល
+            </button>
+          </PermissionGate>
         </div>
       </div>
 

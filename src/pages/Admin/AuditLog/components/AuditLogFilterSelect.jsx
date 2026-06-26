@@ -74,7 +74,7 @@ export default function AuditLogFilterSelect({
                   autoFocus
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search..."
+                  placeholder="ស្វែងរក..."
                   className={`h-10 w-full rounded-xl border pl-9 pr-3 text-sm outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-500/20 ${theme.search}`}
                 />
               </div>

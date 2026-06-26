@@ -1,4 +1,5 @@
 import api from "../lib/axios";
+import { useAuthStore } from "../store/authStore";
 
 export const getBackupsApi = async (params = {}) => {
   const response = await api.get("/backups", { params });
@@ -20,16 +21,16 @@ export const deleteBackupApi = async (id) => {
   return response.data;
 };
 
-export const downloadBackupApi = async (id, fileName) => {
-  const response = await api.get(`/backups/${id}/download`, {
-    responseType: "blob",
-  });
-  const url = URL.createObjectURL(new Blob([response.data]));
-  const a   = document.createElement("a");
-  a.href    = url;
-  a.download = fileName;
+export const downloadBackupApi = (id) => {
+  const { token } = useAuthStore.getState();
+  const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api/v1";
+  const url = `${baseUrl}/backups/${id}/download?token=${encodeURIComponent(token)}`;
+  const a = document.createElement("a");
+  a.href = url;
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 };
 
 export const restoreBackupApi = async (file) => {

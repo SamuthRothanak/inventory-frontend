@@ -66,7 +66,7 @@ export default function App() {
       <Route
         path="/home"
         element={
-          <ProtectedRoute allowedRoles={["admin"]}>
+          <ProtectedRoute requiredPermission="dashboard.view">
             <HomeLayout />
           </ProtectedRoute>
         }
@@ -91,7 +91,7 @@ export default function App() {
       <Route
         path="/pos"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cashier"]}>
+          <ProtectedRoute requiredPermission="sales.create">
             <Pos />
           </ProtectedRoute>
         }

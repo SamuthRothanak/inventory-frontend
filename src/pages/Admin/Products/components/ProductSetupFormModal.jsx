@@ -1410,7 +1410,7 @@ function ImageInput({ label, theme, previewFile, onChange, uniqueId = "" }) {
               )}
             </div>
             <p className={`mt-3 truncate text-sm ${theme.muted}`}>
-              {fileName || "PNG, JPG, JPEG"}
+              {fileName || "JPG, PNG, WEBP · Max 2 MB"}
             </p>
             {previewFile instanceof File && <p className="mt-1 text-xs text-zinc-400">{(previewFile.size / 1024 / 1024).toFixed(2)} MB</p>}
           </div>

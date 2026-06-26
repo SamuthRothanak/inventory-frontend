@@ -16,15 +16,16 @@ import ActivityItem   from "./components/ActivityItem";
 import AlertSection   from "./components/AlertSection";
 import CustomTooltip  from "./components/CustomTooltip";
 import { getDashboardSummaryApi } from "../../../services/dashboard.service";
+import { useAuthStore } from "../../../store/authStore";
 
 // ── Static nav links ──────────────────────────────────────────────
 const QUICK_ACTIONS = [
-  { label: "បើក POS",          icon: FiZap,         to: "/pos",                bg: "bg-red-500 hover:bg-red-600 text-white" },
-  { label: "ស្តុក",       icon: FiArchive,      to: "/home/inventory",     bg: "bg-emerald-600 hover:bg-emerald-700 text-white" },
-  { label: "បន្ថែមការទិញ",     icon: FiShoppingCart, to: "/home/purchases",     bg: "bg-blue-600 hover:bg-blue-700 text-white" },
-  { label: "បន្ថែមទំនិញ",      icon: FiBox,          to: "/home/products",      bg: "bg-violet-600 hover:bg-violet-700 text-white" },
-  { label: "របាយការណ៍",        icon: FiBarChart2,    to: "/home/reports",       bg: "bg-amber-500 hover:bg-amber-600 text-white" },
-  { label: "អត្រាប្តូរប្រាក់", icon: FiRefreshCw,    to: "/home/exchange-rate", bg: "bg-zinc-600 hover:bg-zinc-700 text-white dark:bg-zinc-700 dark:hover:bg-zinc-600" },
+  { label: "បើក POS",          icon: FiZap,         to: "/pos",                bg: "bg-red-500 hover:bg-red-600 text-white",                                              permission: "sales.create"   },
+  { label: "ស្តុក",            icon: FiArchive,      to: "/home/inventory",     bg: "bg-emerald-600 hover:bg-emerald-700 text-white",                                      permission: "stock.view"     },
+  { label: "បន្ថែមការទិញ",     icon: FiShoppingCart, to: "/home/purchases",     bg: "bg-blue-600 hover:bg-blue-700 text-white",                                            permission: "purchases.view" },
+  { label: "បន្ថែមទំនិញ",      icon: FiBox,          to: "/home/products",      bg: "bg-violet-600 hover:bg-violet-700 text-white",                                        permission: "products.view"  },
+  { label: "របាយការណ៍",        icon: FiBarChart2,    to: "/home/reports",       bg: "bg-amber-500 hover:bg-amber-600 text-white",                                          permission: "reports.sales"  },
+  { label: "អត្រាប្តូរប្រាក់", icon: FiRefreshCw,    to: "/home/exchange-rate", bg: "bg-zinc-600 hover:bg-zinc-700 text-white dark:bg-zinc-700 dark:hover:bg-zinc-600",   permission: "settings.view"  },
 ];
 
 const ACTIVITY_META = {
@@ -105,6 +106,7 @@ function LoadingPanel({ theme, text = "រង់ចាំបន្តិច...",
 export default function Dashboard() {
   const outlet = useOutletContext();
   const isDark  = outlet?.isDark ?? false;
+  const can     = useAuthStore((s) => s.can);
 
   const theme = {
     pageTitle: isDark ? "text-white"                                  : "text-zinc-900",
@@ -459,25 +461,27 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Quick Actions ────────────────────────────────────────────── */}
-      <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
-        <h3 className={`mb-4 text-base font-bold ${theme.pageTitle}`}>ប្រតិបត្តិការទូទៅ</h3>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {QUICK_ACTIONS.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Link
-                key={action.label}
-                to={action.to}
-                className={`flex flex-col items-center justify-center gap-2 rounded-2xl px-3 py-4 text-center shadow-sm transition hover:scale-[1.03] hover:shadow-md active:scale-[0.98] ${action.bg}`}
-              >
-                <Icon className="text-xl" />
-                <span className="text-xs font-semibold leading-tight">{action.label}</span>
-              </Link>
-            );
-          })}
+      {/* ── Quick Actions (admin only — hidden if fewer than 3 actions visible) ── */}
+      {QUICK_ACTIONS.filter((a) => can(a.permission)).length >= 3 && (
+        <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+          <h3 className={`mb-4 text-base font-bold ${theme.pageTitle}`}>ប្រតិបត្តិការទូទៅ</h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {QUICK_ACTIONS.filter((a) => can(a.permission)).map((action) => {
+              const Icon = action.icon;
+              return (
+                <Link
+                  key={action.label}
+                  to={action.to}
+                  className={`flex flex-col items-center justify-center gap-2 rounded-2xl px-3 py-4 text-center shadow-sm transition hover:scale-[1.03] hover:shadow-md active:scale-[0.98] ${action.bg}`}
+                >
+                  <Icon className="text-xl" />
+                  <span className="text-xs font-semibold leading-tight">{action.label}</span>
+                </Link>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Inventory + Payment ──────────────────────────────────────── */}
       <div className="grid gap-5 lg:grid-cols-2">
@@ -537,9 +541,11 @@ export default function Dashboard() {
               <h3 className={`text-base font-bold ${theme.pageTitle}`}>ការប្រមូលថ្ងៃនេះ</h3>
               <p className={`mt-0.5 text-xs ${theme.muted}`}>សាច់ប្រាក់ ធនាគារ និង QR ទទួលបានថ្ងៃនេះ</p>
             </div>
-            <Link to="/home/sales" className={`flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:opacity-80 ${theme.badge}`}>
-              <FiExternalLink className="text-xs" /> មើល
-            </Link>
+            {can("sales.view") && (
+              <Link to="/home/sales" className={`flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:opacity-80 ${theme.badge}`}>
+                <FiExternalLink className="text-xs" /> មើល
+              </Link>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             {isLoading
@@ -603,11 +609,13 @@ export default function Dashboard() {
             ))}
           </div>
         )}
-        <div className="mt-5">
-          <Link to="/home/reports" className={`flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold transition hover:opacity-80 ${theme.badge}`}>
-            <FiFileText /> មើលរបាយការណ៍ទាំងអស់
-          </Link>
-        </div>
+        {can("reports.sales") && (
+          <div className="mt-5">
+            <Link to="/home/reports" className={`flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold transition hover:opacity-80 ${theme.badge}`}>
+              <FiFileText /> មើលរបាយការណ៍ទាំងអស់
+            </Link>
+          </div>
+        )}
       </div>
 
     </div>

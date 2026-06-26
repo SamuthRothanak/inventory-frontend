@@ -29,7 +29,7 @@ export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfir
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className={`w-full max-w-lg rounded-2xl border shadow-2xl ${theme.card}`}>
         <div className={`flex items-center justify-between border-b p-6 ${theme.divider}`}>
-          <h2 className="text-xl font-extrabold">Restore Backup</h2>
+          <h2 className="text-xl font-extrabold">ស្ដារទិន្នន័យ</h2>
           <button
             type="button"
             onClick={onClose}
@@ -43,14 +43,22 @@ export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfir
           <div className="flex items-start gap-3 rounded-2xl bg-red-500/10 p-4 text-red-500">
             <FiAlertTriangle className="mt-0.5 shrink-0 text-xl" />
             <p className="text-sm leading-6 font-semibold">
-              Warning: Restoring will overwrite all current data including products, sales, purchases, and users. This cannot be undone.
+              ការព្រមាន: ការស្ដារទិន្នន័យនឹងជំនួសទិន្នន័យបច្ចុប្បន្នទាំងអស់ រួមមាន ផលិតផល ការលក់ ការទិញ និងអ្នកប្រើប្រាស់។ សកម្មភាពនេះមិនអាចត្រឡប់វិញបានឡើយ។
             </p>
           </div>
 
           {isFromExisting ? (
             <div className={`rounded-2xl border p-5 ${theme.softCard}`}>
-              <p className="font-bold text-sm">Restore from existing backup:</p>
+              <p className="font-bold text-sm">ស្ដារពីបម្រុងទុកដែលមានស្រាប់:</p>
               <p className="mt-2 font-mono text-sm text-blue-500">{existingBackup.file_name}</p>
+              <p className={`mt-1 text-sm ${theme.muted}`}>
+                ទំហំ: {(existingBackup.file_size / 1024 / 1024).toFixed(1)} MB
+              </p>
+              {existingBackup.file_size > 100 * 1024 * 1024 && (
+                <p className="mt-2 text-xs font-semibold text-amber-500">
+                  ⚠️ ឯកសារធំ — ការស្ដារអាចចំណាយពេលច្រើនវិនាទី។
+                </p>
+              )}
             </div>
           ) : (
             <div
@@ -62,9 +70,14 @@ export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfir
                 <div className="text-center">
                   <p className="font-bold text-emerald-500">{file.name}</p>
                   <p className={`text-xs ${theme.muted}`}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  {file.size > 100 * 1024 * 1024 && (
+                    <p className="mt-1 text-xs font-semibold text-amber-500">
+                      ⚠️ ឯកសារធំ — ការផ្ទុកឡើង និងការស្ដារអាចចំណាយពេលយូរ។
+                    </p>
+                  )}
                 </div>
               ) : (
-                <p className={`text-sm ${theme.muted}`}>Click to choose .zip backup file</p>
+                <p className={`text-sm ${theme.muted}`}>ចុចដើម្បីជ្រើសរើសឯកសារ .zip (អតិបរមា 1 GB)</p>
               )}
               <input
                 ref={fileRef}
@@ -84,7 +97,7 @@ export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfir
               className="mt-0.5 h-4 w-4 accent-red-600"
             />
             <span className={`text-sm leading-6 ${theme.muted}`}>
-              I understand that restoring will permanently overwrite all current data and this action cannot be undone.
+              ខ្ញុំយល់ថាការស្ដារទិន្នន័យនឹងជំនួសទិន្នន័យបច្ចុប្បន្នទាំងអស់ជាអចិន្ត្រៃយ៍ ហើយសកម្មភាពនេះមិនអាចត្រឡប់វិញបានឡើយ។
             </span>
           </label>
         </div>
@@ -95,7 +108,7 @@ export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfir
             onClick={onClose}
             className={`h-11 rounded-xl border px-5 font-semibold transition hover:opacity-80 ${theme.softCard}`}
           >
-            Cancel
+            បោះបង់
           </button>
           <button
             type="button"
@@ -103,7 +116,7 @@ export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfir
             disabled={!canSubmit || isLoading}
             className="h-11 rounded-xl bg-red-600 px-5 font-bold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? "Restoring..." : "Restore Now"}
+            {isLoading ? "កំពុងស្ដារ..." : "ស្ដារឥឡូវ"}
           </button>
         </div>
       </div>

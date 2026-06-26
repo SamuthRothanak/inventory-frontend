@@ -1,4 +1,5 @@
 import { FiSearch, FiPlusCircle } from "react-icons/fi";
+import PermissionGate from "../../../../components/PermissionGate";
 
 export default function UserToolbar({
   search,
@@ -22,14 +23,16 @@ export default function UserToolbar({
         />
       </div>
 
-      <button
-        type="button"
-        onClick={openCreateModal}
-        className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-      >
-        <FiPlusCircle className="text-lg" />
-        បន្ថែមអ្នកប្រើប្រាស់
-      </button>
+      <PermissionGate permission="users.create">
+        <button
+          type="button"
+          onClick={openCreateModal}
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+        >
+          <FiPlusCircle className="text-lg" />
+          បន្ថែមអ្នកប្រើប្រាស់
+        </button>
+      </PermissionGate>
     </div>
   );
 }

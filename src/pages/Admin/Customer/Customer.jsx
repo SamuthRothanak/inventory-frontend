@@ -31,6 +31,7 @@ import {
   extractCustomers,
   toCustomerPayload,
 } from "./utils/customerUtils";
+import PermissionGate from "../../../components/PermissionGate";
 
 function useLockBodyScroll(isOpen) {
   useEffect(() => {
@@ -492,14 +493,16 @@ export default function Customer() {
           />
         </div>
 
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-        >
-          <FiPlusCircle className="text-lg" />
-          បន្ថែមអតិថិជន
-        </button>
+        <PermissionGate permission="customers.create">
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+          >
+            <FiPlusCircle className="text-lg" />
+            បន្ថែមអតិថិជន
+          </button>
+        </PermissionGate>
       </div>
 
       {customersQuery.isError && (

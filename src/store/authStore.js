@@ -40,6 +40,8 @@ export const useAuthStore = create(
         }),
 
       hasRole: (role) => get().roles.includes(role),
+      can:     (permission) => get().permissions.includes(permission),
+      canAny:  (perms) => perms.some((p) => get().permissions.includes(p)),
     }),
     {
       name: "inventory-auth",

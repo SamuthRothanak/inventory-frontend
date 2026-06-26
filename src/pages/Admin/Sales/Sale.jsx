@@ -29,6 +29,7 @@ import { ReturnSaleModal } from "./components/ReturnSaleModal";
 import { ViewSaleModal } from "./components/ViewSaleModal";
 import SalePrintModal from "./components/SalePrintModal";
 import TableLoading from "../../../components/TableLoading";
+import PermissionGate from "../../../components/PermissionGate";
 import { defaultReturnForm, validateSaleReturn } from "./schemas/saleReturnSchema";
 import { useLockBodyScroll } from "./utils/useLockBodyScroll";
 import { getSalesApi, recordSalePaymentApi } from "../../../services/sale.service";
@@ -863,7 +864,7 @@ export default function Sale() {
                           )}
 
                           <span className={`text-xs ${theme.muted}`}>
-                            {sale.displayDate} · {sale.cashierName}
+                            {sale.displayDate} · <span className="font-semibold text-blue-500">{sale.cashierName}</span>
                           </span>
                         </div>
                       </div>
@@ -953,34 +954,40 @@ export default function Sale() {
 
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-center gap-2">
-                      {(sale.paymentStatus === "unpaid" || sale.paymentStatus === "partial") && (
-                        <Tooltip label="កត់ត្រាការទូទាត់">
-                          <button type="button" onClick={() => openRecordPaymentModal(sale)}
-                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700">
-                            <FiCreditCard size={16} />
-                          </button>
-                        </Tooltip>
-                      )}
+                      <PermissionGate permission="sales.create">
+                        {(sale.paymentStatus === "unpaid" || sale.paymentStatus === "partial") && (
+                          <Tooltip label="កត់ត្រាការទូទាត់">
+                            <button type="button" onClick={() => openRecordPaymentModal(sale)}
+                              className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700">
+                              <FiCreditCard size={16} />
+                            </button>
+                          </Tooltip>
+                        )}
+                      </PermissionGate>
                       <Tooltip label="មើលវិក្កយបត្រ">
                         <button type="button" onClick={() => openViewModal(sale)}
                           className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600">
                           <FiEye size={16} />
                         </button>
                       </Tooltip>
-                      <Tooltip label="បោះពុម្ព">
-                        <button type="button" onClick={() => handlePrint(sale)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
-                          <FiPrinter size={16} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label="ត្រឡប់">
-                        <button type="button"
-                          disabled={sale.paymentStatus !== "paid" || sale.saleStatus === "cancelled" || sale.isFullyReturned}
-                          onClick={() => openReturnModal(sale)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50">
-                          <FiRotateCcw size={16} />
-                        </button>
-                      </Tooltip>
+                      <PermissionGate permission="sales.print_receipt">
+                        <Tooltip label="បោះពុម្ព">
+                          <button type="button" onClick={() => handlePrint(sale)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                            <FiPrinter size={16} />
+                          </button>
+                        </Tooltip>
+                      </PermissionGate>
+                      <PermissionGate permission="sales.refund">
+                        <Tooltip label="ត្រឡប់">
+                          <button type="button"
+                            disabled={sale.paymentStatus !== "paid" || sale.saleStatus === "cancelled" || sale.isFullyReturned}
+                            onClick={() => openReturnModal(sale)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50">
+                            <FiRotateCcw size={16} />
+                          </button>
+                        </Tooltip>
+                      </PermissionGate>
                     </div>
                   </td>
                 </tr>

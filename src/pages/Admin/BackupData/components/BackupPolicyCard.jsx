@@ -4,29 +4,29 @@ export default function BackupPolicyCard({ theme }) {
   const policies = [
     {
       icon: <FiClock />,
-      title: "Schedule",
-      value: "Daily at 10:00 PM",
-      text: "Auto backup can run after shop closing time.",
+      title: "កាលវិភាគ",
+      value: "តាមការចាំបាច់",
+      text: "ណែនាំបង្កើតទិន្នន័យបម្រុងទុករៀងរាល់ថ្ងៃ ឬនៅពេលមានការប្រែប្រួលទិន្នន័យធំ។",
     },
     {
       icon: <FiHardDrive />,
-      title: "Storage",
-      value: "Local + external copy",
-      text: "Keep one copy outside the server for safer recovery.",
+      title: "ទំហំផ្ទុក",
+      value: "ក្នុងម៉ាស៊ីន + ច្បាប់ចម្លងខាងក្រៅ",
+      text: "រក្សាទុកច្បាប់ចម្លងមួយនៅក្រៅ server ដើម្បីសុវត្ថិភាព។",
     },
     {
       icon: <FiShield />,
-      title: "Permission",
-      value: "Admin only",
-      text: "Restore and delete backup should be restricted.",
+      title: "សិទ្ធិប្រើប្រាស់",
+      value: "Admin តែប៉ុណ្ណោះ",
+      text: "ការស្ដារ និងលុបទិន្នន័យបម្រុងទុកគួរតែដាក់កម្រិតសម្រាប់ Admin។",
     },
   ];
 
   return (
     <div className={`rounded-2xl border p-6 shadow-sm ${theme.card}`}>
       <div className="mb-5">
-        <h2 className="text-xl font-extrabold">Recommended Backup Policy</h2>
-        <p className={`mt-1 text-sm ${theme.muted}`}>Simple standard for a real Mart/POS project.</p>
+        <h2 className="text-xl font-extrabold">គោលការណ៍បម្រុងទុកដែលណែនាំ</h2>
+        <p className={`mt-1 text-sm ${theme.muted}`}>ស្តង់ដារសាមញ្ញសម្រាប់គម្រោង Mart/POS ពិតប្រាកដ។</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

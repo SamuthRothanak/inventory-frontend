@@ -1,7 +1,7 @@
 export const backupChecklist = [
-  "Database tables: products, purchases, inventory, sales, payments, users",
-  "Uploaded files: category images, product images, variant images",
-  "System settings: shop profile, exchange rate, inventory rules",
-  "Backup file should be downloaded or stored outside the app server",
+  "តារាង Database: ផលិតផល ការទិញ ស្តុក ការលក់ ការទូទាត់ អតិថិជន អ្នកប្រើប្រាស់ តួនាទី & សិទ្ធិ",
+  "ឯកសាររូបភាព: រូបប្រភេទទំនិញ រូបផលិតផល រូបមុខទំនិញ",
+  "ការកំណត់ប្រព័ន្ធ: ព័ត៌មានហាង អត្រាប្ដូររូបិយប័ណ្ណ និងច្បាប់ស្តុក",
+  "ឯកសារទិន្នន័យបម្រុងទុកគួរទាញយក ឬរក្សាទុកនៅក្រៅម៉ាស៊ីន server",
 ];
 

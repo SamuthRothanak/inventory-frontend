@@ -49,6 +49,7 @@
   } from "../../../services/inventory.service";
   import { useNotification } from "../../../components/AppNotification";
   import TableLoading from "../../../components/TableLoading";
+  import PermissionGate from "../../../components/PermissionGate";
   import {
     extractApiData,
     extractApiObject,
@@ -1636,57 +1637,67 @@
               />
             </div>
 
-            <button
-              type="button"
-              onClick={openConfirmStockInModal}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-            >
-              <FiCheckCircle className="text-lg" />
-              បញ្ជាក់ស្តុកចូល
-            </button>
+            <PermissionGate permission="stock.receive">
+              <button
+                type="button"
+                onClick={openConfirmStockInModal}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+              >
+                <FiCheckCircle className="text-lg" />
+                បញ្ជាក់ស្តុកចូល
+              </button>
+            </PermissionGate>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <ActionCard
-            theme={theme}
-            icon={<FiTruck className="text-4xl text-emerald-500" />}
-            title="ស្តុកចូល"
-            subtitle="បញ្ជាក់ការទិញដែលទទួលបាន"
-            buttonText="បញ្ជាក់ស្តុកចូល"
-            buttonClass="bg-emerald-500 hover:bg-emerald-600"
-            onClick={openConfirmStockInModal}
-          />
+          <PermissionGate permission="stock.receive">
+            <ActionCard
+              theme={theme}
+              icon={<FiTruck className="text-4xl text-emerald-500" />}
+              title="ស្តុកចូល"
+              subtitle="បញ្ជាក់ការទិញដែលទទួលបាន"
+              buttonText="បញ្ជាក់ស្តុកចូល"
+              buttonClass="bg-emerald-500 hover:bg-emerald-600"
+              onClick={openConfirmStockInModal}
+            />
+          </PermissionGate>
 
-          <ActionCard
-            theme={theme}
-            icon={<FiEdit2 className="text-4xl text-blue-500" />}
-            title="ការកែតម្រូវស្តុក"
-            subtitle="សម្រាប់អ្នកគ្រប់គ្រងប៉ុណ្ណោះ"
-            buttonText="ការកែតម្រូវស្តុក"
-            buttonClass="bg-blue-600 hover:bg-blue-700"
-            onClick={() => openAdjustmentModal("adjustment_in")}
-          />
+          <PermissionGate permission="stock.adjust">
+            <ActionCard
+              theme={theme}
+              icon={<FiEdit2 className="text-4xl text-blue-500" />}
+              title="ការកែតម្រូវស្តុក"
+              subtitle="សម្រាប់អ្នកគ្រប់គ្រងប៉ុណ្ណោះ"
+              buttonText="ការកែតម្រូវស្តុក"
+              buttonClass="bg-blue-600 hover:bg-blue-700"
+              onClick={() => openAdjustmentModal("adjustment_in")}
+            />
+          </PermissionGate>
 
-          <ActionCard
-            theme={theme}
-            icon={<FiTrendingDown className="text-4xl text-red-500" />}
-            title="ស្តុកចេញ"
-            subtitle="ខូចខាត / ផុតកំណត់ / ដកប្រើប្រាស់"
-            buttonText="ស្តុកចេញ"
-            buttonClass="bg-red-500 hover:bg-red-600"
-            onClick={() => openAdjustmentModal("adjustment_out")}
-          />
+          <PermissionGate permission="stock.adjust">
+            <ActionCard
+              theme={theme}
+              icon={<FiTrendingDown className="text-4xl text-red-500" />}
+              title="ស្តុកចេញ"
+              subtitle="ខូចខាត / ផុតកំណត់ / ដកប្រើប្រាស់"
+              buttonText="ស្តុកចេញ"
+              buttonClass="bg-red-500 hover:bg-red-600"
+              onClick={() => openAdjustmentModal("adjustment_out")}
+            />
+          </PermissionGate>
 
-          <ActionCard
-            theme={theme}
-            icon={<FiLayers className="text-4xl text-amber-500" />}
-            title="ចលនាស្តុក"
-            subtitle="តាមដានស្តុកចូល/ចេញ"
-            buttonText="មើលចលនា"
-            buttonClass="bg-amber-500 hover:bg-amber-600"
-            onClick={() => setActiveTab("movements")}
-          />
+          <PermissionGate permission="stock.adjust">
+            <ActionCard
+              theme={theme}
+              icon={<FiLayers className="text-4xl text-amber-500" />}
+              title="ចលនាស្តុក"
+              subtitle="តាមដានស្តុកចូល/ចេញ"
+              buttonText="មើលចលនា"
+              buttonClass="bg-amber-500 hover:bg-amber-600"
+              onClick={() => setActiveTab("movements")}
+            />
+          </PermissionGate>
         </div>
 
         <div
@@ -1710,15 +1721,17 @@
             </div>
           </div>
 
-          <button
-            type="button"
-            disabled={pendingPurchases.length === 0}
-            onClick={openConfirmStockInModal}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <FiCheckCircle />
-            ពិនិត្យ & បញ្ជាក់
-          </button>
+          <PermissionGate permission="stock.receive">
+            <button
+              type="button"
+              disabled={pendingPurchases.length === 0}
+              onClick={openConfirmStockInModal}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FiCheckCircle />
+              ពិនិត្យ & បញ្ជាក់
+            </button>
+          </PermissionGate>
         </div>
 
         {lowStockList.length > 0 && (

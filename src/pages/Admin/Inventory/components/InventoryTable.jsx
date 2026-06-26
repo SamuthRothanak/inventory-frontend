@@ -9,6 +9,7 @@ import {
 } from "react-icons/fi";
 import TableLoading from "../../../../components/TableLoading";
 import { InventoryThumb, StockStatusBadge } from "./InventoryCommon";
+import PermissionGate from "../../../../components/PermissionGate";
 
 export default function InventoryTable({
     theme,
@@ -138,18 +139,20 @@ export default function InventoryTable({
                               <FiEye size={15} />
                             </button>
                           </Tooltip>
-                          <Tooltip label="ស្តុកចូល">
-                            <button type="button" onClick={() => openAdjustmentModal("adjustment_in", item)}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700">
-                              <FiTrendingUp size={15} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label="ស្តុកចេញ">
-                            <button type="button" onClick={() => openAdjustmentModal("adjustment_out", item)}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-600 text-white shadow-sm transition hover:bg-rose-700">
-                              <FiTrendingDown size={15} />
-                            </button>
-                          </Tooltip>
+                          <PermissionGate permission="stock.adjust">
+                            <Tooltip label="ស្តុកចូល">
+                              <button type="button" onClick={() => openAdjustmentModal("adjustment_in", item)}
+                                className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700">
+                                <FiTrendingUp size={15} />
+                              </button>
+                            </Tooltip>
+                            <Tooltip label="ស្តុកចេញ">
+                              <button type="button" onClick={() => openAdjustmentModal("adjustment_out", item)}
+                                className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-600 text-white shadow-sm transition hover:bg-rose-700">
+                                <FiTrendingDown size={15} />
+                              </button>
+                            </Tooltip>
+                          </PermissionGate>
                         </div>
                       </td>
                     </tr>

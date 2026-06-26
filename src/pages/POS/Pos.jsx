@@ -250,6 +250,7 @@ export default function Pos() {
   const [saleNote,       setSaleNote]       = useState("");
 
   const currentUser      = useAuthStore((s) => s.user);
+  const isAdmin          = useAuthStore((s) => s.can("dashboard.view"));
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null;
   const appliesTo = saleMode === "wholesale" && selectedCustomer ? "customer" : "public";
 
@@ -581,6 +582,14 @@ export default function Pos() {
             <span className="text-[11px] text-slate-500">1 USD =</span>
             <span className="text-xs font-extrabold text-slate-900">{exchangeRate.toLocaleString()} KHR</span>
           </div>
+
+          {/* Back to Admin — admin only */}
+          {isAdmin && (
+            <button type="button" onClick={() => navigate("/home")}
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-600 transition hover:bg-blue-100">
+              <LogOut className="h-3.5 w-3.5 rotate-180" /> ត្រឡប់ Admin
+            </button>
+          )}
 
           {/* Logout */}
           <button type="button" onClick={handleLogout}

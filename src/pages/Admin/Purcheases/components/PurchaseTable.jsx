@@ -13,6 +13,7 @@ import {
 import { STATUS } from "../utils/purchaseConstants";
 import { formatCurrencyPair, formatPaymentMode, getPurchaseItemSummary } from "../utils/purchaseUtils";
 import { EmptyState, StatusBadge, SummaryMiniBox } from "./PurchaseCommon";
+import PermissionGate from "../../../../components/PermissionGate";
 
 const getPurchaseLines = (purchase = {}) => {
   const items = Array.isArray(purchase.items) ? purchase.items : [];
@@ -399,11 +400,13 @@ export function ActionButtons({
       </Tooltip>
 
       {canEdit && (
-        <Tooltip label="កែការទិញ">
-          <button type="button" onClick={() => openEditModal(purchase)} className={`${iconButton} bg-blue-600 hover:bg-blue-700`}>
-            <FiEdit2 size={17} />
-          </button>
-        </Tooltip>
+        <PermissionGate permission="purchases.update">
+          <Tooltip label="កែការទិញ">
+            <button type="button" onClick={() => openEditModal(purchase)} className={`${iconButton} bg-blue-600 hover:bg-blue-700`}>
+              <FiEdit2 size={17} />
+            </button>
+          </Tooltip>
+        </PermissionGate>
       )}
 
       {!simplified && effectiveStatus === STATUS.PENDING_RECEIVE && (

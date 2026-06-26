@@ -47,6 +47,7 @@ import { getActiveExchangeRateApi } from "../../../services/exchangeRate.service
 import { getProductVariantUnitsApi } from "../../../services/productVariantUnit.service";
 import { useNotification } from "../../../components/AppNotification";
 import TableLoading from "../../../components/TableLoading";
+import PermissionGate from "../../../components/PermissionGate";
 
 import {
   EmptyState,
@@ -2357,10 +2358,12 @@ export default function Purchases() {
                 <FilterSelect value={perPage} setValue={(v) => setPerPage(Number(v))} theme={theme} icon={<FiHash />}
                   options={[10, 25, 50, 100].map((v) => ({ value: v, label: `${v} / ទំព័រ` }))} />
               </div>
-              <button type="button" onClick={openAddModal}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:shrink-0">
-                <FiPlusCircle className="text-lg" /> បន្ថែមការទិញ
-              </button>
+              <PermissionGate permission="purchases.create">
+                <button type="button" onClick={openAddModal}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:shrink-0">
+                  <FiPlusCircle className="text-lg" /> បន្ថែមការទិញ
+                </button>
+              </PermissionGate>
             </div>
 
             <div className="flex items-center justify-between px-5 py-3">

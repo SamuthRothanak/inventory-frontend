@@ -29,9 +29,9 @@ export default function BackupActionPanel({ theme, onCreateBackup, isCreating, o
               <FiArchive />
             </div>
             <div>
-              <h2 className="text-xl font-extrabold">Create Backup</h2>
+              <h2 className="text-xl font-extrabold">បង្កើតទិន្នន័យបម្រុងទុក</h2>
               <p className={`mt-1 max-w-2xl text-sm leading-6 ${theme.muted}`}>
-                Create a protected backup file for database records, uploaded images, and system settings.
+                បង្កើតឯកសារទិន្នន័យបម្រុងទុកដើម្បីការពារទិន្នន័យ database រូបភាព និងការកំណត់ប្រព័ន្ធ។
               </p>
             </div>
           </div>
@@ -45,12 +45,12 @@ export default function BackupActionPanel({ theme, onCreateBackup, isCreating, o
             {isCreating ? (
               <>
                 <FiLoader className="animate-spin" />
-                Creating...
+                កំពុងបង្កើត...
               </>
             ) : (
               <>
                 <FiDownload />
-                Backup Now
+                បង្កើតឥឡូវ
               </>
             )}
           </button>
@@ -72,9 +72,9 @@ export default function BackupActionPanel({ theme, onCreateBackup, isCreating, o
             <FiUploadCloud />
           </div>
           <div>
-            <h2 className="text-xl font-extrabold">Restore Backup</h2>
+            <h2 className="text-xl font-extrabold">ស្ដារទិន្នន័យ</h2>
             <p className={`mt-1 text-sm leading-6 ${theme.muted}`}>
-              Use only when data is lost or you need to move the system to another server.
+              ប្រើតែពេលទិន្នន័យបាត់ ឬចង់ផ្លាស់ប្ដូរ server ថ្មីប៉ុណ្ណោះ។
             </p>
           </div>
         </div>
@@ -83,14 +83,14 @@ export default function BackupActionPanel({ theme, onCreateBackup, isCreating, o
           className={`mt-6 cursor-pointer rounded-2xl border border-dashed p-5 transition hover:opacity-80 ${theme.softCard}`}
           onClick={() => fileRef.current?.click()}
         >
-          <p className="font-bold">Upload backup file</p>
-          <p className={`mt-2 text-sm ${theme.muted}`}>Supported: .zip backup from this system.</p>
+          <p className="font-bold">ជ្រើសរើសឯកសារបម្រុងទុក</p>
+          <p className={`mt-2 text-sm ${theme.muted}`}>គាំទ្រតែ .zip ពីប្រព័ន្ធនេះប៉ុណ្ណោះ។</p>
           <button
             type="button"
             className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-bold text-white shadow-sm transition hover:bg-blue-700"
           >
             <FiUploadCloud />
-            Choose File
+            ជ្រើសរើសឯកសារ
           </button>
           <input
             ref={fileRef}
@@ -104,7 +104,7 @@ export default function BackupActionPanel({ theme, onCreateBackup, isCreating, o
         <div className="mt-4 flex items-start gap-3 rounded-2xl bg-red-500/10 p-4 text-red-500">
           <FiAlertTriangle className="mt-0.5 shrink-0 text-xl" />
           <p className="text-sm leading-6">
-            Restore will overwrite all current data. A confirmation dialog will appear before running.
+            ការស្ដារទិន្នន័យនឹងជំនួសទិន្នន័យទាំងអស់បច្ចុប្បន្ន។ ប្រអប់បញ្ជាក់នឹងបង្ហាញមុននឹងដំណើរការ។
           </p>
         </div>
       </div>

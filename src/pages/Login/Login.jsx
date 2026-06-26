@@ -41,6 +41,7 @@ const Login = () => {
   const setAuth = useAuthStore((state) => state.setAuth);
   const token = useAuthStore((state) => state.token);
   const roles = useAuthStore((state) => state.roles);
+  const can   = useAuthStore((state) => state.can);
   const [showPassword, setShowPassword] = useState(false);
 
   const {
@@ -56,24 +57,14 @@ const Login = () => {
     },
   });
 
-  const redirectByRole = (roleList = []) => {
-    if (roleList.includes("admin")) {
-      navigate("/home", { replace: true });
-      return;
-    }
-
-    if (roleList.includes("cashier")) {
-      navigate("/pos", { replace: true });
-      return;
-    }
-
+  const redirectByPermission = () => {
+    if (can("dashboard.view")) { navigate("/home", { replace: true }); return; }
+    if (can("sales.create"))   { navigate("/pos",  { replace: true }); return; }
     navigate("/login", { replace: true });
   };
 
   useEffect(() => {
-    if (token) {
-      redirectByRole(roles);
-    }
+    if (token) redirectByPermission();
   }, [token, roles]);
 
   const mutation = useMutation({
@@ -94,8 +85,6 @@ const Login = () => {
         roles: userRoles,
         permissions: userPermissions,
       });
-
-      redirectByRole(userRoles);
     },
     onError: (error) => {
       const message =

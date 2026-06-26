@@ -198,7 +198,7 @@ export default function ProductManageModal({
 
           <div className="mt-4 space-y-3 text-sm">
             <InfoLine label="ប្រភេទ" value={product.categoryName} />
-            <InfoLine label="ស្ថានភាព" value={product.status} />
+            <InfoLine label="ស្ថានភាព" value={product.status === "active" ? "ដំណើរការ" : "មិនដំណើរការ"} />
             <InfoLine label="ការពិពណ៌នា" value={product.description || "-"} />
           </div>
         </div>

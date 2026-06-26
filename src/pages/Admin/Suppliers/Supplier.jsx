@@ -28,6 +28,7 @@ import SupplierDropdown from "./components/SupplierDropdown";
 import { useNotification } from "../../../components/AppNotification";
 
 import { extractSuppliers, toSupplierPayload } from "./utils/supplierUtils";
+import PermissionGate from "../../../components/PermissionGate";
 
 function useLockBodyScroll(isOpen) {
   useEffect(() => {
@@ -485,14 +486,16 @@ export default function Supplier() {
           />
         </div>
 
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="inline-flex h-12 items-center justify-center gap-4 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-        >
-          <FiPlusCircle className="text-lg" />
-          បន្ថែមអ្នកផ្គត់ផ្គង់
-        </button>
+        <PermissionGate permission="suppliers.create">
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="inline-flex h-12 items-center justify-center gap-4 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+          >
+            <FiPlusCircle className="text-lg" />
+            បន្ថែមអ្នកផ្គត់ផ្គង់
+          </button>
+        </PermissionGate>
       </div>
 
       {suppliersQuery.isError && (
