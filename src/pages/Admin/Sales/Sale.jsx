@@ -308,16 +308,21 @@ export default function Sale() {
   const [chartPeriod, setChartPeriod] = useState("សប្តាហ៍");
 
   const weeklyChartData = useMemo(() => {
-    const DAYS = ["អាទិត្យ", "ច័ន្ទ", "អង្គារ", "ពុធ", "ព្រ.ហ", "សុក្រ", "សៅរ៏"];
+    const DAYS = ["ច័ន្ទ", "អង្គារ", "ពុធ", "ព្រ.ហ", "សុក្រ", "សៅរ៏", "អាទិត្យ"];
     const totals = Object.fromEntries(DAYS.map((d) => [d, 0]));
     const now = new Date();
     const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay());
+    const currentDay = now.getDay();
+    weekStart.setDate(now.getDate() - (currentDay === 0 ? 6 : currentDay - 1));
     weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+
     for (const sale of sales) {
       const d = new Date(sale.saleDate);
-      if (d >= weekStart && sale.saleStatus === "completed" && sale.paymentStatus !== "refunded") {
-        totals[DAYS[d.getDay()]] += Number(sale.grandTotal || 0);
+      if (d >= weekStart && d < weekEnd && sale.saleStatus === "completed" && sale.paymentStatus !== "refunded") {
+        const mondayBasedDayIndex = (d.getDay() + 6) % 7;
+        totals[DAYS[mondayBasedDayIndex]] += Number(sale.grandTotal || 0);
       }
     }
     return DAYS.map((day) => ({ day, amount: totals[day] }));
@@ -958,7 +963,7 @@ export default function Sale() {
                         {(sale.paymentStatus === "unpaid" || sale.paymentStatus === "partial") && (
                           <Tooltip label="កត់ត្រាការទូទាត់">
                             <button type="button" onClick={() => openRecordPaymentModal(sale)}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700">
+                              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-blue-600 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0">
                               <FiCreditCard size={16} />
                             </button>
                           </Tooltip>
@@ -966,14 +971,14 @@ export default function Sale() {
                       </PermissionGate>
                       <Tooltip label="មើលវិក្កយបត្រ">
                         <button type="button" onClick={() => openViewModal(sale)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600">
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-amber-400 to-orange-500 text-white shadow-md shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-amber-500 hover:to-orange-600 hover:shadow-lg hover:shadow-orange-500/25 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0">
                           <FiEye size={16} />
                         </button>
                       </Tooltip>
                       <PermissionGate permission="sales.print_receipt">
                         <Tooltip label="បោះពុម្ព">
                           <button type="button" onClick={() => handlePrint(sale)}
-                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-emerald-400 to-emerald-600 text-white shadow-md shadow-emerald-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-emerald-500 hover:to-emerald-700 hover:shadow-lg hover:shadow-emerald-600/25 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 active:translate-y-0">
                             <FiPrinter size={16} />
                           </button>
                         </Tooltip>
@@ -983,7 +988,7 @@ export default function Sale() {
                           <button type="button"
                             disabled={sale.paymentStatus !== "paid" || sale.saleStatus === "cancelled" || sale.isFullyReturned}
                             onClick={() => openReturnModal(sale)}
-                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50">
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50">
                             <FiRotateCcw size={16} />
                           </button>
                         </Tooltip>

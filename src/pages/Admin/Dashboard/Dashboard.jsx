@@ -118,16 +118,44 @@ export default function Dashboard() {
     axisColor: isDark ? "#71717a"                                    : "#a1a1aa",
   };
 
-  const today = new Date().toLocaleDateString("en-US", {
+  const today = new Date().toLocaleDateString("km-KH", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
 
-  const { data: raw, isLoading } = useQuery({
+  const { data: raw, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn:  getDashboardSummaryApi,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
+
+  if (isError && !raw) {
+    const message = error?.response?.data?.message
+      || error?.message
+      || "មិនអាចទាញទិន្នន័យផ្ទាំងគ្រប់គ្រងបានទេ។";
+
+    return (
+      <div
+        className={"flex min-h-[420px] flex-col items-center justify-center rounded-2xl border p-6 text-center shadow-sm " + theme.card}
+        role="alert"
+      >
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-3xl text-red-500">
+          <FiAlertTriangle />
+        </div>
+        <h2 className={"mt-5 text-lg font-extrabold " + theme.pageTitle}>ទាញទិន្នន័យមិនបាន</h2>
+        <p className={"mt-2 max-w-md text-sm " + theme.muted}>{message}</p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <FiRefreshCw className={isFetching ? "animate-spin" : ""} />
+          សាកល្បងម្ដងទៀត
+        </button>
+      </div>
+    );
+  }
 
   const source = raw?.data ?? raw ?? {};
   const d = {
@@ -151,6 +179,7 @@ export default function Dashboard() {
     },
     inventory: {
       total_on_hand: 0,
+      stock_item_count: 0,
       low_stock_count: 0,
       out_of_stock_count: 0,
       expiring_soon_count: 0,
@@ -233,7 +262,7 @@ export default function Dashboard() {
       iconBg: "bg-cyan-500/10 text-cyan-500",
       accent: "border-l-cyan-500",
     },
-  ];
+  ].filter((card) => Number(card.raw ?? 0) > 0);
 
   // ── Alerts ───────────────────────────────────────────────────────
   const alerts = [
@@ -255,7 +284,12 @@ export default function Dashboard() {
     d.alerts.expiring_soon.length > 0 && {
       type: "expiring_soon", label: "ជិតផុតកំណត់",
       color: "text-orange-500", bg: "bg-orange-500/10", icon: FiClock,
-      items: d.alerts.expiring_soon,
+      items: d.alerts.expiring_soon.map((item) => ({
+        ...item,
+        detail: item.expired_date
+          ? item.expired_date + " · សល់ " + fmtInt(item.qty_remaining)
+          : item.detail,
+      })),
     },
   ].filter(Boolean);
 
@@ -270,10 +304,18 @@ export default function Dashboard() {
   ];
 
   // ── Inventory bars ────────────────────────────────────────────────
+  const stockItemCount = Number(d.inventory.stock_item_count ?? 0);
+  const lowStockItemCount = Number(d.inventory.low_stock_count ?? 0);
+  const outOfStockItemCount = Number(d.inventory.out_of_stock_count ?? 0);
+  const healthyStockItemCount = Math.max(stockItemCount - lowStockItemCount - outOfStockItemCount, 0);
+  const stockPercent = (count) => stockItemCount > 0
+    ? Math.min(100, Math.round((count / stockItemCount) * 100))
+    : 0;
+
   const inventoryStats = [
-    { label: "ស្តុកនៅក្នុងដៃ", value: `${fmtInt(d.inventory.total_on_hand)} ខ្នាតទំនិញ`,   pct: 100, color: "bg-emerald-500" },
-    { label: "ស្តុកស្ទើរអស់",   value: `${fmtInt(d.inventory.low_stock_count)} មុខ`,   pct: Math.min(d.inventory.low_stock_count * 10, 100),    color: "bg-amber-500"   },
-    { label: "អស់ស្តុក",        value: `${fmtInt(d.inventory.out_of_stock_count)} មុខ`, pct: Math.min(d.inventory.out_of_stock_count * 10, 100), color: "bg-red-500"     },
+    { label: "មានស្តុកធម្មតា", value: fmtInt(healthyStockItemCount) + " មុខ", pct: stockPercent(healthyStockItemCount), color: "bg-emerald-500" },
+    { label: "ស្តុកស្ទើរអស់", value: fmtInt(lowStockItemCount) + " មុខ", pct: stockPercent(lowStockItemCount), color: "bg-amber-500" },
+    { label: "អស់ស្តុក", value: fmtInt(outOfStockItemCount) + " មុខ", pct: stockPercent(outOfStockItemCount), color: "bg-red-500" },
   ];
 
   // ── Recent activities ─────────────────────────────────────────────
@@ -306,37 +348,6 @@ export default function Dashboard() {
           )}
         </div>
       </div>
-
-      {/* ── Alert Banner (urgent, above everything) ──────────────────── */}
-      {!isLoading && totalAlerts > 0 && (
-        <div className={`flex flex-wrap items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-500/20 dark:bg-red-500/5`}>
-          <span className="text-xs font-bold text-red-500 uppercase tracking-wide mr-1">ត្រូវការចាត់វិធានការ</span>
-          {d.alerts.low_stock.length > 0 && (
-            <span className="flex items-center gap-1.5 rounded-full bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-500">
-              <FiAlertTriangle className="shrink-0" />
-              {d.alerts.low_stock.length} ស្តុកស្ទើរអស់
-            </span>
-          )}
-          {d.alerts.pending_stock_in.length > 0 && (
-            <span className="flex items-center gap-1.5 rounded-full bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-600 dark:text-violet-400">
-              <FiPackage className="shrink-0" />
-              {d.alerts.pending_stock_in.length} រង់ចាំទទួលស្តុក
-            </span>
-          )}
-          {d.alerts.unpaid_sales.length > 0 && (
-            <span className="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
-              <FiCreditCard className="shrink-0" />
-              {d.alerts.unpaid_sales.length} លក់មិនទាន់បង់
-            </span>
-          )}
-          {d.alerts.expiring_soon.length > 0 && (
-            <span className="flex items-center gap-1.5 rounded-full bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-600 dark:text-orange-400">
-              <FiClock className="shrink-0" />
-              {d.alerts.expiring_soon.length} ជិតផុតកំណត់
-            </span>
-          )}
-        </div>
-      )}
 
       {/* ── Hero Cards (Sales + Purchases) ───────────────────────────── */}
       <div>

@@ -5,7 +5,10 @@ import { FiBell } from "react-icons/fi";
 
 import { getStockBalancesApi } from "../../../../services/inventory.service";
 import NotificationDropdown from "./NotificationDropdown";
-import { buildInventoryAlerts, extractApiData } from "../utils/notificationUtils";
+import {
+  buildInventoryAlerts,
+  extractApiData,
+} from "../utils/notificationUtils";
 
 export default function NotificationBell({ isDark }) {
   const navigate = useNavigate();
@@ -20,7 +23,7 @@ export default function NotificationBell({ isDark }) {
 
   const alerts = useMemo(
     () => buildInventoryAlerts(extractApiData(stockBalancesQuery.data)),
-    [stockBalancesQuery.data]
+    [stockBalancesQuery.data],
   );
 
   useEffect(() => {
@@ -50,7 +53,7 @@ export default function NotificationBell({ isDark }) {
         type="button"
         onClick={() => setOpen((value) => !value)}
         className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
-        title="ការជូនដំណឹង"
+        // title="ការជូនដំណឹង"
         aria-label="ការជូនដំណឹង"
       >
         <FiBell className="text-[18px]" />

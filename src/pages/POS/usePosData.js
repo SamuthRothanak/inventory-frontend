@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getActiveExchangeRateApi } from "../../services/exchangeRate.service";
 import { getCustomersApi } from "../../services/customer.service";
@@ -157,31 +158,40 @@ export function usePosData() {
   const exchangeRate = Number(rateInner?.usd_to_khr_rate || 4100);
   const khrRounding = rateInner?.khr_rounding || "ceil";
 
-  // Customers
-  const rawCustomers = extractArray(customersQuery.data);
-  const customers = rawCustomers.map((c) => ({
-    id: String(c.id),
-    code: c.code || `CUS-${String(c.id).padStart(3, "0")}`,
-    shopName: c.shop_name || c.shopName || "",
-    contactName: c.contact_name || c.contactName || "",
-    phone: c.phone || "",
-  }));
+  // Customers — memoized so the array reference stays stable between renders
+  const customers = useMemo(() => {
+    return extractArray(customersQuery.data).map((c) => ({
+      id: String(c.id),
+      code: c.code || `CUS-${String(c.id).padStart(3, "0")}`,
+      shopName: c.shop_name || c.shopName || "",
+      contactName: c.contact_name || c.contactName || "",
+      phone: c.phone || "",
+    }));
+  }, [customersQuery.data]);
 
-  // Assembled product cards
-  const rawProducts = extractArray(productsQuery.data);
-  const rawCategories = extractArray(categoriesQuery.data);
-  const rawVariants = extractArray(variantsQuery.data);
-  const rawPvus = extractArray(pvusQuery.data);
-  const rawPriceRules = extractArray(priceRulesQuery.data);
-  const rawStock = extractArray(stockQuery.data);
+  // Assembled product cards — memoized to prevent infinite loop in Pos.jsx useEffect
+  const posProducts = useMemo(() => {
+    const rawProducts   = extractArray(productsQuery.data);
+    const rawCategories = extractArray(categoriesQuery.data);
+    const rawVariants   = extractArray(variantsQuery.data);
+    const rawPvus       = extractArray(pvusQuery.data);
+    const rawPriceRules = extractArray(priceRulesQuery.data);
+    const rawStock      = extractArray(stockQuery.data);
+    if (rawVariants.length === 0 || rawPvus.length === 0) return [];
+    return assemblePosProducts(rawProducts, rawCategories, rawVariants, rawPvus, rawPriceRules, rawStock);
+  }, [
+    productsQuery.data,
+    categoriesQuery.data,
+    variantsQuery.data,
+    pvusQuery.data,
+    priceRulesQuery.data,
+    stockQuery.data,
+  ]);
 
-  const posProducts =
-    rawVariants.length > 0 && rawPvus.length > 0
-      ? assemblePosProducts(rawProducts, rawCategories, rawVariants, rawPvus, rawPriceRules, rawStock)
-      : [];
-
-  const uniqueCategories = [...new Set(posProducts.map((p) => p.category).filter(Boolean))];
-  const categories = ["All", ...uniqueCategories];
+  const categories = useMemo(
+    () => ["All", ...new Set(posProducts.map((p) => p.category).filter(Boolean))],
+    [posProducts]
+  );
 
   const isLoading = [
     exchangeRateQuery,

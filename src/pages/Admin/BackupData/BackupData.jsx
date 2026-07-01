@@ -200,6 +200,7 @@ export default function BackupData() {
           onConfirmFromId={(id) => restoreFromIdMutation.mutate(id)}
           isLoading={restoreMutation.isPending || restoreFromIdMutation.isPending}
           existingBackup={restoreTarget.existing ?? null}
+          preSelectedFile={restoreTarget.file ?? null}
         />
       )}
     </div>

@@ -21,9 +21,9 @@ export const auditLogActions = [
 ];
 
 export const pageSizeOptions = [
-  { label: "១០ / ទំព័រ", value: 10 },
-  { label: "២០ / ទំព័រ", value: 20 },
-  { label: "៥០ / ទំព័រ", value: 50 },
+  { label: "10 / ទំព័រ", value: 10 },
+  { label: "20 / ទំព័រ", value: 20 },
+  { label: "50 / ទំព័រ", value: 50 },
 ];
 
 export const auditLogRows = [

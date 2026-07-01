@@ -1,87 +1,109 @@
-import React, { useMemo, useState } from "react";
-import { useOutletContext } from "react-router-dom";
-import {
-  FiBox,
-  FiCheckCircle,
-  FiRefreshCcw,
-  FiSave,
-  FiShoppingCart,
-  FiTruck,
-  FiUser,
-} from "react-icons/fi";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FiCheckCircle, FiDatabase, FiDollarSign, FiSave, FiShield, FiUser } from "react-icons/fi";
 
 import SettingSummaryCard from "./components/SettingSummaryCard";
 import SettingsSidebar from "./components/SettingsSidebar";
 import {
-  InventorySettings,
-  PurchaseSettings,
-  SalesSettings,
-  ShopSettings,
+  ExchangeRateInfo,
+  InventoryRulesSettings,
+  PasswordSettings,
+  ProfileSettings,
+  PurchaseRulesSettings,
+  SalesRulesSettings,
+  ShopInfoSettings,
+  SystemToolsSettings,
 } from "./components/SettingFields";
-import { settingDefaults, settingSchema } from "./schemas/setting.schema";
+import { profileSchema } from "./schemas/setting.schema";
 import { settingSections } from "./utils/settingSections";
 import { getSettingTheme } from "./utils/settingTheme";
+import { useAuthStore } from "../../../store/authStore";
+import { meApi } from "../../../services/auth.service";
+import { resetUserPasswordApi, updateUserApi } from "../../../services/user.service";
+import { getActiveExchangeRateApi } from "../../../services/exchangeRate.service";
 
 export default function Setting() {
-  const outlet = useOutletContext();
-  const isDark = outlet?.isDark ?? false;
+  const outlet   = useOutletContext();
+  const isDark   = outlet?.isDark ?? false;
+  const navigate = useNavigate();
+  const qc       = useQueryClient();
 
-  const [activeSection, setActiveSection] = useState("shop");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [settings, setSettings] = useState(settingDefaults);
-  const [savedMessage, setSavedMessage] = useState("");
-
+  const { user: authUser } = useAuthStore();
   const theme = useMemo(() => getSettingTheme(isDark), [isDark]);
 
-  const filteredSections = useMemo(() => {
-    const keyword = searchTerm.toLowerCase().trim();
+  const [activeSection, setActiveSection] = useState("profile");
+  const [profile, setProfile]             = useState({ name: "", email: "", phone: "" });
+  const [savedMessage, setSavedMessage]   = useState("");
+  const [errorMessage, setErrorMessage]   = useState("");
 
-    if (!keyword) return settingSections;
+  const { data: meData } = useQuery({
+    queryKey: ["me"],
+    queryFn:  meApi,
+  });
+  const user = meData?.data ?? authUser;
 
-    return settingSections.filter(
-      (section) =>
-        section.title.toLowerCase().includes(keyword) ||
-        section.description.toLowerCase().includes(keyword)
-    );
-  }, [searchTerm]);
+  const { data: rateData } = useQuery({
+    queryKey: ["exchange-rate-active"],
+    queryFn:  getActiveExchangeRateApi,
+  });
+  const rate = rateData?.data ?? null;
 
-  const activeSectionInfo =
-    settingSections.find((section) => section.id === activeSection) ||
-    settingSections[0];
+  useEffect(() => {
+    if (user) {
+      setProfile({
+        name:  user.name  ?? "",
+        email: user.email ?? "",
+        phone: user.phone ?? "",
+      });
+    }
+  }, [user]);
 
-  const ActiveIcon = activeSectionInfo.icon;
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }) => updateUserApi({ id, payload }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["me"] });
+      setErrorMessage("");
+      setSavedMessage("ព័ត៌មានគណនីត្រូវបានរក្សាទុករួចរាល់។");
+      setTimeout(() => setSavedMessage(""), 2500);
+    },
+    onError: (err) => {
+      setErrorMessage(err?.response?.data?.message ?? "កំហុស! សូមព្យាយាមម្ដងទៀត។");
+    },
+  });
 
-  const updateSetting = (group, field, value) => {
-    setSettings((previous) => ({
-      ...previous,
-      [group]: {
-        ...previous[group],
-        [field]: value,
-      },
-    }));
+  const passwordMutation = useMutation({
+    mutationFn: (password) => resetUserPasswordApi({ id: user?.id, password }),
+    onSuccess: () => {
+      setErrorMessage("");
+      setSavedMessage("ពាក្យសម្ងាត់ត្រូវបានផ្លាស់ប្ដូររួចរាល់។");
+      setTimeout(() => setSavedMessage(""), 2500);
+    },
+    onError: (err) => {
+      setErrorMessage(err?.response?.data?.message ?? "កំហុស! សូមព្យាយាមម្ដងទៀត។");
+    },
+  });
 
-    setSavedMessage("");
-  };
-
-  const handleSave = () => {
-    const parsed = settingSchema.safeParse(settings);
-
-    if (!parsed.success) {
-      setSavedMessage(parsed.error.issues[0]?.message || "Invalid settings.");
+  const handleSaveProfile = () => {
+    const result = profileSchema.safeParse(profile);
+    if (!result.success) {
+      setErrorMessage(result.error.issues[0]?.message ?? "ទិន្នន័យមិនត្រឹមត្រូវ។");
       return;
     }
-
-    setSavedMessage("Settings saved successfully.");
-
-    setTimeout(() => {
-      setSavedMessage("");
-    }, 2500);
+    if (!user?.id) return;
+    setErrorMessage("");
+    updateMutation.mutate({ id: user.id, payload: result.data });
   };
 
-  const handleReset = () => {
-    setSettings(settingDefaults);
-    setSavedMessage("Settings reset to default.");
+  const handleSavePassword = (password, resetForm) => {
+    passwordMutation.mutate(password, { onSuccess: resetForm });
   };
+
+  const activeSectionInfo =
+    settingSections.find((s) => s.id === activeSection) ?? settingSections[0];
+  const ActiveIcon = activeSectionInfo.icon;
+
+  const userRole = (authUser?.roles ?? user?.roles ?? [])[0] ?? "—";
 
   return (
     <section className="space-y-5">
@@ -93,76 +115,65 @@ export default function Setting() {
           </span>
         )}
 
-        <button
-          type="button"
-          onClick={handleReset}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
-        >
-          <FiRefreshCcw />
-          Reset
-        </button>
+        {errorMessage && (
+          <span className="inline-flex h-11 items-center rounded-xl bg-red-500/10 px-4 text-sm font-semibold text-red-500">
+            {errorMessage}
+          </span>
+        )}
 
-        <button
-          type="button"
-          onClick={handleSave}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600"
-        >
-          <FiSave />
-          Save Settings
-        </button>
+        {activeSection === "profile" && (
+          <button
+            type="button"
+            onClick={handleSaveProfile}
+            disabled={updateMutation.isPending}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:opacity-60"
+          >
+            <FiSave />
+            {updateMutation.isPending ? "កំពុងរក្សាទុក..." : "រក្សាទុក"}
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SettingSummaryCard
           theme={theme}
-          title="Shop"
-          value={settings.shop.shopName}
-          subtitle={settings.shop.phone}
+          title="គណនី"
+          value={user?.name ?? "—"}
+          subtitle={user?.email ?? "—"}
           icon={<FiUser className="text-[32px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
-
         <SettingSummaryCard
           theme={theme}
-          title="Sales Return"
-          value={settings.sales.allowSalesReturn ? "Enabled" : "Disabled"}
-          subtitle="Refund / exchange flow"
-          icon={<FiShoppingCart className="text-[32px] text-emerald-500" />}
+          title="តួនាទី"
+          value={userRole}
+          subtitle="សិទ្ធិប្រើប្រាស់ប្រព័ន្ធ"
+          icon={<FiShield className="text-[32px] text-purple-500" />}
+          iconBg="bg-purple-500/10"
+        />
+        <SettingSummaryCard
+          theme={theme}
+          title="អត្រាប្ដូររូបិយប័ណ្ណ"
+          value={rate ? `1 USD = ${Number(rate.usd_to_khr_rate).toLocaleString()} ៛` : "—"}
+          subtitle={rate ? rate.rate_date : "មិនទាន់មានអត្រា"}
+          icon={<FiDollarSign className="text-[32px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
         />
-
         <SettingSummaryCard
           theme={theme}
-          title="Stock-In"
-          value={
-            settings.purchases.requireStockInConfirm ? "Confirm First" : "Auto"
-          }
-          subtitle="Purchase stock control"
-          icon={<FiTruck className="text-[32px] text-blue-500" />}
+          title="សុវត្ថិភាពទិន្នន័យ"
+          value="Backup / Audit"
+          subtitle="ប្រើ module ដែលមានស្រាប់"
+          icon={<FiDatabase className="text-[32px] text-blue-500" />}
           iconBg="bg-blue-500/10"
-        />
-
-        <SettingSummaryCard
-          theme={theme}
-          title="Inventory"
-          value={settings.inventory.allowNegativeStock ? "Flexible" : "Strict"}
-          subtitle={
-            settings.inventory.allowNegativeStock
-              ? "Negative stock allowed"
-              : "No negative stock"
-          }
-          icon={<FiBox className="text-[32px] text-purple-500" />}
-          iconBg="bg-purple-500/10"
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[300px_1fr]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[280px_1fr]">
         <SettingsSidebar
           theme={theme}
-          sections={filteredSections}
+          sections={settingSections}
           activeSection={activeSection}
-          searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
           onSectionChange={setActiveSection}
         />
 
@@ -172,12 +183,10 @@ export default function Setting() {
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
                 <ActiveIcon size={22} />
               </div>
-
               <div>
                 <h2 className={`text-lg font-bold ${theme.pageTitle}`}>
                   {activeSectionInfo.title}
                 </h2>
-
                 <p className={`mt-1 text-sm ${theme.muted}`}>
                   {activeSectionInfo.description}
                 </p>
@@ -186,39 +195,58 @@ export default function Setting() {
           </div>
 
           <div className="p-5">
-            {activeSection === "shop" && (
-              <ShopSettings
+            {activeSection === "profile" && (
+              <ProfileSettings
                 theme={theme}
-                settings={settings.shop}
-                onChange={(field, value) => updateSetting("shop", field, value)}
+                profile={profile}
+                onChange={(field, value) =>
+                  setProfile((prev) => ({ ...prev, [field]: value }))
+                }
+              />
+            )}
+
+            {activeSection === "shop" && (
+              <ShopInfoSettings
+                theme={theme}
+                user={user}
+                onManageExchange={() => navigate("/home/exchange-rate")}
+              />
+            )}
+
+            {activeSection === "password" && (
+              <PasswordSettings
+                theme={theme}
+                onSave={handleSavePassword}
+                isSaving={passwordMutation.isPending}
               />
             )}
 
             {activeSection === "sales" && (
-              <SalesSettings
-                theme={theme}
-                settings={settings.sales}
-                onChange={(field, value) => updateSetting("sales", field, value)}
-              />
-            )}
-
-            {activeSection === "purchases" && (
-              <PurchaseSettings
-                theme={theme}
-                settings={settings.purchases}
-                onChange={(field, value) =>
-                  updateSetting("purchases", field, value)
-                }
-              />
+              <SalesRulesSettings theme={theme} />
             )}
 
             {activeSection === "inventory" && (
-              <InventorySettings
+              <InventoryRulesSettings theme={theme} />
+            )}
+
+            {activeSection === "purchase" && (
+              <PurchaseRulesSettings theme={theme} />
+            )}
+
+            {activeSection === "system" && (
+              <SystemToolsSettings
                 theme={theme}
-                settings={settings.inventory}
-                onChange={(field, value) =>
-                  updateSetting("inventory", field, value)
-                }
+                onGoBackup={() => navigate("/home/backup-data")}
+                onGoAudit={() => navigate("/home/audit-log")}
+                onGoExchange={() => navigate("/home/exchange-rate")}
+              />
+            )}
+
+            {activeSection === "exchange" && (
+              <ExchangeRateInfo
+                theme={theme}
+                rate={rate}
+                onManage={() => navigate("/home/exchange-rate")}
               />
             )}
           </div>

@@ -348,9 +348,7 @@ export function ActionButtons({
   compact = false,
   simplified = false,
 }) {
-  const iconButton = compact
-    ? "inline-flex h-10 w-10 items-center justify-center rounded-xl text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40"
-    : "inline-flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40";
+  const iconButton = "inline-flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-md ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-4 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40";
   const canEdit = effectiveStatus !== STATUS.RECEIVED;
   const canCancel = effectiveStatus !== STATUS.RECEIVED && effectiveStatus !== STATUS.CANCELLED;
   const relatedReturns = [
@@ -394,7 +392,7 @@ export function ActionButtons({
   return (
     <div className={`flex flex-wrap items-center ${compact ? "justify-end gap-2" : "gap-2"}`}>
       <Tooltip label="មើលការទិញ">
-        <button type="button" onClick={() => openViewModal(purchase)} className={`${iconButton} bg-amber-500 hover:bg-amber-600`}>
+        <button type="button" onClick={() => openViewModal(purchase)} className={`${iconButton} bg-gradient-to-b from-amber-400 to-orange-500 shadow-orange-500/20 hover:from-amber-500 hover:to-orange-600 hover:shadow-orange-500/25 focus:ring-orange-500/20`}>
           <FiEye size={17} />
         </button>
       </Tooltip>
@@ -402,7 +400,7 @@ export function ActionButtons({
       {canEdit && (
         <PermissionGate permission="purchases.update">
           <Tooltip label="កែការទិញ">
-            <button type="button" onClick={() => openEditModal(purchase)} className={`${iconButton} bg-blue-600 hover:bg-blue-700`}>
+            <button type="button" onClick={() => openEditModal(purchase)} className={`${iconButton} bg-gradient-to-b from-blue-500 to-blue-700 shadow-blue-600/20 hover:from-blue-600 hover:to-blue-800 hover:shadow-blue-600/25 focus:ring-blue-500/20`}>
               <FiEdit2 size={17} />
             </button>
           </Tooltip>
@@ -411,7 +409,7 @@ export function ActionButtons({
 
       {!simplified && effectiveStatus === STATUS.PENDING_RECEIVE && (
         <Tooltip label="ទទួលទំនិញ">
-          <button type="button" onClick={() => openReceiveGoodsModal(purchase)} className={`${iconButton} bg-indigo-600 hover:bg-indigo-700`}>
+          <button type="button" onClick={() => openReceiveGoodsModal(purchase)} className={`${iconButton} bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-indigo-600/20 hover:from-indigo-600 hover:to-indigo-800 hover:shadow-indigo-600/25 focus:ring-indigo-500/20`}>
             <FiTruck size={17} />
           </button>
         </Tooltip>
@@ -419,7 +417,7 @@ export function ActionButtons({
 
       {!simplified && canOpenInventory && (
         <Tooltip label="បញ្ជាក់ស្តុកចូល">
-          <button type="button" onClick={() => handleConfirmStockIn(purchase)} className={`${iconButton} bg-emerald-500 hover:bg-emerald-600`}>
+          <button type="button" onClick={() => handleConfirmStockIn(purchase)} className={`${iconButton} bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-emerald-600/20 hover:from-emerald-500 hover:to-emerald-700 hover:shadow-emerald-600/25 focus:ring-emerald-500/20`}>
             <FiCheckCircle size={17} />
           </button>
         </Tooltip>
@@ -427,7 +425,7 @@ export function ActionButtons({
 
       {!simplified && replacementClaim && (
         <Tooltip label="ទទួលជំនួស អ្នកផ្គត់ផ្គង់">
-          <button type="button" onClick={() => handleReceiveReplacement?.(purchase, replacementClaim)} className={`${iconButton} bg-indigo-600 hover:bg-indigo-700`}>
+          <button type="button" onClick={() => handleReceiveReplacement?.(purchase, replacementClaim)} className={`${iconButton} bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-indigo-600/20 hover:from-indigo-600 hover:to-indigo-800 hover:shadow-indigo-600/25 focus:ring-indigo-500/20`}>
             <FiTruck size={17} />
           </button>
         </Tooltip>
@@ -435,7 +433,7 @@ export function ActionButtons({
 
       {!simplified && moneyClaim && (
         <Tooltip label={normalizeResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type) === "refund" ? "កត់ការសងបានទទួល" : "ដោះស្រាយ Credit Note"}>
-          <button type="button" onClick={() => handleResolveSupplierClaim?.(purchase, moneyClaim)} className={`${iconButton} bg-emerald-600 hover:bg-emerald-700`}>
+          <button type="button" onClick={() => handleResolveSupplierClaim?.(purchase, moneyClaim)} className={`${iconButton} bg-gradient-to-b from-emerald-500 to-emerald-700 shadow-emerald-600/20 hover:from-emerald-600 hover:to-emerald-800 hover:shadow-emerald-600/25 focus:ring-emerald-500/20`}>
             <FiDollarSign size={17} />
           </button>
         </Tooltip>
@@ -443,15 +441,15 @@ export function ActionButtons({
 
       {!simplified && canClaim && effectiveStatus !== STATUS.PENDING_STOCK_IN && (
         <Tooltip label="បង្កើតការទាមទារ អ្នកផ្គត់ផ្គង់">
-          <button type="button" onClick={() => openPurchaseReturnModal(purchase)} className={`${iconButton} bg-purple-600 hover:bg-purple-700`}>
+          <button type="button" onClick={() => openPurchaseReturnModal(purchase)} className={`${iconButton} bg-gradient-to-b from-purple-500 to-purple-700 shadow-purple-600/20 hover:from-purple-600 hover:to-purple-800 hover:shadow-purple-600/25 focus:ring-purple-500/20`}>
             <FiRotateCcw size={17} />
           </button>
         </Tooltip>
       )}
 
       {canCancel && (
-        <Tooltip label="លុបចោលការទិញ">
-          <button type="button" onClick={() => handleCancelPurchase(purchase)} className={`${iconButton} bg-rose-600 hover:bg-rose-700`}>
+        <Tooltip label="លុបការទិញ">
+          <button type="button" onClick={() => handleCancelPurchase(purchase)} className={`${iconButton} bg-gradient-to-b from-red-500 to-red-700 shadow-red-600/20 hover:from-red-600 hover:to-red-800 hover:shadow-red-600/25 focus:ring-red-500/20`}>
             <FiXCircle size={17} />
           </button>
         </Tooltip>

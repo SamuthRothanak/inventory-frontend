@@ -17,6 +17,7 @@ import UserStats from "./components/UserStats";
 import UserToolbar from "./components/UserToolbar";
 import UserTable from "./components/UserTable";
 import UserFormModal from "./components/UserFormModal";
+import UserViewModal from "./components/UserViewModal";
 
 import { userSchema, defaultValues } from "./schemas/userSchema";
 import { extractUsers, getRoleName, getStatusLabel } from "./utils/userUtils";
@@ -69,9 +70,10 @@ export default function Users() {
 
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [serverMessage, setServerMessage] = useState("");
 
-  useLockBodyScroll(showModal);
+  useLockBodyScroll(showModal || Boolean(selectedUser));
 
   const {
     register,
@@ -202,6 +204,10 @@ export default function Users() {
     setServerMessage("");
     reset(defaultValues);
     setShowModal(true);
+  };
+
+  const openViewModal = (user) => {
+    setSelectedUser(user);
   };
 
   const openEditModal = (user) => {
@@ -349,11 +355,20 @@ export default function Users() {
         isLoading={isLoading}
         isError={isError}
         error={error}
+        openViewModal={openViewModal}
         openEditModal={openEditModal}
         onDelete={handleDelete}
         isDeletingId={deleteMutation.isPending ? deleteMutation.variables : null}
         theme={theme}
       />
+
+      {selectedUser && (
+        <UserViewModal
+          user={selectedUser}
+          theme={theme}
+          onClose={() => setSelectedUser(null)}
+        />
+      )}
 
       {showModal && (
         <UserFormModal

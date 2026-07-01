@@ -160,7 +160,7 @@ export default function Roles() {
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
         >
           <FiPlusCircle />
-          បន្ថែម Role
+          បន្ថែមតួនាទី
         </button>
       </div>
 
@@ -190,7 +190,7 @@ export default function Roles() {
               ) : roles.length === 0 ? (
                 <tr className={`border-t ${theme.row}`}>
                   <td colSpan="4" className={`px-6 py-8 text-center text-sm ${theme.empty}`}>
-                    គ្មាន Role
+                    គ្មានតួនាទី
                   </td>
                 </tr>
               ) : roles.map((item) => (
@@ -209,24 +209,28 @@ export default function Roles() {
                   <td className="px-6 py-4 text-sm">{item.guard_name}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-2">
-                      <button
+                      <Tooltip label={"កែសិទ្ធិប្រើប្រាស់"}>
+                        <button
                         onClick={() => openPerms(item)}
-                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white transition hover:bg-blue-700"
+                        className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 text-[0] text-white shadow-md shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-blue-600 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0"
                       >
-                        <FiSettings size={13} />
-                        Permissions
+                        <FiSettings size={16} />
+                        {/* សិទ្ធិប្រើប្រាស់ */}
                       </button>
-                      <button
+                      </Tooltip>
+                      <Tooltip label={"លុបសិទ្ធិ"}>
+                        <button
                         onClick={() => {
                           if (!isProtected(item.name) && confirm(`លុប "${item.name}"?`))
                             deleteMutation.mutate(item.id);
                         }}
                         disabled={isProtected(item.name)}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-30"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-30"
                         title={isProtected(item.name) ? "Default role — cannot delete" : "Delete"}
                       >
                         <FiTrash2 size={14} />
                       </button>
+                      </Tooltip>
                     </div>
                   </td>
                 </tr>
@@ -401,5 +405,16 @@ export default function Roles() {
       )}
 
     </section>
+  );
+}
+function Tooltip({ label, children }) {
+  return (
+    <div className="relative inline-flex group">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-zinc-700">
+        {label}
+        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-zinc-800 dark:border-t-zinc-700" />
+      </span>
+    </div>
   );
 }

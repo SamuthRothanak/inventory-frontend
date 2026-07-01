@@ -694,14 +694,16 @@ function ExchangeRateTable({
                     <div className="flex justify-end gap-2">
                       <Tooltip label="កែប្រែ">
                         <button type="button" onClick={() => onEdit(rate)}
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700">
-                          <FiEdit2 />
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-blue-600 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0"
+                          >
+                          <FiEdit2 size={16}/>
                         </button>
                       </Tooltip>
                       <Tooltip label="លុប">
                         <button type="button" disabled={isDeleting} onClick={() => onDelete(rate)}
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60">
-                          <FiTrash2 />
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                          <FiTrash2 size={16}/>
                         </button>
                       </Tooltip>
                     </div>

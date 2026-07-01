@@ -100,6 +100,16 @@ import {
   useLockBodyScroll,
 } from "./utils/purchaseUtils";
 
+const PURCHASE_ACTION_ICON_CLASS =
+  "inline-flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-md ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-4 active:translate-y-0";
+
+const PURCHASE_ACTION_TONE = {
+  view: "bg-gradient-to-b from-amber-400 to-orange-500 shadow-orange-500/20 hover:from-amber-500 hover:to-orange-600 hover:shadow-orange-500/25 focus:ring-orange-500/20",
+  receive: "bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-indigo-600/20 hover:from-indigo-600 hover:to-indigo-800 hover:shadow-indigo-600/25 focus:ring-indigo-500/20",
+  confirm: "bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-emerald-600/20 hover:from-emerald-500 hover:to-emerald-700 hover:shadow-emerald-600/25 focus:ring-emerald-500/20",
+  claim: "bg-gradient-to-b from-red-500 to-red-700 shadow-red-600/20 hover:from-red-600 hover:to-red-800 hover:shadow-red-600/25 focus:ring-red-500/20",
+};
+
 export default function Purchases() {
   const navigate = useNavigate();
   const outlet = useOutletContext();
@@ -2536,7 +2546,7 @@ export default function Purchases() {
                                   {getEffectivePurchaseStatus(purchase) === STATUS.PENDING_RECEIVE && (
                                     <Tooltip label="ទទួលទំនិញ">
                                       <button type="button" onClick={() => openReceiveGoodsModal(purchase)}
-                                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700">
+                                        className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.receive}`}>
                                         <FiTruck size={17} />
                                       </button>
                                     </Tooltip>
@@ -2544,7 +2554,7 @@ export default function Purchases() {
                                   {getEffectivePurchaseStatus(purchase) === STATUS.PENDING_STOCK_IN && purchase.status !== STATUS.PENDING_CLAIM && (
                                     <Tooltip label="បញ្ជាក់ស្តុកចូល">
                                       <button type="button" onClick={() => handleConfirmStockIn(purchase)}
-                                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                                        className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm}`}>
                                         <FiCheckCircle size={17} />
                                       </button>
                                     </Tooltip>
@@ -2554,7 +2564,7 @@ export default function Purchases() {
                                       {((hasRemainingStockInQty(purchase) && !hasAnyStockedInQty(purchase)) || hasPendingReplacementStockIn(purchase)) && (
                                         <Tooltip label="បញ្ជាក់ស្តុកចូល">
                                           <button type="button" onClick={() => handleConfirmStockIn(purchase)}
-                                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                                            className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm}`}>
                                             <FiCheckCircle size={17} />
                                           </button>
                                         </Tooltip>
@@ -2562,7 +2572,7 @@ export default function Purchases() {
                                       {getClaimRequiredCount(purchase) > 0 && !getOpenSupplierClaim(purchase) && !hasResolvedSupplierClaim(purchase) && (
                                         <Tooltip label="បង្កើតការទាមទារ">
                                           <button type="button" onClick={() => openPurchaseReturnModal(purchase)}
-                                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600">
+                                            className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.claim}`}>
                                             <FiRotateCcw size={17} />
                                           </button>
                                         </Tooltip>
@@ -2571,7 +2581,7 @@ export default function Purchases() {
                                   )}
                                   <Tooltip label="មើលការទិញ">
                                     <button type="button" onClick={() => openViewModal(purchase)}
-                                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600">
+                                      className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.view}`}>
                                       <FiEye size={17} />
                                     </button>
                                   </Tooltip>
@@ -2752,7 +2762,7 @@ export default function Purchases() {
                                 {retIsOpen && retPurchase && isReplacement && (
                                   <Tooltip label="ទទួលជំនួស">
                                     <button type="button" onClick={() => handleReceiveReplacement(retPurchase, ret)}
-                                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700">
+                                      className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.receive}`}>
                                       <FiTruck size={17} />
                                     </button>
                                   </Tooltip>
@@ -2760,7 +2770,7 @@ export default function Purchases() {
                                 {retIsOpen && retPurchase && isMoneyClaim && (
                                   <Tooltip label={ret.resolutionType === "refund" ? "កត់ការសងបានទទួល" : "ដោះស្រាយ Credit Note"}>
                                     <button type="button" onClick={() => handleResolveSupplierClaim(retPurchase, ret)}
-                                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                                      className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm}`}>
                                       <FiCheckCircle size={17} />
                                     </button>
                                   </Tooltip>
@@ -2768,7 +2778,7 @@ export default function Purchases() {
                                 {retPurchase && (
                                   <Tooltip label="មើលការទិញ">
                                     <button type="button" onClick={() => openViewModal(retPurchase)}
-                                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600">
+                                      className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.view}`}>
                                       <FiEye size={17} />
                                     </button>
                                   </Tooltip>
@@ -2937,14 +2947,14 @@ export default function Purchases() {
                             {purchase.paymentStatus !== "paid" && Number(purchase.balanceAmountUsd || 0) > 0 && isPaymentReady(purchase) && (
                               <Tooltip label="កត់ការទូទាត់">
                                 <button type="button" onClick={() => setRecordPaymentPurchase(purchase)}
-                                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600">
+                                  className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm}`}>
                                   <FiCreditCard size={17} />
                                 </button>
                               </Tooltip>
                             )}
                             <Tooltip label="មើលការទិញ">
                               <button type="button" onClick={() => openViewModal(purchase)}
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm transition hover:bg-amber-600">
+                                className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.view}`}>
                                 <FiEye size={17} />
                               </button>
                             </Tooltip>

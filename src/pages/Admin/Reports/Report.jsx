@@ -33,10 +33,24 @@ import { getReportSummaryApi } from "../../../services/report.service";
 
 const METHOD_LABEL = { cash: "សាច់ប្រាក់", bank_transfer: "ផ្ទេរប្រាក់", qr: "QR Code", card: "កាត", other: "ផ្សេងទៀត" };
 
+const toLocalDateValue = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getMondayOfWeek = (date) => {
+  const monday = new Date(date);
+  const day = monday.getDay();
+  monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
+  return monday;
+};
+
 export default function Report() {
   const outlet    = useOutletContext();
   const isDark    = outlet?.isDark ?? false;
-  const today     = new Date().toISOString().slice(0, 10);
+  const today     = toLocalDateValue(new Date());
   const monthStart = today.slice(0, 8) + "01";
 
   const [dateFrom,    setDateFrom]    = useState(monthStart);
@@ -45,23 +59,33 @@ export default function Report() {
   const [search,      setSearch]      = useState("");
 
   const applyPeriod = (period) => {
-    const t = new Date().toISOString().slice(0, 10);
-    const y = new Date().getFullYear();
+    const now = new Date();
+    const t = toLocalDateValue(now);
+    const y = now.getFullYear();
     setChartPeriod(period);
     setDateTo(t);
     if (period === "ថ្ងៃនេះ")  setDateFrom(t);
-    if (period === "សប្ដាហ៍") setDateFrom(new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10));
+    if (period === "សប្ដាហ៍") setDateFrom(toLocalDateValue(getMondayOfWeek(now)));
     if (period === "ខែ")     setDateFrom(t.slice(0, 8) + "01");
     if (period === "ឆ្នាំ")   setDateFrom(`${y}-01-01`);
   };
 
   const PRESETS = ["ថ្ងៃនេះ", "សប្ដាហ៍", "ខែ", "ឆ្នាំ"];
 
-  const { data: raw, isLoading, isFetching } = useQuery({
+  const dateRangeError = !dateFrom || !dateTo
+    ? "សូមជ្រើសរើសថ្ងៃចាប់ផ្ដើម និងថ្ងៃបញ្ចប់។"
+    : dateFrom > dateTo
+      ? "ថ្ងៃចាប់ផ្ដើមមិនអាចនៅក្រោយថ្ងៃបញ្ចប់បានទេ។"
+      : dateFrom > today || dateTo > today
+        ? "មិនអាចជ្រើសរើសកាលបរិច្ឆេទនាពេលអនាគតបានទេ។"
+        : "";
+
+  const { data: raw, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["report-summary", dateFrom, dateTo],
     queryFn:  () => getReportSummaryApi({ date_from: dateFrom, date_to: dateTo }),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    enabled: !dateRangeError,
   });
 
   const d = raw?.data ?? null;
@@ -72,6 +96,10 @@ export default function Report() {
   const recentActs    = d?.recent_activities ?? [];
   const payBreakdown  = d?.payment_breakdown ?? [];
   const insights      = d?.insights       ?? {};
+  const queryErrorMessage = error?.response?.data?.message
+    || error?.message
+    || "មិនអាចទាញទិន្នន័យរបាយការណ៍បានទេ។";
+  const suppressReport = Boolean(dateRangeError) || (isError && !d) || isLoading;
 
   const theme = {
     pageTitle: isDark ? "text-white"                                         : "text-zinc-900",
@@ -169,30 +197,20 @@ export default function Report() {
     <section className="space-y-6">
 
       {/* â"€â"€ Filters + Actions â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
-      <div className={`rounded-2xl border p-4 shadow-sm ${theme.card}`}>
+      <div className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm ${theme.card}`}>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
 
           {/* Left: filters */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:items-center xl:gap-3">
-            {/* Search */}
-            <div className="relative xl:w-56">
-              <FiSearch className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-base ${theme.muted}`} />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="ស្វែងរកទំនិញ..."
-                className={`h-10 w-full rounded-xl border pl-10 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
-              />
-            </div>
-
             {/* Date From */}
             <div className="relative xl:w-44">
               <input
                 type="date"
                 value={dateFrom}
+                max={today}
                 onChange={(e) => { setDateFrom(e.target.value); setChartPeriod("ផ្ទាល់ខ្លួន"); }}
-                className={`h-10 w-full rounded-xl border px-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+                aria-invalid={Boolean(dateRangeError)}
+                className={`h-10 w-full rounded-xl border px-4 text-sm outline-none transition focus:ring-4 ${theme.input} ${dateRangeError ? "border-red-500 ring-2 ring-red-500/10" : ""}`}
               />
             </div>
 
@@ -201,8 +219,10 @@ export default function Report() {
               <input
                 type="date"
                 value={dateTo}
+                max={today}
                 onChange={(e) => { setDateTo(e.target.value); setChartPeriod("ផ្ទាល់ខ្លួន"); }}
-                className={`h-10 w-full rounded-xl border px-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+                aria-invalid={Boolean(dateRangeError)}
+                className={`h-10 w-full rounded-xl border px-4 text-sm outline-none transition focus:ring-4 ${theme.input} ${dateRangeError ? "border-red-500 ring-2 ring-red-500/10" : ""}`}
               />
             </div>
 
@@ -239,10 +259,54 @@ export default function Report() {
           </div>
 
         </div>
+        {isFetching && !isLoading && (
+          <div className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-red-500/10" aria-hidden="true">
+            <div className="h-full w-full animate-pulse bg-red-500" />
+          </div>
+        )}
       </div>
 
+      {dateRangeError && (
+        <div className={`flex items-start gap-3 rounded-2xl border p-4 ${isDark ? "border-red-500/30 bg-red-500/10" : "border-red-200 bg-red-50"}`} role="alert">
+          <FiAlertCircle className="mt-0.5 shrink-0 text-xl text-red-500" />
+          <div>
+            <p className={`text-sm font-bold ${theme.pageTitle}`}>កាលបរិច្ឆេទមិនត្រឹមត្រូវ</p>
+            <p className={`mt-1 text-xs ${theme.muted}`}>{dateRangeError}</p>
+          </div>
+        </div>
+      )}
+
+      {isError && (
+        <div className={`flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${isDark ? "border-red-500/30 bg-red-500/10" : "border-red-200 bg-red-50"}`} role="alert">
+          <div className="flex items-start gap-3">
+            <FiAlertTriangle className="mt-0.5 shrink-0 text-xl text-red-500" />
+            <div>
+              <p className={`text-sm font-bold ${theme.pageTitle}`}>ទាញទិន្នន័យមិនបាន</p>
+              <p className={`mt-1 text-xs ${theme.muted}`}>{queryErrorMessage}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <FiRotateCcw className={isFetching ? "animate-spin" : ""} />
+            សាកល្បងម្ដងទៀត
+          </button>
+        </div>
+      )}
+
+      {isLoading && (
+        <div className={`flex min-h-[240px] flex-col items-center justify-center rounded-2xl border shadow-sm ${theme.card}`} role="status">
+          <FiRotateCcw className="animate-spin text-4xl text-red-500" />
+          <p className={`mt-4 text-sm font-bold ${theme.pageTitle}`}>កំពុងរៀបចំរបាយការណ៍...</p>
+          <p className={`mt-1 text-xs ${theme.muted}`}>សូមរង់ចាំបន្តិច</p>
+        </div>
+      )}
+
       {/* â"€â"€ Summary Cards â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
-      <div>
+      <div className={suppressReport ? "hidden" : ""}>
         <p className={`mb-3 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>សង្ខេបរយៈពេល</p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {SUMMARY_CARDS.map((card) => (
@@ -252,7 +316,7 @@ export default function Report() {
       </div>
 
       {/* ── Chart (full width) ── */}
-      <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+      <div className={`${suppressReport ? "hidden" : ""} rounded-2xl border p-5 shadow-sm ${theme.card}`}>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className={`text-base font-bold ${theme.pageTitle}`}>សមត្ថភាពអាជីវកម្ម</h2>
@@ -305,16 +369,25 @@ export default function Report() {
         </div>
 
       {/* ── Products table (full width) ── */}
-      <div className={`overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}>
-        <div className={`flex items-center justify-between border-b px-5 py-4 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+      <div className={`${suppressReport ? "hidden" : ""} overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}>
+        <div className={`flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${isDark ? "border-white/10" : "border-zinc-200"}`}>
           <div>
             <h2 className={`text-base font-bold ${theme.pageTitle}`}>ទំនិញលក់ដាច់</h2>
             <p className={`mt-0.5 text-xs ${theme.muted}`}>{filteredProducts.length} មុខ · រយៈពេលនេះ</p>
           </div>
-          <FiPackage className="text-xl text-red-500" />
+          <div className="relative w-full sm:w-72">
+            <FiSearch className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-base ${theme.muted}`} />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="ស្វែងរកទំនិញក្នុងបញ្ជី..."
+              className={`h-10 w-full rounded-xl border pl-10 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+            />
+          </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[850px]">
             <thead className="bg-red-600 text-white">
               <tr>
                 <th className="px-5 py-3 text-left text-sm font-semibold">ទំនិញ</th>
@@ -369,7 +442,7 @@ export default function Report() {
       </div>
 
       {/* ── Insights + Activities (two columns) ── */}
-      <div className="flex flex-col gap-6 xl:flex-row xl:items-stretch">
+      <div className={`${suppressReport ? "hidden" : ""} flex flex-col gap-6 xl:flex-row xl:items-stretch`}>
 
         {/* Insights */}
         <div className={`flex w-full shrink-0 flex-col rounded-2xl border p-5 shadow-sm xl:w-90 ${theme.card}`}>
@@ -432,10 +505,7 @@ export default function Report() {
               <h2 className={`text-base font-bold ${theme.pageTitle}`}>សកម្មភាពថ្មីៗ</h2>
               <p className={`mt-0.5 text-xs ${theme.muted}`}>សកម្មភាពសំខាន់ៗចុងក្រោយ</p>
             </div>
-            <div className={`flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
-              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-              បន្តផ្ទាល់
-            </div>
+            <span className={`text-xs font-semibold ${theme.muted}`}>ទិន្នន័យថ្មីៗ</span>
           </div>
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {isLoading && (
@@ -492,7 +562,7 @@ export default function Report() {
       </div>{/* end insights + activities */}
 
       {/* ── Low Stock (full-width, hidden when empty) ── */}
-      {lowStock.length > 0 && (
+      {!suppressReport && lowStock.length > 0 && (
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
           <div className="mb-4 flex items-center justify-between">
             <div>

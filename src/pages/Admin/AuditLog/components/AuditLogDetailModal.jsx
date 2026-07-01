@@ -41,7 +41,6 @@ export default function AuditLogDetailModal({ log, isDark = false, onClose }) {
             <FiX />
           </button>
         </div>
-
         <div className="overflow-y-auto p-6">
           <div className="grid gap-4 md:grid-cols-4">
             <div className={`rounded-2xl border p-4 ${isDark ? "border-white/10 bg-[#202023]" : "border-zinc-200 bg-white"}`}>
@@ -66,18 +65,15 @@ export default function AuditLogDetailModal({ log, isDark = false, onClose }) {
               <p className={`mt-1 text-sm ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>{formatDateTime(log.created_at)}</p>
             </div>
           </div>
-
           <div className={`mt-5 rounded-2xl border p-5 ${isDark ? "border-white/10 bg-[#202023]" : "border-zinc-200 bg-white"}`}>
             <p className={`text-sm font-bold ${isDark ? "text-zinc-300" : "text-zinc-600"}`}>ការពិពណ៌នា</p>
             <p className="mt-2 leading-7">{translateDescription(log.description)}</p>
           </div>
-
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <JsonPanel title="តម្លៃមុន" value={log.old_values} isDark={isDark} />
             <JsonPanel title="តម្លៃក្រោយ" value={log.new_values} isDark={isDark} />
           </div>
         </div>
-
         <div className={`flex justify-end border-t p-5 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
           <button
             type="button"

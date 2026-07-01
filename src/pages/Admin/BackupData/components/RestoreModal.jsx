@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
 import { FiAlertTriangle, FiUploadCloud, FiX } from "react-icons/fi";
 
-export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfirmFromId, isLoading, existingBackup }) {
+export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfirmFromId, isLoading, existingBackup, preSelectedFile }) {
   const fileRef = useRef(null);
-  const [file, setFile]           = useState(null);
+  const [file, setFile]           = useState(preSelectedFile ?? null);
   const [confirmed, setConfirmed] = useState(false);
 
   const isFromExisting = Boolean(existingBackup);
