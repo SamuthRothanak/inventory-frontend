@@ -1,13 +1,77 @@
 import React, { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FiPlusCircle, FiSettings, FiTrash2, FiX, FiSave, FiShield, FiRefreshCw } from "react-icons/fi";
+import { FiCheck, FiPlusCircle, FiSettings, FiTrash2, FiX, FiSave, FiShield, FiRefreshCw } from "react-icons/fi";
 import {
   getRolesApi, createRoleApi, deleteRoleApi,
   getPermissionsApi, syncRolePermissionsApi,
 } from "../../../services/role.service";
 
 const PROTECTED_ROLES = ["admin", "staff", "cashier"];
+
+const ROLE_LABELS = {
+  admin: "អ្នកគ្រប់គ្រង",
+  staff: "បុគ្គលិក",
+  cashier: "អ្នកគិតលុយ",
+};
+
+const PERMISSION_MODULE_LABELS = {
+  dashboard: "ផ្ទាំងគ្រប់គ្រង",
+  sales: "ការលក់",
+  purchases: "ការទិញ",
+  "purchase-items": "មុខទំនិញក្នុងការទិញ",
+  purchase_returns: "ការត្រឡប់ការទិញ",
+  purchase_return_items: "មុខទំនិញត្រឡប់ការទិញ",
+  products: "ផលិតផល",
+  "product-variants": "មុខទំនិញ",
+  categories: "ប្រភេទទំនិញ",
+  units: "ខ្នាតទំនិញ",
+  stock: "ស្តុក",
+  "stock-balances": "ស្តុកនៅសល់",
+  "stock-movements": "ចលនាស្តុក",
+  "inventory-batches": "បាច់ស្តុក",
+  customers: "អតិថិជន",
+  suppliers: "អ្នកផ្គត់ផ្គង់",
+  reports: "របាយការណ៍",
+  users: "អ្នកប្រើប្រាស់",
+  roles: "តួនាទី",
+  permissions: "សិទ្ធិប្រើប្រាស់",
+  "exchange-rate": "អត្រាប្តូរប្រាក់",
+  "audit-log": "កំណត់ហេតុ",
+  settings: "ការកំណត់",
+  backups: "ទិន្នន័យបម្រុងទុក",
+};
+
+const PERMISSION_ACTION_LABELS = {
+  view: "មើល",
+  create: "បង្កើត",
+  update: "កែប្រែ",
+  delete: "លុប",
+  adjust: "កែសម្រួល",
+  receive: "ទទួលចូល",
+  "stock-in": "បញ្ចូលស្តុក",
+  void: "បោះបង់",
+  refund: "សងប្រាក់",
+  print_receipt: "បោះពុម្ពបង្កាន់ដៃ",
+  assign: "កំណត់",
+  restore: "ស្ដារឡើងវិញ",
+  sales: "ការលក់",
+  inventory: "ស្តុក",
+  profit: "ប្រាក់ចំណេញ",
+  expenses: "ចំណាយ",
+};
+
+const getRoleLabel = (name) => ROLE_LABELS[String(name ?? "").toLowerCase()] ?? name;
+
+const getPermissionLabel = (name) => {
+  const [module, ...actionParts] = String(name ?? "").split(".");
+  const action = actionParts.join(".");
+  const moduleLabel = PERMISSION_MODULE_LABELS[module] ?? module;
+  const actionLabel = PERMISSION_ACTION_LABELS[action] ?? action.replaceAll("_", " ");
+
+  if (module === "reports") return `មើលរបាយការណ៍${actionLabel}`;
+  return `${actionLabel}${moduleLabel}`;
+};
 
 const PERMISSION_GROUPS = [
   { label: "ផ្ទាំងគ្រប់គ្រង",  prefixes: ["dashboard"] },
@@ -18,7 +82,7 @@ const PERMISSION_GROUPS = [
   { label: "អតិថិជន",          prefixes: ["customers"] },
   { label: "អ្នកផ្គត់ផ្គង់",   prefixes: ["suppliers"] },
   { label: "របាយការណ៍",        prefixes: ["reports"] },
-  { label: "អ្នកប្រើ & Role",  prefixes: ["users", "roles", "permissions"] },
+  { label: "អ្នកប្រើប្រាស់ និងតួនាទី", prefixes: ["users", "roles", "permissions"] },
   { label: "អត្រាប្តូរប្រាក់", prefixes: ["exchange-rate"] },
   { label: "កំណត់ហេតុ",        prefixes: ["audit-log"] },
   { label: "ការកំណត់",         prefixes: ["settings", "backups"] },
@@ -65,7 +129,9 @@ export default function Roles() {
     muted:    isDark ? "text-zinc-400"                     : "text-zinc-500",
     pageTitle:isDark ? "text-white"                        : "text-zinc-900",
     badge:    isDark ? "border-white/10 bg-white/5 text-zinc-300" : "border-zinc-200 bg-zinc-100 text-zinc-600",
-    perm:     isDark ? "border-white/10 bg-white/[0.04] hover:bg-white/10" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100",
+    perm:     isDark
+      ? "border-white/10 bg-white/[0.04] text-zinc-200 hover:border-white/20 hover:bg-white/10 focus:ring-white/15"
+      : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-zinc-300 hover:bg-zinc-100 focus:ring-zinc-300/40",
     permOn:   isDark ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-red-300 bg-red-50 text-red-600",
     overlay:  isDark ? "bg-black/70" : "bg-black/40",
   };
@@ -171,9 +237,9 @@ export default function Roles() {
             <thead className={theme.head}>
               <tr>
                 <th className="w-20 px-6 py-4 text-left text-sm font-semibold">ID</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Role</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Guard</th>
-                <th className="w-52 px-6 py-4 text-center text-sm font-semibold">Actions</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">តួនាទី</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold">ប្រភេទការពារ</th>
+                <th className="w-52 px-6 py-4 text-center text-sm font-semibold">សកម្មភាព</th>
               </tr>
             </thead>
             <tbody>
@@ -198,10 +264,10 @@ export default function Roles() {
                   <td className="px-6 py-4 text-sm">{item.id}</td>
                   <td className="px-6 py-4 text-sm font-semibold">
                     <div className="flex items-center gap-2">
-                      {item.name}
+                      {getRoleLabel(item.name)}
                       {isProtected(item.name) && (
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${theme.badge}`}>
-                          Default
+                          លំនាំដើម
                         </span>
                       )}
                     </div>
@@ -226,7 +292,7 @@ export default function Roles() {
                         }}
                         disabled={isProtected(item.name)}
                         className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-30"
-                        title={isProtected(item.name) ? "Default role — cannot delete" : "Delete"}
+                        title={isProtected(item.name) ? "មិនអាចលុបតួនាទីលំនាំដើមបានទេ" : "លុប"}
                       >
                         <FiTrash2 size={14} />
                       </button>
@@ -248,7 +314,7 @@ export default function Roles() {
             <div className="flex shrink-0 items-center justify-between border-b px-6 py-4" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
               <div className="flex items-center gap-2">
                 <FiShield className="text-emerald-500" />
-                <h2 className={`text-base font-bold ${theme.pageTitle}`}>បន្ថែម Role ថ្មី</h2>
+                 <h2 className={`text-base font-bold ${theme.pageTitle}`}>បន្ថែមតួនាទីថ្មី</h2>
               </div>
               <button onClick={() => { setAddOpen(false); setAddSelected([]); }} className={`rounded-lg p-1.5 ${theme.badge}`}><FiX /></button>
             </div>
@@ -259,13 +325,13 @@ export default function Roles() {
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="ឈ្មោះ Role..."
+                 placeholder="ឈ្មោះតួនាទី..."
                 className={`h-10 w-full rounded-xl border px-4 text-sm outline-none transition focus:ring-2 focus:ring-red-400/30 ${theme.input}`}
               />
 
               {/* Permissions */}
               <div>
-                <p className={`mb-3 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>ជ្រើសរើស Permissions</p>
+                <p className={`mb-3 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>ជ្រើសរើសសិទ្ធិប្រើប្រាស់</p>
                 {groupedPerms.length === 0 ? (
                   <div className={`py-6 text-center text-sm ${theme.muted}`}>កំពុងផ្ទុក...</div>
                 ) : (
@@ -275,21 +341,16 @@ export default function Roles() {
                         <p className={`mb-2 text-[11px] font-bold tracking-wider ${theme.muted}`}>{group.label}</p>
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                           {sortPerms(group.perms).map((p) => {
-                            const on      = addSelected.includes(p.name);
-                            const isView  = p.name.endsWith(".view");
+                            const on = addSelected.includes(p.name);
                             return (
                               <button
                                 key={p.name}
                                 type="button"
                                 onClick={() => setAddSelected((prev) => withAutoView(prev, p.name, allPerms))}
-                                className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
-                                  on
-                                    ? isView ? "border-amber-400 bg-amber-500/20 text-amber-600 dark:text-amber-400" : theme.permOn
-                                    : theme.perm
-                                }`}
+                                className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition focus:outline-none focus:ring-2 ${on ? theme.permOn : theme.perm}`}
                               >
-                                {isView && <span className="mr-1 text-amber-500">🔑</span>}
-                                {p.name}
+                                <span>{getPermissionLabel(p.name)}</span>
+                                {on && <FiCheck className="shrink-0" size={14} aria-hidden="true" />}
                               </button>
                             );
                           })}
@@ -303,7 +364,7 @@ export default function Roles() {
 
             {/* Footer */}
             <div className="flex shrink-0 items-center justify-between border-t px-6 py-4" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
-              <span className={`text-xs ${theme.muted}`}>{addSelected.length} permissions បានជ្រើស</span>
+              <span className={`text-xs ${theme.muted}`}>បានជ្រើស {addSelected.length} សិទ្ធិ</span>
               <div className="flex gap-2">
                 <button onClick={() => { setAddOpen(false); setAddSelected([]); }} className={`h-9 rounded-xl border px-4 text-sm font-semibold ${theme.badge}`}>
                   បោះបង់
@@ -331,7 +392,7 @@ export default function Roles() {
               <div className="flex items-center gap-2">
                 <FiShield className="text-red-500" />
                 <h2 className={`text-base font-bold ${theme.pageTitle}`}>
-                  Permissions — <span className="text-red-500">{permRole.name}</span>
+                   សិទ្ធិប្រើប្រាស់៖ <span className="text-red-500">{getRoleLabel(permRole.name)}</span>
                 </h2>
               </div>
               <button onClick={() => setPermRole(null)} className={`rounded-lg p-1.5 ${theme.badge}`}><FiX /></button>
@@ -348,19 +409,15 @@ export default function Roles() {
                       <p className={`mb-2 text-[11px] font-bold tracking-wider ${theme.muted}`}>{group.label}</p>
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {sortPerms(group.perms).map((p) => {
-                          const on     = selected.includes(p.name);
-                          const isView = p.name.endsWith(".view");
+                          const on = selected.includes(p.name);
                           return (
                             <button
                               key={p.name}
                               onClick={() => togglePerm(p.name)}
-                              className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
-                                on
-                                  ? isView ? "border-amber-400 bg-amber-500/20 text-amber-600 dark:text-amber-400" : theme.permOn
-                                  : isView ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400" : theme.perm
-                              }`}
+                              className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition focus:outline-none focus:ring-2 ${on ? theme.permOn : theme.perm}`}
                             >
-                              {p.name}
+                              <span title={p.name}>{getPermissionLabel(p.name)}</span>
+                              {on && <FiCheck className="shrink-0" size={14} aria-hidden="true" />}
                             </button>
                           );
                         })}
@@ -373,7 +430,7 @@ export default function Roles() {
 
             {/* Footer */}
             <div className="flex shrink-0 items-center justify-between gap-2 border-t px-6 py-4" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
-              <span className={`text-xs ${theme.muted}`}>{selected.length} permissions បានជ្រើស</span>
+              <span className={`text-xs ${theme.muted}`}>បានជ្រើស {selected.length} សិទ្ធិ</span>
               <div className="flex gap-2">
                 {DEFAULT_ROLE_PERMISSIONS[permRole?.name] !== undefined && (
                   <button
@@ -384,7 +441,7 @@ export default function Roles() {
                     className={`inline-flex h-9 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition ${isDark ? "border-white/10 text-zinc-300 hover:bg-white/10" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
                   >
                     <FiRefreshCw size={13} />
-                    Reset Default
+                    កំណត់តាមលំនាំដើមវិញ
                   </button>
                 )}
                 <button onClick={() => setPermRole(null)} className={`h-9 rounded-xl border px-4 text-sm font-semibold ${theme.badge}`}>

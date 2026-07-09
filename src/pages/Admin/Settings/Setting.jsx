@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FiCheckCircle, FiDatabase, FiDollarSign, FiSave, FiShield, FiUser } from "react-icons/fi";
+import { FiCheckCircle } from "react-icons/fi";
 
-import SettingSummaryCard from "./components/SettingSummaryCard";
 import SettingsSidebar from "./components/SettingsSidebar";
 import {
   ExchangeRateInfo,
@@ -22,6 +21,11 @@ import { useAuthStore } from "../../../store/authStore";
 import { meApi } from "../../../services/auth.service";
 import { resetUserPasswordApi, updateUserApi } from "../../../services/user.service";
 import { getActiveExchangeRateApi } from "../../../services/exchangeRate.service";
+import {
+  DEFAULT_SHOP_INFO,
+  getStoredShopInfo,
+  saveStoredShopInfo,
+} from "../../../utils/shopInfo";
 
 export default function Setting() {
   const outlet   = useOutletContext();
@@ -34,6 +38,7 @@ export default function Setting() {
 
   const [activeSection, setActiveSection] = useState("profile");
   const [profile, setProfile]             = useState({ name: "", email: "", phone: "" });
+  const [shopInfo, setShopInfo]           = useState(DEFAULT_SHOP_INFO);
   const [savedMessage, setSavedMessage]   = useState("");
   const [errorMessage, setErrorMessage]   = useState("");
 
@@ -58,6 +63,10 @@ export default function Setting() {
       });
     }
   }, [user]);
+
+  useEffect(() => {
+    setShopInfo(getStoredShopInfo());
+  }, []);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }) => updateUserApi({ id, payload }),
@@ -99,77 +108,17 @@ export default function Setting() {
     passwordMutation.mutate(password, { onSuccess: resetForm });
   };
 
-  const activeSectionInfo =
-    settingSections.find((s) => s.id === activeSection) ?? settingSections[0];
-  const ActiveIcon = activeSectionInfo.icon;
-
-  const userRole = (authUser?.roles ?? user?.roles ?? [])[0] ?? "—";
+  const handleSaveShopInfo = () => {
+    const savedShopInfo = saveStoredShopInfo(shopInfo);
+    setShopInfo(savedShopInfo);
+    setErrorMessage("");
+    setSavedMessage("ព័ត៌មានហាងត្រូវបានរក្សាទុករួចរាល់។");
+    setTimeout(() => setSavedMessage(""), 2500);
+  };
 
   return (
-    <section className="space-y-5">
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        {savedMessage && (
-          <span className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-            <FiCheckCircle />
-            {savedMessage}
-          </span>
-        )}
-
-        {errorMessage && (
-          <span className="inline-flex h-11 items-center rounded-xl bg-red-500/10 px-4 text-sm font-semibold text-red-500">
-            {errorMessage}
-          </span>
-        )}
-
-        {activeSection === "profile" && (
-          <button
-            type="button"
-            onClick={handleSaveProfile}
-            disabled={updateMutation.isPending}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:opacity-60"
-          >
-            <FiSave />
-            {updateMutation.isPending ? "កំពុងរក្សាទុក..." : "រក្សាទុក"}
-          </button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SettingSummaryCard
-          theme={theme}
-          title="គណនី"
-          value={user?.name ?? "—"}
-          subtitle={user?.email ?? "—"}
-          icon={<FiUser className="text-[32px] text-red-500" />}
-          iconBg="bg-red-500/10"
-        />
-        <SettingSummaryCard
-          theme={theme}
-          title="តួនាទី"
-          value={userRole}
-          subtitle="សិទ្ធិប្រើប្រាស់ប្រព័ន្ធ"
-          icon={<FiShield className="text-[32px] text-purple-500" />}
-          iconBg="bg-purple-500/10"
-        />
-        <SettingSummaryCard
-          theme={theme}
-          title="អត្រាប្ដូររូបិយប័ណ្ណ"
-          value={rate ? `1 USD = ${Number(rate.usd_to_khr_rate).toLocaleString()} ៛` : "—"}
-          subtitle={rate ? rate.rate_date : "មិនទាន់មានអត្រា"}
-          icon={<FiDollarSign className="text-[32px] text-emerald-500" />}
-          iconBg="bg-emerald-500/10"
-        />
-        <SettingSummaryCard
-          theme={theme}
-          title="សុវត្ថិភាពទិន្នន័យ"
-          value="Backup / Audit"
-          subtitle="ប្រើ module ដែលមានស្រាប់"
-          icon={<FiDatabase className="text-[32px] text-blue-500" />}
-          iconBg="bg-blue-500/10"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[280px_1fr]">
+    <section className="space-y-4">
+      <div className={`min-w-0 overflow-hidden rounded-xl border shadow-sm lg:grid lg:grid-cols-[260px_minmax(0,1fr)] ${theme.card}`}>
         <SettingsSidebar
           theme={theme}
           sections={settingSections}
@@ -177,24 +126,21 @@ export default function Setting() {
           onSectionChange={setActiveSection}
         />
 
-        <div className={`overflow-hidden rounded-2xl border shadow-sm ${theme.card}`}>
-          <div className="border-b border-zinc-200 px-5 py-4 dark:border-white/10">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
-                <ActiveIcon size={22} />
+        <div className="min-w-0 bg-zinc-50/60 p-4 lg:p-5 dark:bg-[#0f0f11]">
+          <div className="mx-auto max-w-6xl">
+            {savedMessage && (
+              <div className="mb-5 flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                <FiCheckCircle className="shrink-0" />
+                {savedMessage}
               </div>
-              <div>
-                <h2 className={`text-lg font-bold ${theme.pageTitle}`}>
-                  {activeSectionInfo.title}
-                </h2>
-                <p className={`mt-1 text-sm ${theme.muted}`}>
-                  {activeSectionInfo.description}
-                </p>
-              </div>
-            </div>
-          </div>
+            )}
 
-          <div className="p-5">
+            {errorMessage && (
+              <div className="mb-5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-500">
+                {errorMessage}
+              </div>
+            )}
+
             {activeSection === "profile" && (
               <ProfileSettings
                 theme={theme}
@@ -202,14 +148,8 @@ export default function Setting() {
                 onChange={(field, value) =>
                   setProfile((prev) => ({ ...prev, [field]: value }))
                 }
-              />
-            )}
-
-            {activeSection === "shop" && (
-              <ShopInfoSettings
-                theme={theme}
-                user={user}
-                onManageExchange={() => navigate("/home/exchange-rate")}
+                onSave={handleSaveProfile}
+                isSaving={updateMutation.isPending}
               />
             )}
 
@@ -221,16 +161,26 @@ export default function Setting() {
               />
             )}
 
-            {activeSection === "sales" && (
-              <SalesRulesSettings theme={theme} />
+            {activeSection === "shop" && (
+              <ShopInfoSettings
+                theme={theme}
+                shopInfo={shopInfo}
+                onChange={(field, value) =>
+                  setShopInfo((prev) => ({ ...prev, [field]: value }))
+                }
+                onSave={handleSaveShopInfo}
+                onManageExchange={() => navigate("/home/exchange-rate")}
+              />
             )}
 
-            {activeSection === "inventory" && (
-              <InventoryRulesSettings theme={theme} />
-            )}
-
-            {activeSection === "purchase" && (
-              <PurchaseRulesSettings theme={theme} />
+            {activeSection === "rules" && (
+              <div className="space-y-8">
+                <SalesRulesSettings theme={theme} />
+                <div className="border-t border-zinc-200 dark:border-white/10" />
+                <InventoryRulesSettings theme={theme} />
+                <div className="border-t border-zinc-200 dark:border-white/10" />
+                <PurchaseRulesSettings theme={theme} />
+              </div>
             )}
 
             {activeSection === "system" && (
@@ -238,7 +188,6 @@ export default function Setting() {
                 theme={theme}
                 onGoBackup={() => navigate("/home/backup-data")}
                 onGoAudit={() => navigate("/home/audit-log")}
-                onGoExchange={() => navigate("/home/exchange-rate")}
               />
             )}
 

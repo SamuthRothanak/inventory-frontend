@@ -54,11 +54,12 @@ function buildSaleForPrint(data) {
 
 const BASE_TABS = [
   { id: "cash",     label: "សាច់ប្រាក់" },
-  { id: "transfer", label: "ABA / Wing" },
+  { id: "transfer", label: "ធនាគារ / QR" },
   { id: "split",    label: "បំបែក" },
 ];
 
-const PROVIDERS = ["ABA", "Wing", "ACLEDA", "Bakong"];
+const OTHER_PROVIDER = "ផ្សេងៗ";
+const PROVIDERS = ["ABA", "Wing", "ACLEDA", "Bakong", OTHER_PROVIDER];
 
 // ─── Print receipt ────────────────────────────────────────────────
 function printReceipt(data) {
@@ -287,11 +288,16 @@ export default function PaymentModal({
   const [cashCurrency,      setCashCurrency]       = useState("USD");
   const [cashAmount,        setCashAmount]         = useState("");
   const [transferProvider,  setTransferProvider]   = useState("ABA");
+  const [transferOther,     setTransferOther]      = useState("");
   const [transferCurrency,  setTransferCurrency]   = useState("USD");
   const [splitProvider,     setSplitProvider]      = useState("ABA");
+  const [splitOther,        setSplitOther]         = useState("");
+  const [splitTransferCurrency, setSplitTransferCurrency] = useState("USD");
   const [splitTransfer,     setSplitTransfer]      = useState("");
   const [splitCashCurrency, setSplitCashCurrency]  = useState("USD");
   const [splitCash,         setSplitCash]          = useState("");
+  const [splitChangeCurrency, setSplitChangeCurrency] = useState("USD");
+  const [splitChange,       setSplitChange]        = useState("");
   const [receipt,           setReceipt]            = useState(null);
   const [printSale,         setPrintSale]          = useState(null);
   const [isSubmitting,      setIsSubmitting]       = useState(false);
@@ -308,21 +314,35 @@ export default function PaymentModal({
   const canCompleteCash = total > 0 && cashApplied >= total;
 
   // ── Transfer calculations ──
+  const resolvedTransferProvider = transferProvider === OTHER_PROVIDER
+    ? transferOther.trim()
+    : transferProvider;
   const transferReceived    = transferCurrency === "USD" ? total : Math.ceil(total * exchangeRate);
   const transferApplied     = total;
-  const canCompleteTransfer = total > 0;
+  const canCompleteTransfer = total > 0 && Boolean(resolvedTransferProvider);
 
   // ── Split calculations ──
+  const resolvedSplitProvider = splitProvider === OTHER_PROVIDER
+    ? splitOther.trim()
+    : splitProvider;
   const splitTransferAmt     = Number(splitTransfer || 0);
-  const splitTransferApplied = Math.min(splitTransferAmt, total);
+  const splitTransferUsd     = splitTransferCurrency === "USD" ? splitTransferAmt : splitTransferAmt / exchangeRate;
+  const splitTransferApplied = Math.min(splitTransferUsd, total);
   const remainingAfter       = Math.max(total - splitTransferApplied, 0);
   const splitCashAmt         = Number(splitCash || 0);
   const splitCashUsd         = splitCashCurrency === "USD" ? splitCashAmt : splitCashAmt / exchangeRate;
   const splitCashApplied     = Math.min(splitCashUsd, remainingAfter);
   const splitTotal           = splitTransferApplied + splitCashApplied;
-  const splitCashChange      = Math.max(splitCashUsd - remainingAfter, 0);
-  const splitCashChangeDisp  = splitCashCurrency === "USD" ? splitCashChange : splitCashChange * exchangeRate;
-  const canCompleteSplit     = total > 0 && splitTotal >= total;
+  const splitReceivedUsd     = splitTransferUsd + splitCashUsd;
+  const splitChangeDueUsd    = Math.max(splitReceivedUsd - total, 0);
+  const splitChangeAmt       = Number(splitChange || 0);
+  const splitChangeUsd       = splitChangeCurrency === "USD" ? splitChangeAmt : splitChangeAmt / exchangeRate;
+  const splitExpectedChange  = splitChangeCurrency === "USD" ? splitChangeDueUsd.toFixed(2) : Math.ceil(splitChangeDueUsd * exchangeRate);
+  const splitChangeValid     = splitChangeDueUsd <= 0 || Math.abs(splitChangeUsd - splitChangeDueUsd) < 0.01;
+  const canCompleteSplit     = total > 0
+    && splitTotal >= total
+    && (splitTransferAmt <= 0 || Boolean(resolvedSplitProvider))
+    && splitChangeValid;
 
   // ── Build payment objects (aligned with flow: payments.exchange_rate_used) ──
   function buildPayments() {
@@ -344,7 +364,7 @@ export default function PaymentModal({
     if (tab === "transfer") {
       return [{
         paymentMethod: "mobile_payment",
-        providerName: transferProvider,
+        providerName: resolvedTransferProvider,
         currencyCode: transferCurrency,
         amountReceived: transferReceived,
         exchangeRateUsed: exchangeRate,
@@ -355,16 +375,16 @@ export default function PaymentModal({
       }];
     }
     // split
-    return [
+    const splitPayments = [
       {
         paymentMethod: "mobile_payment",
-        providerName: splitProvider,
-        currencyCode: "USD",
+        providerName: resolvedSplitProvider,
+        currencyCode: splitTransferCurrency,
         amountReceived: splitTransferAmt,
         exchangeRateUsed: exchangeRate,
         amountAppliedInvoiceCurrency: splitTransferApplied,
         changeAmount: 0,
-        changeCurrency: "USD",
+        changeCurrency: splitTransferCurrency,
         paidAt: now,
       },
       {
@@ -374,11 +394,19 @@ export default function PaymentModal({
         amountReceived: splitCashAmt,
         exchangeRateUsed: exchangeRate,
         amountAppliedInvoiceCurrency: splitCashApplied,
-        changeAmount: splitCashCurrency === "USD" ? splitCashChange : splitCashChangeDisp,
+        changeAmount: 0,
         changeCurrency: splitCashCurrency,
         paidAt: now,
       },
-    ];
+    ].filter((payment) => Number(payment.amountReceived) > 0);
+
+    if (splitChangeDueUsd > 0 && splitPayments.length > 0) {
+      const changePayment = splitPayments[splitPayments.length - 1];
+      changePayment.changeAmount = splitChangeAmt;
+      changePayment.changeCurrency = splitChangeCurrency;
+    }
+
+    return splitPayments;
   }
 
   async function handleComplete() {
@@ -418,6 +446,7 @@ export default function PaymentModal({
           currency_code:      p.currencyCode,
           amount_received:    p.amountReceived,
           exchange_rate_used: exchangeRate,
+          change_amount:      p.changeAmount || 0,
           change_currency:    p.changeCurrency || null,
         })),
       };
@@ -738,7 +767,7 @@ export default function PaymentModal({
             {/* ── Transfer ── */}
             {tab === "transfer" && (
               <div className="space-y-4">
-                <p className="font-bold text-slate-900">ការទូទាត់ ABA / Wing</p>
+                <p className="font-bold text-slate-900">ការទូទាត់តាមធនាគារ / QR</p>
 
                 {/* Provider chips */}
                 <div>
@@ -760,6 +789,32 @@ export default function PaymentModal({
                       </button>
                     ))}
                   </div>
+                  {transferProvider === OTHER_PROVIDER && (
+                    <div className="mt-3">
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-500">
+                        ឈ្មោះធនាគារ ឬសេវាបង់ប្រាក់
+                      </label>
+                      <input
+                        type="text"
+                        value={transferOther}
+                        onChange={(event) => setTransferOther(event.target.value)}
+                        maxLength={255}
+                        autoFocus
+                        placeholder="ឧ. Canadia, Sathapana, Woori..."
+                        className={cn(
+                          "h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:ring-2",
+                          transferOther.trim()
+                            ? "border-slate-200 focus:border-red-300 focus:ring-red-100"
+                            : "border-red-300 focus:border-red-400 focus:ring-red-100"
+                        )}
+                      />
+                      {!transferOther.trim() && (
+                        <p className="mt-1.5 text-xs font-medium text-red-500">
+                          សូមបញ្ចូលឈ្មោះធនាគារដែលទទួលប្រាក់។
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Currency selector */}
@@ -789,7 +844,9 @@ export default function PaymentModal({
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs font-semibold text-slate-500">ចំនួន Transfer ({transferCurrency})</p>
-                      <p className="mt-0.5 text-xs text-slate-400">ពិតប្រាកដ — តាម {transferProvider}</p>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        ពិតប្រាកដ — តាម {resolvedTransferProvider || "មិនទាន់បញ្ជាក់"}
+                      </p>
                     </div>
                     <p className="text-2xl font-extrabold text-slate-900">
                       {transferCurrency === "USD" ? usd(total) : khr(Math.ceil(total * exchangeRate))}
@@ -847,16 +904,66 @@ export default function PaymentModal({
                         </button>
                       ))}
                     </div>
+                    {splitProvider === OTHER_PROVIDER && (
+                      <div className="mt-3">
+                        <label className="mb-1.5 block text-xs font-semibold text-slate-500">
+                          ឈ្មោះធនាគារ ឬសេវាបង់ប្រាក់
+                        </label>
+                        <input
+                          type="text"
+                          value={splitOther}
+                          onChange={(event) => setSplitOther(event.target.value)}
+                          maxLength={255}
+                          placeholder="ឧ. Canadia, Sathapana, Woori..."
+                          className={cn(
+                            "h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:ring-2",
+                            splitOther.trim() || splitTransferAmt <= 0
+                              ? "border-slate-200 focus:border-red-300 focus:ring-red-100"
+                              : "border-red-300 focus:border-red-400 focus:ring-red-100"
+                          )}
+                        />
+                        {!splitOther.trim() && splitTransferAmt > 0 && (
+                          <p className="mt-1.5 text-xs font-medium text-red-500">
+                            សូមបញ្ចូលឈ្មោះធនាគារដែលទទួលប្រាក់។
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
-                    <p className="mb-1.5 text-xs font-semibold text-slate-500">ចំនួន (USD)</p>
+                    <p className="mb-1.5 text-xs font-semibold text-slate-500">រូបិយប័ណ្ណ</p>
+                    <div className="mb-3 flex gap-2">
+                      {[{ v: "USD", l: "USD ($)" }, { v: "KHR", l: "KHR (៛)" }].map((c) => (
+                        <button
+                          key={c.v}
+                          type="button"
+                          onClick={() => { setSplitTransferCurrency(c.v); setSplitTransfer(""); }}
+                          className={cn(
+                            "flex-1 h-9 rounded-xl text-xs font-bold transition",
+                            splitTransferCurrency === c.v
+                              ? "bg-red-500 text-white shadow-sm shadow-red-200"
+                              : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                          )}
+                        >
+                          {c.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold text-slate-500">ចំនួន ({splitTransferCurrency})</p>
                     <input
                       type="number"
                       value={splitTransfer}
                       onChange={(e) => setSplitTransfer(e.target.value)}
-                      placeholder={total.toFixed(2)}
+                      placeholder={splitTransferCurrency === "USD" ? total.toFixed(2) : Math.ceil(total * exchangeRate)}
                       className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
                     />
+                    {splitTransferCurrency === "KHR" && splitTransferAmt > 0 && (
+                      <p className="mt-1.5 text-xs text-slate-400">
+                        USD equivalent: <span className="font-semibold text-slate-600">{usd(splitTransferUsd)}</span>
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -900,9 +1007,53 @@ export default function PaymentModal({
                   </div>
                 </div>
 
+                {splitChangeDueUsd > 0 && (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">លុយអាប់</p>
+                      <span className="rounded-lg bg-white px-2 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+                        ត្រូវអាប់: {splitChangeCurrency === "USD" ? usd(splitChangeDueUsd) : `${Math.ceil(splitChangeDueUsd * exchangeRate).toLocaleString()} ៛`}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold text-slate-500">រូបិយប័ណ្ណអាប់</p>
+                      <div className="flex gap-2">
+                        {[{ v: "USD", l: "USD ($)" }, { v: "KHR", l: "KHR (៛)" }].map((c) => (
+                          <button
+                            key={c.v}
+                            type="button"
+                            onClick={() => { setSplitChangeCurrency(c.v); setSplitChange(""); }}
+                            className={cn(
+                              "flex-1 h-9 rounded-xl text-xs font-bold transition",
+                              splitChangeCurrency === c.v
+                                ? "bg-red-500 text-white shadow-sm shadow-red-200"
+                                : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                            )}
+                          >
+                            {c.l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold text-slate-500">ចំនួនអាប់ ({splitChangeCurrency})</p>
+                      <input
+                        type="number"
+                        value={splitChange}
+                        onChange={(e) => setSplitChange(e.target.value)}
+                        placeholder={String(splitExpectedChange)}
+                        className={cn(
+                          "h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:ring-2",
+                          splitChangeValid ? "border-slate-200 focus:border-red-300 focus:ring-red-100" : "border-red-300 focus:border-red-400 focus:ring-red-100"
+                        )}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
-                  <PaymentRow label={splitProvider} currency="USD" received={splitTransferAmt} applied={splitTransferApplied} change={0} />
-                  <PaymentRow label="Cash" currency={splitCashCurrency} received={splitCashAmt} applied={splitCashApplied} change={splitCashChangeDisp} />
+                  <PaymentRow label={resolvedSplitProvider || "ធនាគារផ្សេងៗ"} currency={splitTransferCurrency} received={splitTransferAmt} applied={splitTransferApplied} change={0} />
+                  <PaymentRow label="Cash" currency={splitCashCurrency} received={splitCashAmt} applied={splitCashApplied} change={splitChangeDueUsd > 0 ? splitChangeAmt : 0} changeCurrency={splitChangeCurrency} />
                 </div>
 
                 <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">

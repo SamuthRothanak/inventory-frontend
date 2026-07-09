@@ -38,6 +38,47 @@ const fmtUsd = (n) =>
   Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtInt = (n) => Number(n ?? 0).toLocaleString("en-US");
 
+const fmtCompactUsd = (value) => {
+  const amount = Number(value ?? 0);
+
+  if (Math.abs(amount) >= 1_000_000) {
+    return `$${Number((amount / 1_000_000).toFixed(1))}M`;
+  }
+
+  if (Math.abs(amount) >= 1_000) {
+    return `$${Number((amount / 1_000).toFixed(1))}k`;
+  }
+
+  return `$${Number(amount.toFixed(2)).toLocaleString("en-US")}`;
+};
+
+function buildChartScale(rows = []) {
+  const highestValue = rows.reduce((highest, row) => Math.max(
+    highest,
+    Number(row?.sales ?? 0),
+    Number(row?.purchases ?? 0),
+  ), 0);
+
+  if (highestValue <= 0) {
+    return { max: 100, ticks: [0, 25, 50, 75, 100] };
+  }
+
+  const roughStep = highestValue / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const normalizedStep = roughStep / magnitude;
+  const multiplier = normalizedStep <= 1 ? 1 : normalizedStep <= 2 ? 2 : normalizedStep <= 5 ? 5 : 10;
+  const step = multiplier * magnitude;
+  let max = Math.ceil(highestValue / step) * step;
+
+  if (max < highestValue * 1.1) {
+    max += step;
+  }
+
+  const ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, index) => index * step);
+
+  return { max, ticks };
+}
+
 function trendPct(today, yesterday) {
   if (!yesterday || yesterday === 0 || today === 0) return null;
   const pct = ((today - yesterday) / yesterday) * 100;
@@ -203,6 +244,7 @@ export default function Dashboard() {
     },
     recent_activities: source.recent_activities ?? [],
   };
+  const chartScale = buildChartScale(d.chart);
 
   // ── Trends ───────────────────────────────────────────────────────
   const salesTrend    = trendPct(d.today.sales_total_usd, d.yesterday.sales_total_usd);
@@ -403,10 +445,7 @@ export default function Dashboard() {
 
       {/* ── Secondary Cards (hide if 0) ──────────────────────────────── */}
       {!isLoading && secondaryCards.length > 0 && (
-        <div className={`grid gap-3 sm:grid-cols-2 ${
-          secondaryCards.length <= 2 ? "lg:grid-cols-2" :
-          secondaryCards.length <= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3 xl:grid-cols-6"
-        }`}>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-3">
           {secondaryCards.map((c) => (
             <MiniCard key={c.label} theme={theme} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} accent={c.accent} />
           ))}
@@ -414,7 +453,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Chart + Action Required ───────────────────────────────────── */}
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]">
 
         {/* Chart */}
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
@@ -425,7 +464,10 @@ export default function Dashboard() {
             </div>
             <div className={`flex items-center gap-2 self-start rounded-xl border px-3 py-1.5 text-xs font-semibold sm:self-auto ${theme.badge}`}>
               <FiActivity className="shrink-0" />
-              សប្ដាហ៍នេះ
+              <span>សប្ដាហ៍នេះ</span>
+              <span className={`border-l pl-2 ${isDark ? "border-white/10" : "border-zinc-300"}`}>
+                ដល់ {fmtCompactUsd(chartScale.max)}
+              </span>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={240}>
@@ -436,7 +478,9 @@ export default function Dashboard() {
               <YAxis
                 tick={{ fill: theme.axisColor, fontSize: 11 }}
                 axisLine={false} tickLine={false}
-                tickFormatter={(v) => `$${v >= 1000 ? `${v / 1000}k` : v}`}
+                domain={[0, chartScale.max]}
+                ticks={chartScale.ticks}
+                tickFormatter={fmtCompactUsd}
               />
               <Tooltip content={<CustomTooltip isDark={isDark} />} />
               <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12, color: isDark ? "#a1a1aa" : "#71717a" }} iconType="circle" iconSize={8} />
@@ -454,7 +498,7 @@ export default function Dashboard() {
               <span className="rounded-full bg-red-500 px-2.5 py-0.5 text-xs font-bold text-white">{totalAlerts}</span>
             )}
           </div>
-          <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 256 }}>
+          <div className="space-y-2 overflow-y-auto pr-1" style={{ maxHeight: 300 }}>
             {isLoading ? (
               <LoadingPanel theme={theme} minH="min-h-[220px]" />
             ) : alerts.length === 0 ? (
@@ -527,9 +571,9 @@ export default function Dashboard() {
           )}
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             {[
-              { label: "ស្តុករួម",       value: d ? fmtInt(d.inventory.total_on_hand) : "-", icon: FiBox,    color: "text-blue-500",   bg: "bg-blue-500/10"  },
-              { label: "ស្តុកស្ទើរអស់", value: d ? fmtInt(d.inventory.low_stock_count) : "-", icon: FiLayers, color: "text-amber-500", bg: "bg-amber-500/10" },
-              { label: "ជិតផុតកំណត់",   value: d ? fmtInt(d.inventory.expiring_soon_count ?? d.alerts.expiring_soon.length) : "-", icon: FiClock, color: "text-orange-500", bg: "bg-orange-500/10" },
+              { label: "ស្តុករួម",       value: isLoading ? "-" : fmtInt(d.inventory.total_on_hand), icon: FiBox,    color: "text-blue-500",   bg: "bg-blue-500/10"  },
+              { label: "ស្តុកស្ទើរអស់", value: isLoading ? "-" : fmtInt(d.inventory.low_stock_count), icon: FiLayers, color: "text-amber-500", bg: "bg-amber-500/10" },
+              { label: "ជិតផុតកំណត់",   value: isLoading ? "-" : fmtInt(d.inventory.expiring_soon_count ?? d.alerts.expiring_soon.length), icon: FiClock, color: "text-orange-500", bg: "bg-orange-500/10" },
             ].map((item) => {
               const Icon = item.icon;
               return (
@@ -600,8 +644,8 @@ export default function Dashboard() {
             <p className={`mt-0.5 text-xs ${theme.muted}`}>ការលក់ ទិញ ការទូទាត់ និងព្រឹត្តិការណ៍ស្តុកថ្មីៗ</p>
           </div>
           <div className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold ${theme.badge}`}>
-            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-            ផ្ទាល់
+            <FiClock className="shrink-0" />
+            ទិន្នន័យថ្មីៗ
           </div>
         </div>
         {isLoading ? (

@@ -13,6 +13,13 @@ const DETAIL_KH = {
 };
 const translateDetail = (s) => DETAIL_KH[String(s ?? "").toLowerCase()] ?? s;
 
+const ROW_ACCENT = {
+  low_stock: "border-l-red-500",
+  pending_stock_in: "border-l-violet-500",
+  unpaid: "border-l-amber-500",
+  expiring_soon: "border-l-orange-500",
+};
+
 export default function AlertSection({ alert, theme, isDark }) {
   const [open, setOpen] = useState(true);
   const Icon = alert.icon;
@@ -35,11 +42,21 @@ export default function AlertSection({ alert, theme, isDark }) {
         <span className={`text-xs ${theme.muted}`}>{open ? "▲" : "▼"}</span>
       </button>
       {open && (
-        <div className="space-y-1 px-4 pb-3">
+        <div className="space-y-2 px-3 pb-3">
           {alert.items.map((item, i) => (
-            <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 text-xs ${isDark ? "bg-white/4" : "bg-zinc-50"}`}>
-              <span className={`font-semibold ${theme.pageTitle}`}>{item.name}</span>
-              <span className={theme.muted}>{translateDetail(item.detail)}</span>
+            <div
+              key={`${item.id ?? item.name ?? "alert"}-${i}`}
+              className={`flex min-w-0 items-start gap-3 rounded-lg border border-l-4 px-3 py-2.5 text-xs transition ${ROW_ACCENT[alert.type] ?? "border-l-zinc-400"} ${isDark ? "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
+            >
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-bold ${alert.bg} ${alert.color}`}>
+                {i + 1}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={`block break-words font-bold leading-5 ${theme.pageTitle}`}>{item.name}</span>
+                <span className={`mt-0.5 block break-words leading-5 ${theme.muted}`}>
+                  {translateDetail(item.detail) || "-"}
+                </span>
+              </span>
             </div>
           ))}
         </div>
@@ -47,5 +64,3 @@ export default function AlertSection({ alert, theme, isDark }) {
     </div>
   );
 }
-
-

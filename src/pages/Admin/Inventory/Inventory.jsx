@@ -511,14 +511,22 @@
         variantCode: variant.variant_code || variant.variantCode || item.variant_code || item.variantCode || meta.variantCode || "",
         category:
           product.category?.name ||
+          product.category?.category_name ||
+          product.category?.categoryName ||
           product.category_name ||
           product.categoryName ||
+          product.category_name_snapshot ||
+          product.categoryNameSnapshot ||
           variant.category?.name ||
+          variant.category?.category_name ||
+          variant.category?.categoryName ||
           variant.category_name ||
           variant.categoryName ||
           item.category_name ||
           item.categoryName ||
-          (typeof item.category === "string" ? item.category : item.category?.name) ||
+          item.category_name_snapshot ||
+          item.categoryNameSnapshot ||
+          (typeof item.category === "string" ? item.category : item.category?.name || item.category?.category_name || item.category?.categoryName) ||
           meta.category ||
           "-",
         imagePath: variant.images || variant.image_path || variant.imagePath || item.image_path || item.imagePath || meta.imagePath || "",
@@ -1035,14 +1043,20 @@
       const convertedTexts = item.units
         .filter((unit) => Number(unit.conversionQty) > 1)
         .map((unit) => {
-          const convertedQty =
-            Number(item.stockBaseQty || 0) / Number(unit.conversionQty || 1);
+          const baseQty = Number(item.stockBaseQty || 0);
+          const convQty = Number(unit.conversionQty || 1);
+          const convertedQty = baseQty / convQty;
+          const isExact = convQty > 0 && baseQty % convQty === 0;
+          const displayQty = isExact ? convertedQty : Math.floor(convertedQty);
+          const text =
+            !isExact && displayQty < 1
+              ? `< 1 ${unit.unitName}`
+              : `${displayQty.toLocaleString()} ${unit.unitName}`;
 
           return {
             unitName: unit.unitName,
-            text: `${Number(convertedQty).toLocaleString(undefined, {
-              maximumFractionDigits: 2,
-            })} ${unit.unitName}`,
+            text,
+            symbol: isExact ? "=" : "≈",
           };
         });
 
@@ -1057,14 +1071,13 @@
         .map((unit) => {
           const convQty = Number(unit.conversionQty || 1);
           const convertedQty = threshold / convQty;
-          const display = Number.isInteger(convertedQty)
-            ? convertedQty
-            : Number(convertedQty.toFixed(2));
+          const isExact = convQty > 0 && threshold % convQty === 0;
+          const display = isExact ? convertedQty : Math.floor(convertedQty);
           const text =
-            convertedQty < 1
+            !isExact && display < 1
               ? `< 1 ${unit.unitName} (${threshold.toLocaleString()} ${item.baseUnit})`
-              : `${display} ${unit.unitName} = ${threshold.toLocaleString()} ${item.baseUnit}`;
-          return { unitName: unit.unitName, text };
+              : `${display.toLocaleString()} ${unit.unitName} ${isExact ? "=" : "≈"} ${threshold.toLocaleString()} ${item.baseUnit}`;
+          return { unitName: unit.unitName, text, symbol: isExact ? "=" : "≈" };
         });
       return { baseText, convertedTexts };
     };
@@ -1630,6 +1643,7 @@
                 value={perPage}
                 onChange={(value) => setPerPage(Number(value))}
                 theme={theme}
+                icon={<FiHash />}
                 options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / ទំព័រ` }))}
                 heightClass="h-12"
                 roundedClass="rounded-2xl"
@@ -1853,6 +1867,7 @@
                   value={adjustmentPerPage}
                   onChange={(value) => setAdjustmentPerPage(Number(value))}
                   theme={theme}
+                  icon={<FiHash />}
                   options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / ទំព័រ` }))}
                   heightClass="h-12"
                   roundedClass="rounded-2xl"
@@ -1932,6 +1947,7 @@
                     value={movementPerPage}
                     onChange={(value) => setMovementPerPage(Number(value))}
                     theme={theme}
+                    icon={<FiHash />}
                     options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / ទំព័រ` }))}
                     heightClass="h-12"
                     roundedClass="rounded-2xl"

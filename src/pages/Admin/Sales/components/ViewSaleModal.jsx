@@ -228,11 +228,11 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
                       <td className="px-3 py-3">{item.qty} {item.unitNameSnapshot}</td>
                       <td className="px-3 py-3">
                         <p>${Number(item.unitPrice).toFixed(2)}</p>
-                        <p className={`text-xs ${theme.muted}`}>≈ {Math.round(Number(item.unitPrice) * Number(sale.exchangeRateKhrPerUsd)).toLocaleString()} ៛</p>
+                        <p className={`text-xs ${theme.muted}`}>= {Math.round(Number(item.unitPrice) * Number(sale.exchangeRateKhrPerUsd)).toLocaleString()} ៛</p>
                       </td>
                       <td className="px-3 py-3 text-right font-semibold">
                         <p>${Number(item.lineTotal).toFixed(2)}</p>
-                        <p className={`text-xs font-normal ${theme.muted}`}>≈ {Math.round(Number(item.lineTotal) * Number(sale.exchangeRateKhrPerUsd)).toLocaleString()} ៛</p>
+                        <p className={`text-xs font-normal ${theme.muted}`}>= {Math.round(Number(item.lineTotal) * Number(sale.exchangeRateKhrPerUsd)).toLocaleString()} ៛</p>
                       </td>
                     </tr>
                   ))}
@@ -256,7 +256,7 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
                 theme={theme}
                 label="ចំនួនទឹកប្រាក់សរុប"
                 value={`$${Number(sale.grandTotal).toFixed(2)}`}
-                subValue={`≈ ${Math.round(Number(sale.grandTotal) * Number(sale.exchangeRateKhrPerUsd)).toLocaleString()} ៛`}
+                subValue={`= ${Math.round(Number(sale.grandTotal) * Number(sale.exchangeRateKhrPerUsd)).toLocaleString()} ៛`}
                 strong
               />
             </div>
@@ -315,6 +315,13 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
                           ? `${Number(p.amountReceived).toLocaleString()} ៛`
                           : `$${Number(p.amountReceived).toFixed(2)}`}
                       </p>
+                      {Number(p.changeAmount || 0) > 0 && (
+                        <p className="text-xs font-semibold text-emerald-600">
+                          អាប់: {p.changeCurrency === "KHR"
+                            ? `${Number(p.changeAmount).toLocaleString()} ៛`
+                            : `$${Number(p.changeAmount).toFixed(2)}`}
+                        </p>
+                      )}
                       {p.paidAt && (
                         <p className={`text-xs ${theme.muted}`}>{String(p.paidAt).slice(0, 10)}</p>
                       )}

@@ -1,11 +1,9 @@
 import {
-  FiBell,
   FiDatabase,
   FiDollarSign,
   FiLock,
-  FiMonitor,
-  FiShoppingCart,
-  FiTruck,
+  FiPrinter,
+  FiSliders,
   FiUser,
 } from "react-icons/fi";
 
@@ -17,16 +15,16 @@ export const settingSections = [
     icon: FiUser,
   },
   {
-    id: "shop",
-    title: "ព័ត៌មានហាង",
-    description: "ព័ត៌មានដែលប្រើលើវិក្កយបត្រ បង្កាន់ដៃ និងរបាយការណ៍។",
-    icon: FiMonitor,
+    id: "password",
+    title: "សុវត្ថិភាពគណនី",
+    description: "ផ្លាស់ប្ដូរពាក្យសម្ងាត់សម្រាប់គណនីអ្នក។",
+    icon: FiLock,
   },
   {
-    id: "password",
-    title: "ផ្លាស់ប្ដូរពាក្យសម្ងាត់",
-    description: "កំណត់ពាក្យសម្ងាត់ថ្មីសម្រាប់គណនីអ្នក។",
-    icon: FiLock,
+    id: "shop",
+    title: "ព័ត៌មានហាង",
+    description: "ឈ្មោះហាង លេខទូរស័ព្ទ អាសយដ្ឋាន និងអត្ថបទលើវិក្កយបត្រ។",
+    icon: FiPrinter,
   },
   {
     id: "exchange",
@@ -35,27 +33,15 @@ export const settingSections = [
     icon: FiDollarSign,
   },
   {
-    id: "sales",
-    title: "ការលក់ និង POS",
-    description: "គោលការណ៍លក់ បង់ប្រាក់ បោះពុម្ព និងការបង្វិលទំនិញ។",
-    icon: FiShoppingCart,
-  },
-  {
-    id: "inventory",
-    title: "ស្តុក និងការជូនដំណឹង",
-    description: "ការគ្រប់គ្រងស្តុក ការជូនដំណឹងទំនិញជិតអស់ និងផុតកំណត់។",
-    icon: FiBell,
-  },
-  {
-    id: "purchase",
-    title: "ការទិញចូល",
-    description: "លំហូរ stock-in ការខូចខាត និង supplier claim។",
-    icon: FiTruck,
+    id: "rules",
+    title: "គោលការណ៍ប្រព័ន្ធ",
+    description: "លំហូរការលក់ ស្តុក ការទិញចូល និងការជូនដំណឹង។",
+    icon: FiSliders,
   },
   {
     id: "system",
     title: "ឧបករណ៍ប្រព័ន្ធ",
-    description: "ចូលទៅ Backup Data, Audit Log និង module សុវត្ថិភាពទិន្នន័យ។",
+    description: "ចូលទៅទិន្នន័យបម្រុង និងកំណត់ហេតុប្រព័ន្ធ។",
     icon: FiDatabase,
   },
 ];

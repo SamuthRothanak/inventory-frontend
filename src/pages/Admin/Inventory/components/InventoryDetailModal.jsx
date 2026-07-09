@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { FiArrowDown, FiArrowUp, FiChevronDown, FiChevronRight, FiClock, FiDollarSign, FiLayers, FiPackage } from "react-icons/fi";
-import { InfoLine, InventoryThumb, ModalShell, SectionTitle, StockStatusBadge } from "./InventoryCommon";
+import {
+  ExpiryBadge,
+  formatUsdTwoDigits,
+  InfoLine,
+  InventoryThumb,
+  ModalShell,
+  SectionTitle,
+  StockStatusBadge,
+} from "./InventoryCommon";
 import { formatMovementTypeKh, translateNote } from "./StockMovementTable";
+import { getExpiryInfo, getNearestExpiryInfo } from "../utils/inventoryExpiry";
 export default function InventoryDetailModal({
     item,
     theme,
@@ -25,20 +34,21 @@ export default function InventoryDetailModal({
     const movements = Array.isArray(item.movements) ? item.movements : [];
     const activeBatches = batches.filter((b) => Number(b.qtyRemainingBase) > 0);
     const depletedBatches = batches.filter((b) => Number(b.qtyRemainingBase) <= 0);
-    const latestBatch = batches.find((batch) => batch.expiredDate) || batches[0];
+    const nearestExpiry = getNearestExpiryInfo(activeBatches);
+    const nearestExpiryBatch = nearestExpiry?.batch || activeBatches[0] || batches[0];
     const totalRemaining = batches.reduce(
       (total, batch) => total + Number(batch.qtyRemainingBase || 0),
       0
     );
     const baseUnitLabel = item.baseUnit || "base unit";
-    const formatUsd = (value) => `$${Number(value || 0).toFixed(2)}`;
+    const formatUsd = formatUsdTwoDigits;
     const truncateBatchNo = (batchNo) => {
       if (!batchNo) return "-";
       const parts = String(batchNo).split("-");
       if (parts.length <= 4) return batchNo;
       return `${parts.slice(0, 3).join("-")}-…${parts[parts.length - 1]}`;
     };
-    const formatUnitCost = (value) => `$${Number(value || 0).toFixed(3)} / ${baseUnitLabel}`;
+    const formatUnitCost = (value) => `${formatUsdTwoDigits(value)} / ${baseUnitLabel}`;
 
     return (
       <ModalShell
@@ -104,22 +114,26 @@ export default function InventoryDetailModal({
               </div>
 
               <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
-                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>Batch នៅសល់</p>
+                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>Batch មានស្តុក</p>
                 <p className="mt-2 text-2xl font-bold">
                   {Number(totalRemaining).toLocaleString()} {item.baseUnit}
                 </p>
 
                 <p className={`mt-2 text-xs ${theme.muted}`}>
-                  {batches.length} Batch ដំណើរការ
+                  {activeBatches.length} Batch មានស្តុក
                 </p>
               </div>
 
               <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
-                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>ថ្ងៃផុតកំណត់ចុងក្រោយ</p>
-                <p className="mt-2 text-2xl font-bold">{latestBatch?.expiredDate || "-"}</p>
+                <p className={`text-xs font-semibold uppercase ${theme.muted}`}>ថ្ងៃផុតកំណត់ជិតបំផុត</p>
+                <p className="mt-2 text-2xl font-bold">{nearestExpiryBatch?.expiredDate || "-"}</p>
+
+                <div className="mt-2">
+                  <ExpiryBadge info={nearestExpiry?.info} showAll />
+                </div>
 
                 <p className={`mt-2 text-xs ${theme.muted}`}>
-                  តម្លៃខ្នាត {formatUnitCost(item.unitCostBase || latestBatch?.unitCostBase || 0)}
+                  តម្លៃខ្នាត {formatUnitCost(item.unitCostBase || nearestExpiryBatch?.unitCostBase || 0)}
                 </p>
               </div>
           </div>
@@ -163,7 +177,7 @@ export default function InventoryDetailModal({
               <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">
                 <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-4 py-2 dark:border-white/10 dark:bg-white/5">
                   <span className="text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400">
-                    Batch ដំណើរការ
+                    Batch មានស្តុក
                   </span>
                   <span className={`text-xs font-semibold ${theme.muted}`}>{activeBatches.length} Batch</span>
                 </div>
@@ -186,13 +200,18 @@ export default function InventoryDetailModal({
                             <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-500">ដំណើរការ</span>
                           </div>
                         </td>
-                        <td className="px-4 py-4">{batch.expiredDate || "-"}</td>
+                        <td className="px-4 py-4">
+                          <p>{batch.expiredDate || "-"}</p>
+                          <div className="mt-1.5">
+                            <ExpiryBadge info={getExpiryInfo(batch.expiredDate)} />
+                          </div>
+                        </td>
                         <td className="px-4 py-4">
                           <p className="font-semibold">{Number(batch.qtyRemainingBase).toLocaleString()}</p>
                           <p className={`mt-1 text-xs ${theme.muted}`}>{baseUnitLabel}</p>
                         </td>
                         <td className="px-4 py-4">
-                          <p className="font-semibold">${Number(batch.unitCostBase || 0).toFixed(3)}</p>
+                          <p className="font-semibold">{formatUsdTwoDigits(batch.unitCostBase)}</p>
                           <p className={`mt-1 text-xs ${theme.muted}`}>ក្នុង {baseUnitLabel} · {formatUsd(Number(batch.qtyRemainingBase || 0) * Number(batch.unitCostBase || 0))}</p>
                         </td>
                       </tr>
@@ -250,7 +269,7 @@ export default function InventoryDetailModal({
                               <p className={`mt-1 text-xs ${theme.muted}`}>{baseUnitLabel}</p>
                             </td>
                             <td className="px-4 py-4">
-                              <p className="font-semibold">${Number(batch.unitCostBase || 0).toFixed(3)}</p>
+                              <p className="font-semibold">{formatUsdTwoDigits(batch.unitCostBase)}</p>
                               <p className={`mt-1 text-xs ${theme.muted}`}>ក្នុង {baseUnitLabel} · $0.00</p>
                             </td>
                           </tr>

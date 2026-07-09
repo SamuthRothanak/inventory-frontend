@@ -1,5 +1,5 @@
 import { FiClock, FiDollarSign, FiLayers, FiPackage, FiTrendingDown, FiTrendingUp } from "react-icons/fi";
-import { InfoLine, InventoryThumb, ModalShell, SectionTitle, StockStatusBadge } from "./InventoryCommon";
+import { formatUsdTwoDigits, InfoLine, InventoryThumb, ModalShell, SectionTitle, StockStatusBadge } from "./InventoryCommon";
 import { formatMovementTypeKh } from "./StockMovementTable";
 export default function ViewInventoryModal({
     item,
@@ -76,7 +76,7 @@ export default function ViewInventoryModal({
                       key={converted.unitName}
                       className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                     >
-                      ≈ {converted.text}
+                      {converted.symbol || "≈"} {converted.text}
                     </span>
                   ))}
                 </div>
@@ -146,7 +146,7 @@ export default function ViewInventoryModal({
                             {Number(batch.qtyRemainingBase).toLocaleString()} {item.baseUnit}
                           </td>
                           <td className="px-3 py-3">
-                            ${Number(batch.unitCostBase).toFixed(3)}
+                            {formatUsdTwoDigits(batch.unitCostBase)}
                           </td>
                           <td className="px-3 py-3 capitalize">{batch.status}</td>
                         </tr>

@@ -54,6 +54,39 @@ function PriceText({ rule }) {
   );
 }
 
+function formatLowStockThreshold(variant = {}) {
+  const threshold = Number(variant.lowStockThreshold || 0);
+  if (!threshold) return "0";
+
+  const units = Array.isArray(variant.units) ? variant.units : [];
+  const baseUnit =
+    units.find((unit) => unit.isBaseUnit || unit.is_base_unit) || units[0];
+  const baseName = baseUnit?.unitName || variant.packageType || "ខ្នាត";
+
+  const matchedUnit = units
+    .filter((unit) => {
+      const qty = Number(unit.conversionQty ?? unit.conversion_qty ?? 1);
+      return qty > 1 && threshold >= qty && threshold % qty === 0;
+    })
+    .sort(
+      (a, b) =>
+        Number(b.conversionQty ?? b.conversion_qty ?? 1) -
+        Number(a.conversionQty ?? a.conversion_qty ?? 1),
+    )[0];
+
+  if (!matchedUnit) {
+    return `${threshold.toLocaleString()} ${baseName}`;
+  }
+
+  const conversionQty = Number(
+    matchedUnit.conversionQty ?? matchedUnit.conversion_qty ?? 1,
+  );
+  const displayQty = threshold / conversionQty;
+  const displayName = matchedUnit.unitName || "ខ្នាត";
+
+  return `${displayQty.toLocaleString()} ${displayName} = ${threshold.toLocaleString()} ${baseName}`;
+}
+
 export default function ProductDetailModal({
   product,
   theme,
@@ -175,7 +208,7 @@ export default function ProductDetailModal({
                     <span
                       className={`rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                     >
-                      ស្តុកក្រោម: {variant.lowStockThreshold}
+                      ស្តុកក្រោម: {formatLowStockThreshold(variant)}
                     </span>
                   </div>
                 </div>

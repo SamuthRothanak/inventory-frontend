@@ -510,9 +510,15 @@ export function normalizeVariantUnit(item) {
     category:
       product.category_name ||
       product.categoryName ||
+      product.category_name_snapshot ||
+      product.categoryNameSnapshot ||
       category.name ||
+      category.category_name ||
+      category.categoryName ||
       item.category_name ||
       item.categoryName ||
+      item.category_name_snapshot ||
+      item.categoryNameSnapshot ||
       (typeof item.category === "string" ? item.category : "") ||
       "-",
 

@@ -9,7 +9,7 @@ import {
   FiXCircle,
 } from "react-icons/fi";
 
-import { capitalize } from "../utils/userUtils";
+import { getRoleLabel } from "../utils/userUtils";
 
 export default function UserViewModal({ user, theme, onClose }) {
   const isActive = user.status === "Active";
@@ -69,7 +69,7 @@ export default function UserViewModal({ user, theme, onClose }) {
 
           <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <InfoItem icon={<FiHash />} label="លេខសម្គាល់" value={user.id} theme={theme} />
-            <InfoItem icon={<FiShield />} label="តួនាទី" value={capitalize(user.role)} theme={theme} />
+            <InfoItem icon={<FiShield />} label="តួនាទី" value={getRoleLabel(user.role)} theme={theme} />
             <InfoItem icon={<FiMail />} label="អ៊ីមែល" value={user.email} theme={theme} />
             <InfoItem icon={<FiPhone />} label="លេខទូរស័ព្ទ" value={user.phone} theme={theme} />
           </div>

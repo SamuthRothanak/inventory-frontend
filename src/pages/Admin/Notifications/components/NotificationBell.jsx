@@ -3,11 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { FiBell } from "react-icons/fi";
 
-import { getStockBalancesApi } from "../../../../services/inventory.service";
+import {
+  getInventoryBatchesApi,
+  getStockBalancesApi,
+} from "../../../../services/inventory.service";
 import NotificationDropdown from "./NotificationDropdown";
 import {
+  buildExpiryAlerts,
   buildInventoryAlerts,
   extractApiData,
+  sortAlerts,
 } from "../utils/notificationUtils";
 
 export default function NotificationBell({ isDark }) {
@@ -21,9 +26,30 @@ export default function NotificationBell({ isDark }) {
     staleTime: 30_000,
   });
 
+  const expiryCutoff = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 30);
+    return date.toISOString().slice(0, 10);
+  }, []);
+
+  const inventoryBatchesQuery = useQuery({
+    queryKey: ["notifications", "inventory-batches", expiryCutoff],
+    queryFn: () =>
+      getInventoryBatchesApi({
+        per_page: 200,
+        only_available: 1,
+        expired_before: expiryCutoff,
+      }),
+    staleTime: 30_000,
+  });
+
   const alerts = useMemo(
-    () => buildInventoryAlerts(extractApiData(stockBalancesQuery.data)),
-    [stockBalancesQuery.data],
+    () =>
+      sortAlerts([
+        ...buildExpiryAlerts(extractApiData(inventoryBatchesQuery.data)),
+        ...buildInventoryAlerts(extractApiData(stockBalancesQuery.data)),
+      ]),
+    [inventoryBatchesQuery.data, stockBalancesQuery.data],
   );
 
   useEffect(() => {
@@ -69,11 +95,14 @@ export default function NotificationBell({ isDark }) {
         <NotificationDropdown
           alerts={alerts}
           isDark={isDark}
-          isLoading={stockBalancesQuery.isLoading}
-          isError={stockBalancesQuery.isError}
+          isLoading={stockBalancesQuery.isLoading || inventoryBatchesQuery.isLoading}
+          isError={stockBalancesQuery.isError || inventoryBatchesQuery.isError}
           onItemClick={goToInventory}
           onViewInventory={() => goToInventory()}
-          onRefresh={() => stockBalancesQuery.refetch()}
+          onRefresh={() => {
+            stockBalancesQuery.refetch();
+            inventoryBatchesQuery.refetch();
+          }}
         />
       )}
     </div>

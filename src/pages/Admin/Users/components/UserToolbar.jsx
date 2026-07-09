@@ -18,7 +18,7 @@ export default function UserToolbar({
           type="text"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="ស្វែងរកឈ្មោះ, username, email, ទូរស័ព្ទ, តួនាទី..."
+          placeholder="ស្វែងរកឈ្មោះ អ៊ីមែល លេខទូរស័ព្ទ ឬតួនាទី..."
           className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
         />
       </div>

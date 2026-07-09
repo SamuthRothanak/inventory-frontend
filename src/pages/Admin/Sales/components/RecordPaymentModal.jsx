@@ -57,7 +57,7 @@ export function RecordPaymentModal({ sale, form, onChange, onClose, onSubmit, is
             theme={theme}
             label="ប្រាក់ជំពាក់"
             value={`$${balance.toFixed(2)}`}
-            subValue={`≈ ${Math.round(balance * Number(sale.exchangeRateKhrPerUsd)).toLocaleString()} ៛`}
+            subValue={`= ${Math.round(balance * Number(sale.exchangeRateKhrPerUsd)).toLocaleString()} ៛`}
             strong
           />
         </div>

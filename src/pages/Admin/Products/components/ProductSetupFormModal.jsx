@@ -24,7 +24,7 @@ import {
 
 import ModalShell from "./ModalShell";
 import SearchableDropdown from "./SearchableDropdown";
-import { SizeUnitSelect } from "./SizeUnitSelect";
+import { CreatableOptionSelect, SizeUnitSelect } from "./SizeUnitSelect";
 import {
   productSetupDefaultValues,
   productSetupSchema,
@@ -52,6 +52,10 @@ function onlyPositiveNumber(value, allowDecimal = true) {
 
 function onlyText(value) {
   return String(value || "").replace(/[0-9]/g, "");
+}
+
+function cleanNamePart(value) {
+  return String(value || "").replace(/[\s\u00A0\u1680\u180E\u2000-\u200D\u202F\u205F\u3000]+/g, " ");
 }
 
 function detectUnitType(unitName) {
@@ -101,6 +105,16 @@ function roundKhr(value, mode = "ceil") {
     case "none":  return Number(amount.toFixed(2));
     default:      return Math.ceil(amount / 100) * 100;
   }
+}
+
+function khrRoundingLabel(value) {
+  const labels = {
+    ceil: "បង្គត់ឡើង",
+    round: "បង្គត់ជិតបំផុត",
+    floor: "បង្គត់ចុះ",
+    none: "តម្លៃពិត (មិនបង្គត់)",
+  };
+  return labels[value] || labels.ceil;
 }
 
 function convertPrice(inputPrice, inputCurrency, exchangeRate, khrMode = "ceil") {
@@ -506,8 +520,6 @@ function VariantSetupCard({
   onRemoveVariant,
 }) {
   const confirm = useConfirm();
-  const [showSize, setShowSize] = useState(false);
-  const [showColor, setShowColor] = useState(false);
   const [quickUnitOpen, setQuickUnitOpen] = useState(false);
   const [quickUnit, setQuickUnit] = useState({
     unit_code: "",
@@ -697,10 +709,13 @@ function VariantSetupCard({
   };
 
   return (
-    <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div className={`rounded-xl border p-4 shadow-sm ${theme.section}`}>
+      <div className="mb-4 flex flex-col gap-3 border-b border-zinc-200 pb-4 dark:border-white/10 md:flex-row md:items-start md:justify-between">
         <div>
-          <h4 className="text-sm font-bold">មុខទំនិញ #{variantIndex + 1}</h4>
+          <h4 className="text-base font-extrabold">មុខទំនិញ #{variantIndex + 1}</h4>
+          <p className={`mt-1 text-xs ${theme.muted}`}>
+            កំណត់ឈ្មោះ សណ្ឋាន ទំហំ រូបភាព ខ្នាត និងតម្លៃសម្រាប់មុខទំនិញនេះ។
+          </p>
         </div>
         {onRemoveVariant && (
           <button type="button" onClick={onRemoveVariant}
@@ -714,10 +729,10 @@ function VariantSetupCard({
       {/* Status hidden — always Active on creation */}
       <input type="hidden" {...register(`variants.${variantIndex}.status`)} defaultValue="true" />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {/* Variant Code — read-only style, auto-generated */}
         <div>
-          <label className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
+          <label className={`mb-2 flex h-7 items-center text-xs font-semibold ${theme.muted}`}>
             លេខកូដមុខទំនិញ <span className="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-500 dark:bg-white/10">auto</span>
           </label>
           <div className="relative">
@@ -725,11 +740,19 @@ function VariantSetupCard({
             <input {...register(`variants.${variantIndex}.variant_code`)}
               className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} opacity-70`} />
           </div>
-          {variantErrors?.variant_code?.message && <p className="mt-1.5 text-xs text-red-400">{variantErrors.variant_code.message}</p>}
+          <div className="min-h-[1.375rem]">
+            {variantErrors?.variant_code?.message ? (
+              <p className="mt-1.5 text-xs text-red-400">{variantErrors.variant_code.message}</p>
+            ) : (
+              <p className={`mt-1.5 text-xs ${theme.muted}`}>
+                លេខកូដបង្កើតស្វ័យប្រវត្តិ និងអាចកែបានបើចាំបាច់។
+              </p>
+            )}
+          </div>
         </div>
 
         <div>
-          <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="mb-2 flex h-7 items-center justify-between gap-3">
             <label className={`block text-xs font-semibold ${theme.muted}`}>
               ឈ្មោះមុខទំនិញ <span className="ml-1 text-red-400">*</span>
             </label>
@@ -751,7 +774,7 @@ function VariantSetupCard({
               </button>
             )}
           </div>
-          <div className={`flex h-11 overflow-hidden rounded-xl border transition focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-500/20 ${variantErrors?.variant_name?.message ? "border-red-500" : "border-zinc-200 dark:border-white/10"}`}>
+          <div className={`flex h-11 overflow-hidden rounded-xl border bg-white transition focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-500/20 dark:bg-white/[0.03] ${variantErrors?.variant_name?.message ? "border-red-500" : "border-zinc-200 dark:border-white/10"}`}>
             {productName && (
               <span className="flex shrink-0 items-center border-r border-zinc-200 bg-zinc-100 px-3 text-xs font-semibold text-zinc-500 dark:border-white/10 dark:bg-white/10 dark:text-zinc-400">
                 {productName}
@@ -763,91 +786,83 @@ function VariantSetupCard({
               readOnly={isAutoName}
               onChange={(e) => {
                 setIsAutoName(false);
-                const suffix = e.target.value;
+                const suffix = cleanNamePart(e.target.value);
                 setValue(
                   `variants.${variantIndex}.variant_name`,
-                  productName ? `${productName} ${suffix}`.trim() : suffix,
+                  productName ? (suffix ? `${productName} ${suffix}` : productName) : suffix,
                   { shouldValidate: true }
                 );
               }}
               className={`min-w-0 flex-1 bg-transparent px-3 text-sm outline-none ${isAutoName ? "cursor-default text-zinc-500 dark:text-zinc-400" : "text-zinc-900 dark:text-zinc-100"}`}
             />
           </div>
-          {variantErrors?.variant_name?.message && (
-            <p className="mt-1.5 text-xs text-red-400">{variantErrors.variant_name.message}</p>
-          )}
-          <p className={`mt-1.5 text-xs ${theme.muted}`}>
-            {isAutoName ? "ឈ្មោះបង្កើតស្វ័យប្រវត្តិពី សណ្ឋានទំនិញ និង ទំហំ។" : "កំពុងកែដោយខ្លួនឯង។ ចុច ↺ ស្វ័យប្រវត្តិ ដើម្បីបង្កើតវិញ។"}
-          </p>
-        </div>
-
-        {/* Package Type — select + custom */}
-        <PackageTypeCombobox
-          label="សណ្ឋានទំនិញ"
-          required
-          error={variantErrors?.package_type?.message}
-          theme={theme}
-          value={watch(`variants.${variantIndex}.package_type`) || ""}
-          onChange={(v) => setValue(`variants.${variantIndex}.package_type`, v, { shouldValidate: true })}
-        />
-
-        {/* Size — collapsible */}
-        <div>
-          {showSize ? (
-            <div>
-              <label className={`mb-2 block text-xs font-semibold ${theme.muted}`}>ទំហំ</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
-                  <input {...register(`variants.${variantIndex}.size_value`)} placeholder="330"
-                    className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
-                </div>
-                <SizeUnitSelect value={sizeUnitVal} onChange={(v) => setValue(`variants.${variantIndex}.size_unit`, v)} theme={theme} />
-              </div>
-              <button type="button" onClick={() => { setShowSize(false); setValue(`variants.${variantIndex}.size_value`, ""); setValue(`variants.${variantIndex}.size_unit`, ""); }}
-                className={`mt-1 text-xs ${theme.muted} hover:text-red-500`}>
-                − លុបទំហំ
-              </button>
-            </div>
-          ) : (
-            <div className="flex h-full items-end pb-1">
-              <button type="button" onClick={() => setShowSize(true)}
-                className={`inline-flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-semibold transition hover:border-red-400 hover:text-red-500 dark:border-white/10 dark:hover:border-red-500/60 dark:hover:text-red-400 ${theme.muted}`}>
-                <FiHash className="text-sm" /> + បន្ថែមទំហំ (ស្រេចចិត្ត)
-              </button>
-            </div>
-          )}
+          <div className="min-h-[1.375rem]">
+            {variantErrors?.variant_name?.message ? (
+              <p className="mt-1.5 text-xs text-red-400">{variantErrors.variant_name.message}</p>
+            ) : (
+              <p className={`mt-1.5 text-xs ${theme.muted}`}>
+                {isAutoName ? "ឈ្មោះបង្កើតស្វ័យប្រវត្តិពី សណ្ឋានទំនិញ និង ទំហំ។" : "កំពុងកែដោយខ្លួនឯង។ ចុច ↺ ស្វ័យប្រវត្តិ ដើម្បីបង្កើតវិញ។"}
+              </p>
+            )}
+          </div>
         </div>
 
       </div>
 
-      {/* Optional fields row — Color + Image together */}
-      <div className="mt-4 flex flex-wrap gap-6">
-        <div>
-          {showColor ? (
-            <div className="w-52">
-              <FormInput label="ពណ៌" sanitize="text" error={variantErrors?.color?.message} theme={theme} icon={<FiTag />}
-                inputProps={register(`variants.${variantIndex}.color`)} placeholder="ក្រហម" />
-              <button type="button" onClick={() => { setShowColor(false); setValue(`variants.${variantIndex}.color`, ""); }}
-                className={`mt-1 text-xs ${theme.muted} hover:text-red-500`}>
-                − លុបពណ៌
-              </button>
-            </div>
-          ) : (
-            <button type="button" onClick={() => setShowColor(true)}
-              className={`inline-flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-semibold transition hover:border-red-400 hover:text-red-500 dark:border-white/10 dark:hover:border-red-500/60 dark:hover:text-red-400 ${theme.muted}`}>
-              <FiTag className="text-sm" /> + បន្ថែមពណ៌ (ស្រេចចិត្ត)
-            </button>
-          )}
+      <div className="mt-5 border-t border-zinc-200 pt-5 dark:border-white/10">
+        <div className="mb-4">
+          <div>
+            <h5 className="text-sm font-bold">ព័ត៌មានលម្អិតបន្ថែម</h5>
+            <p className={`mt-0.5 text-xs ${theme.muted}`}>សណ្ឋាន ទំហំ ពណ៌ និងរូបភាពសម្រាប់មុខទំនិញនេះ។</p>
+          </div>
         </div>
 
-        <div className="w-full min-w-[280px] sm:min-w-[420px]">
-          <ImageInput label="រូបភាពមុខទំនិញ *" uniqueId={`variant-${variantIndex}`} theme={theme}
-            previewFile={variantImage}
-            onChange={(file) => setValue(`variants.${variantIndex}.imageFile`, file, { shouldValidate: true })} />
-          {variantErrors?.imageFile && (
-            <p className="mt-1 text-xs text-red-500">{variantErrors.imageFile.message}</p>
-          )}
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+          <div>
+            <PackageTypeCombobox
+              label="សណ្ឋានទំនិញ"
+              required
+              error={variantErrors?.package_type?.message}
+              theme={theme}
+              value={watch(`variants.${variantIndex}.package_type`) || ""}
+              onChange={(v) => setValue(`variants.${variantIndex}.package_type`, v, { shouldValidate: true })}
+            />
+          </div>
+
+          <div>
+            <label className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
+              ទំហំ <span className="font-normal">(ស្រេចចិត្ត)</span>
+            </label>
+            <div className="flex h-11 overflow-visible rounded-xl border border-zinc-200 bg-white transition focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-500/20 dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="relative min-w-0 flex-1">
+                <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
+                <input {...register(`variants.${variantIndex}.size_value`)} placeholder="330"
+                  className="h-full w-full bg-transparent pl-10 pr-3 text-sm outline-none" />
+              </div>
+              <SizeUnitSelect value={sizeUnitVal} onChange={(v) => setValue(`variants.${variantIndex}.size_unit`, v)} theme={theme} embedded />
+            </div>
+          </div>
+
+          <div>
+            <label className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
+              ពណ៌ <span className="font-normal">(ស្រេចចិត្ត)</span>
+            </label>
+            <div className="relative">
+              <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiTag /></span>
+              <input {...register(`variants.${variantIndex}.color`)} placeholder="ក្រហម"
+                className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${variantErrors?.color?.message ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : theme.input}`} />
+            </div>
+            {variantErrors?.color?.message && <p className="mt-1.5 text-xs text-red-400">{variantErrors.color.message}</p>}
+          </div>
+
+          <div>
+            <ImageInput label="រូបភាពមុខទំនិញ *" uniqueId={`variant-${variantIndex}`} theme={theme}
+              previewFile={variantImage}
+              onChange={(file) => setValue(`variants.${variantIndex}.imageFile`, file, { shouldValidate: true })} />
+            {variantErrors?.imageFile && (
+              <p className="mt-1 text-xs text-red-500">{variantErrors.imageFile.message}</p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1061,7 +1076,7 @@ function VariantSetupCard({
                           <div className="mt-3 flex items-center justify-between">
                             <p className={`text-[11px] ${theme.muted}`}>
                               {Number(activeExchangeRate || 0) > 0
-                                ? `អត្រា: 1 USD = ${Number(activeExchangeRate).toLocaleString()}៛ · ${activeKhrRounding}`
+                                ? `អត្រា: 1 USD = ${Number(activeExchangeRate).toLocaleString()}៛ · ${khrRoundingLabel(activeKhrRounding)}`
                                 : "គ្មានអត្រាប្ដូររូបិយប័ណ្ណ"}
                             </p>
                             <button type="button" onClick={() => removePriceRule(idx)}
@@ -1389,9 +1404,9 @@ function ImageInput({ label, theme, previewFile, onChange, uniqueId = "" }) {
   return (
     <div>
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
-      <div className="rounded-2xl border border-dashed border-zinc-300 bg-white/0 p-4 transition hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
+      <div className="rounded-xl border border-dashed border-zinc-300 bg-white/0 p-3 transition hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
             {previewUrl ? <img src={previewUrl} alt="Selected" className="h-full w-full object-cover" /> : <FiImage className="text-3xl text-red-500" />}
           </div>
           <input id={inputId} type="file" accept="image/*" className="hidden"
@@ -1399,17 +1414,17 @@ function ImageInput({ label, theme, previewFile, onChange, uniqueId = "" }) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap gap-2">
               <label htmlFor={inputId}
-                className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700">
+                className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700">
                 <FiImage className="text-lg" /> {previewUrl ? "ប្ដូររូបភាព" : "ជ្រើសរើសរូបភាព"}
               </label>
               {previewUrl && (
                 <button type="button" onClick={handleRemoveImage}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
                   <FiXCircle className="text-base" /> លុប
                 </button>
               )}
             </div>
-            <p className={`mt-3 truncate text-sm ${theme.muted}`}>
+            <p className={`mt-2 truncate text-xs ${theme.muted}`}>
               {fileName || "JPG, PNG, WEBP · Max 2 MB"}
             </p>
             {previewFile instanceof File && <p className="mt-1 text-xs text-zinc-400">{(previewFile.size / 1024 / 1024).toFixed(2)} MB</p>}
@@ -1468,49 +1483,25 @@ function FormInput({
 }
 
 function PackageTypeCombobox({ label, required = false, error = "", theme, value = "", onChange }) {
-  const matchedType = PACKAGE_TYPES.find((t) => t.toLowerCase() === value.toLowerCase());
-  const [showCustom, setShowCustom] = useState(!!value && !matchedType);
-
-  const options = [
-    ...PACKAGE_TYPES.map((t) => ({ value: t, label: t })),
-    { value: "__other__", label: "ផ្សេងៗ (វាយខាងក្រោម)…" },
-  ];
-
-  const handleDropdownChange = (selected) => {
-    if (selected === "__other__") {
-      setShowCustom(true);
-      onChange("");
-    } else {
-      setShowCustom(false);
-      onChange(selected);
-    }
-  };
-
   return (
     <div>
-      <SearchableDropdown
+      <CreatableOptionSelect
         label={label}
         required={required}
-        error={error}
         theme={theme}
         icon={<FiBox />}
-        value={showCustom ? "__other__" : (matchedType || "")}
-        onChange={handleDropdownChange}
-        options={options}
-        searchable={false}
+        value={value}
+        onChange={onChange}
+        groups={[{ options: PACKAGE_TYPES }]}
+        placeholder="-- រើស --"
+        searchPlaceholder="ស្វែងរក ឬបញ្ចូលសណ្ឋានថ្មី"
+        hint="មិនឃើញ? វាយសណ្ឋានថ្មី រួចចុចបន្ថែម។"
+        createLabel="បន្ថែម"
+        existingLabel="ជម្រើសដែលមានស្រាប់"
+        widthClass="w-full"
+        menuWidthClass="w-full"
       />
-      {showCustom && (
-        <div className="relative mt-2">
-          <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiBox /></span>
-          <input
-            autoFocus
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="វាយសណ្ឋានទំនិញផ្ទាល់ខ្លួន..."
-            className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input}`}
-          />
-        </div>
-      )}
+      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
     </div>
   );
 }

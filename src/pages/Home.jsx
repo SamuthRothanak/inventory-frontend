@@ -28,6 +28,11 @@ import { useMutation } from "@tanstack/react-query";
 import { logoutApi } from "../services/auth.service";
 import { useAuthStore } from "../store/authStore";
 import NotificationBell from "./Admin/Notifications/components/NotificationBell";
+import {
+  getShopInitials,
+  getStoredShopInfo,
+  SHOP_INFO_UPDATED_EVENT,
+} from "../utils/shopInfo";
 
 const mainMenus = [
   { label: "ផ្ទាំងគ្រប់គ្រង",       icon: FiGrid,         path: "/home", end: true,     permission: "dashboard.view" },
@@ -183,6 +188,7 @@ export default function Home() {
   });
 
   const [collapsed, setCollapsed] = useState(false);
+  const [shopInfo, setShopInfo] = useState(() => getStoredShopInfo());
 
   const isAdminPath = adminMenus.some(
     (item) =>
@@ -206,6 +212,20 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem("theme", isDark ? "dark" : "light");
   }, [isDark]);
+
+  useEffect(() => {
+    const syncShopInfo = (event) => {
+      setShopInfo(event.detail ?? getStoredShopInfo());
+    };
+
+    window.addEventListener(SHOP_INFO_UPDATED_EVENT, syncShopInfo);
+    window.addEventListener("storage", syncShopInfo);
+
+    return () => {
+      window.removeEventListener(SHOP_INFO_UPDATED_EVENT, syncShopInfo);
+      window.removeEventListener("storage", syncShopInfo);
+    };
+  }, []);
 
   useEffect(() => {
     if (isAdminPath) {
@@ -279,7 +299,7 @@ export default function Home() {
                 ].join(" ")}
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500 text-base font-bold text-white shadow-sm">
-                  L
+                  {getShopInitials(shopInfo.name)}
                 </div>
 
                 {!collapsed && (
@@ -290,7 +310,7 @@ export default function Home() {
                         theme.title,
                       ].join(" ")}
                     >
-                      Hak Ley Mart
+                      {shopInfo.name || "Hak Ley Mart"}
                     </h2>
                     <p
                       className={[
@@ -298,7 +318,7 @@ export default function Home() {
                         theme.subTitle,
                       ].join(" ")}
                     >
-                      ហាក់ ឡីម៉ាត
+                      {shopInfo.khmerName || "ហាក់ ឡេ ម៉ាត"}
                     </p>
                   </div>
                 )}
@@ -383,7 +403,7 @@ export default function Home() {
         <div className="flex min-w-0 flex-1 flex-col">
           <header
             className={[
-              "sticky top-0 z-10 flex h-[74px] shrink-0 items-center justify-between border-b px-6 backdrop-blur",
+              "sticky top-0 z-40 flex h-[74px] shrink-0 items-center justify-between border-b px-6 backdrop-blur",
               theme.header,
             ].join(" ")}
           >
@@ -411,8 +431,8 @@ export default function Home() {
             </div>
           </header>
 
-          <main className={`flex-1 overflow-y-auto ${theme.contentWrap}`}>
-            <div className="p-6">
+          <main className={`flex-1 overflow-x-hidden overflow-y-auto ${theme.contentWrap}`}>
+  <div className="min-w-0 p-6">
               <div className="mx-auto w-full max-w-7xl">
                 <Outlet context={{ isDark }} />
               </div>

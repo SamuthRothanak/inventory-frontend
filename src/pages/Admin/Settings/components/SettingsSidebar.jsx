@@ -1,10 +1,21 @@
-export default function SettingsSidebar({ theme, sections, activeSection, onSectionChange }) {
+export default function SettingsSidebar({
+  theme,
+  sections,
+  activeSection,
+  onSectionChange,
+}) {
   return (
-    <div className={`rounded-2xl border p-3 shadow-sm ${theme.card}`}>
-      <p className={`mb-2 px-2 text-[11px] font-bold uppercase tracking-widest ${theme.muted}`}>
-        ការកំណត់
-      </p>
-      <nav className="space-y-0.5">
+    <aside className="border-b border-zinc-200 bg-white/80 p-4 dark:border-white/10 dark:bg-white/[0.025] lg:border-b-0 lg:border-r">
+      <div className="mb-3 hidden lg:block">
+        <p className={`text-xs font-bold uppercase tracking-wide ${theme.muted}`}>
+          ការកំណត់
+        </p>
+        <h2 className={`mt-1 text-base font-extrabold ${theme.pageTitle}`}>
+          មជ្ឈមណ្ឌលគ្រប់គ្រង
+        </h2>
+      </div>
+
+      <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
         {sections.map((section) => {
           const Icon = section.icon;
           const isActive = activeSection === section.id;
@@ -14,29 +25,23 @@ export default function SettingsSidebar({ theme, sections, activeSection, onSect
               key={section.id}
               type="button"
               onClick={() => onSectionChange(section.id)}
-              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-all duration-150 ${
+              title={section.description}
+              className={`group flex min-h-10 min-w-max items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition-all duration-150 focus:outline-none focus:ring-4 focus:ring-red-500/15 lg:min-w-0 lg:justify-start ${
                 isActive
-                  ? "bg-red-500 text-white shadow-sm"
-                  : `hover:bg-zinc-100 dark:hover:bg-white/5 ${theme.pageTitle}`
+                  ? "bg-red-500 text-white shadow-sm shadow-red-500/15"
+                  : `border border-transparent text-zinc-600 hover:border-red-200 hover:bg-red-50 hover:text-zinc-950 dark:text-zinc-300 dark:hover:border-red-500/30 dark:hover:bg-red-500/10 dark:hover:text-white`
               }`}
             >
-              <div
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                  isActive ? "bg-white/20 text-white" : "bg-red-500/10 text-red-500"
-                }`}
-              >
-                <Icon size={14} />
-              </div>
-              <span className={`text-sm font-semibold ${isActive ? "text-white" : ""}`}>
-                {section.title}
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
+                isActive ? "bg-white/20 text-white" : "bg-red-500/10 text-red-500"
+              }`}>
+                <Icon size={15} />
               </span>
-              {isActive && (
-                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-white/70" />
-              )}
+              <span className="truncate">{section.title}</span>
             </button>
           );
         })}
       </nav>
-    </div>
+    </aside>
   );
 }

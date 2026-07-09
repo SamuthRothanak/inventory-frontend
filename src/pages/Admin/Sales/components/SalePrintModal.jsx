@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { FiPrinter, FiX } from "react-icons/fi";
+import { getShopInitials, getStoredShopInfo } from "../../../../utils/shopInfo";
 
 const METHOD_LABEL = {
   cash: "សាច់ប្រាក់",
@@ -27,6 +28,7 @@ const paymentStatusClass = {
 };
 
 export default function SalePrintModal({ sale, onClose }) {
+  const shopInfo = getStoredShopInfo();
   const rate = Number(sale.exchangeRateKhrPerUsd || 0);
   const grandKhr = rate > 0 ? Math.round(Number(sale.grandTotal || 0) * rate).toLocaleString("en-US") + " ៛" : null;
   const now = new Date().toLocaleString("en-GB", {
@@ -62,11 +64,11 @@ export default function SalePrintModal({ sale, onClose }) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/70">
+    <div className="fixed inset-0 z-[2000] flex flex-col bg-black/70">
       {/* Toolbar — hidden on print */}
       <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-6 py-3 print:hidden">
         <p className="text-sm font-semibold text-zinc-700">
-          Preview — <span className="text-red-600">{sale.saleNo}</span>
+          មើលមុនបោះពុម្ព — <span className="text-red-600">{sale.saleNo}</span>
         </p>
         <div className="flex items-center gap-2">
           <button
@@ -74,7 +76,7 @@ export default function SalePrintModal({ sale, onClose }) {
             onClick={() => window.print()}
             className="inline-flex h-9 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
           >
-            <FiPrinter size={14} /> បោះពុម្ព / Print
+            <FiPrinter size={14} /> បោះពុម្ព
           </button>
           <button
             type="button"
@@ -110,26 +112,35 @@ export default function SalePrintModal({ sale, onClose }) {
             </div>
           )}
           {/* Header */}
-          <div style={{ background: "linear-gradient(135deg,#dc2626 0%,#b91c1c 100%)", padding: "28px 32px 24px", color: "white" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ background: "linear-gradient(135deg,#dc2626 0%,#b91c1c 100%)", padding: "30px 40px 28px", color: "white" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 24 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 16, minWidth: 0 }}>
                 <div style={{
-                  width: 52, height: 52, background: "rgba(255,255,255,0.2)",
+                  width: 56, height: 56, background: "rgba(255,255,255,0.22)",
                   borderRadius: 12, display: "flex", alignItems: "center",
-                  justifyContent: "center", fontSize: 24, fontWeight: 700, color: "white", flexShrink: 0,
-                }}>H</div>
-                <div>
-                  <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 0.3 }}>Hak Ley Mart</div>
-                  <div style={{ fontSize: 13, opacity: 0.85, marginTop: 2 }}>ហាក់ ឡី ម៉ាត</div>
+                  justifyContent: "center", fontSize: 24, fontWeight: 800, color: "white", flexShrink: 0,
+                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)",
+                }}>{getShopInitials(shopInfo.name)}</div>
+                <div style={{ minWidth: 0, paddingTop: 1 }}>
+                  <div style={{ fontSize: 23, fontWeight: 800, lineHeight: 1.15, letterSpacing: 0.2 }}>{shopInfo.name}</div>
+                  {shopInfo.khmerName && (
+                    <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.55, marginTop: 5, opacity: 0.94 }}>
+                      {shopInfo.khmerName}
+                    </div>
+                  )}
+                  <div style={{ display: "grid", gap: 3, marginTop: 8, maxWidth: 360, fontSize: 11, lineHeight: 1.45, color: "rgba(255,255,255,0.78)" }}>
+                    {shopInfo.phone && <div>{shopInfo.phone}</div>}
+                    {shopInfo.address && <div>{shopInfo.address}</div>}
+                  </div>
                 </div>
               </div>
               <div style={{
                 background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)",
-                borderRadius: 8, padding: "8px 14px", textAlign: "right", flexShrink: 0,
+                borderRadius: 10, padding: "10px 16px", textAlign: "right", flexShrink: 0,
               }}>
                 <div style={{ fontSize: 10, opacity: 0.8, letterSpacing: 1, textTransform: "uppercase" }}>Invoice / Receipt</div>
-                <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2, letterSpacing: 0.5 }}>{sale.saleNo}</div>
-                <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{sale.displayDate}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, marginTop: 5, letterSpacing: 0.4 }}>{sale.saleNo}</div>
+                <div style={{ fontSize: 11, opacity: 0.85, marginTop: 5 }}>{sale.displayDate}</div>
               </div>
             </div>
           </div>
@@ -247,7 +258,7 @@ export default function SalePrintModal({ sale, onClose }) {
                   <span className="text-sm font-bold text-zinc-900">សរុបទូទៅ</span>
                   <div className="text-right">
                     <p className="text-xl font-bold text-red-600">{fmtUsd(sale.grandTotal)}</p>
-                    {grandKhr && <p className="text-[11px] text-zinc-400">≈ {grandKhr}</p>}
+                    {grandKhr && <p className="text-[11px] text-zinc-400">= {grandKhr}</p>}
                   </div>
                 </div>
               </div>
@@ -260,7 +271,7 @@ export default function SalePrintModal({ sale, onClose }) {
                     </span>
                     <div className="text-right">
                       <p className="text-base font-bold text-red-600">{fmtUsd(balance)}</p>
-                      {balanceKhr && <p className="text-[11px] text-red-400">≈ {balanceKhr}</p>}
+                      {balanceKhr && <p className="text-[11px] text-red-400">= {balanceKhr}</p>}
                     </div>
                   </div>
                 </div>
@@ -278,7 +289,7 @@ export default function SalePrintModal({ sale, onClose }) {
           {/* Footer */}
           <div className="border-t border-dashed border-zinc-200 py-5 text-center">
             <p className="text-lg font-bold text-red-600">🙏 អរគុណ!</p>
-            <p className="mt-1 text-xs text-zinc-400">សូមមកទិញទៀតណា · Thank you for your purchase</p>
+            <p className="mt-1 text-xs text-zinc-400">{shopInfo.receiptFooter}</p>
             <p className="mt-2 text-[10px] text-zinc-300">បោះពុម្ព: {now}</p>
           </div>
         </div>

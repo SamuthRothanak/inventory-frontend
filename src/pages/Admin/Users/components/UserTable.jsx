@@ -11,7 +11,7 @@
   FiXCircle,
   FiSearch,
 } from "react-icons/fi";
-import { capitalize } from "../utils/userUtils";
+import { getRoleLabel } from "../utils/userUtils";
 import PermissionGate from "../../../../components/PermissionGate";
 
 export default function UserTable({
@@ -110,11 +110,11 @@ export default function UserTable({
                           <span
                             className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${theme.badge}`}
                           >
-                            @{item.username || "username"}
+                            @{item.username || "ឈ្មោះអ្នកប្រើ"}
                           </span>
 
                           <span className={`text-xs ${theme.muted}`}>
-                            ID: {item.id}
+                            លេខសម្គាល់៖ {item.id}
                           </span>
                         </div>
                       </div>
@@ -142,7 +142,7 @@ export default function UserTable({
                       className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                     >
                       <FiShield />
-                      {capitalize(item.role)}
+                      {getRoleLabel(item.role)}
                     </span>
                   </td>
 

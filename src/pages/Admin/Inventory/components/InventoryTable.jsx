@@ -8,12 +8,17 @@ import {
   FiTrendingUp,
 } from "react-icons/fi";
 import TableLoading from "../../../../components/TableLoading";
-import { InventoryThumb, StockStatusBadge } from "./InventoryCommon";
+import {
+  ExpiryBadge,
+  formatUsdTwoDigits,
+  InventoryThumb,
+  StockStatusBadge,
+} from "./InventoryCommon";
+import { getNearestExpiryInfo } from "../utils/inventoryExpiry";
 import PermissionGate from "../../../../components/PermissionGate";
 
 export default function InventoryTable({
     theme,
-    inventory,
     filteredInventory,
     isLoading,
     pagination,
@@ -63,6 +68,7 @@ export default function InventoryTable({
                   const pendingStockIn = getPendingStockInForInventoryItem?.(item) || { baseQty: 0, qty: 0 };
                   const productMeta = item.category && item.category !== "-" ? item.category : item.productName;
                   const hasPending = Number(pendingStockIn.baseQty || 0) > 0;
+                  const nearestExpiry = getNearestExpiryInfo(item.batches);
 
                   return (
                     <tr key={item.id} className={`border-t transition ${theme.row}`}>
@@ -91,7 +97,7 @@ export default function InventoryTable({
                           <div className="mt-1 flex flex-wrap gap-1">
                             {stockBreakdown.convertedTexts.map((c) => (
                               <span key={c.unitName} className={`rounded-full border px-2 py-0.5 text-[11px] ${theme.badge}`}>
-                                ≈ {c.text}
+                                {c.symbol || "≈"} {c.text}
                               </span>
                             ))}
                           </div>
@@ -117,17 +123,20 @@ export default function InventoryTable({
                       {/* Cost / Value */}
                       <td className="px-5 py-3.5">
                         <p className="text-sm font-semibold">
-                          ${Number(item.unitCostBase).toFixed(3)}
+                          {formatUsdTwoDigits(item.unitCostBase)}
                           <span className={`ml-1 text-xs font-normal ${theme.muted}`}>/ {item.baseUnit}</span>
                         </p>
                         <p className={`mt-0.5 text-xs ${theme.muted}`}>
-                          សរុប: ${(Number(item.stockBaseQty || 0) * Number(item.unitCostBase || 0)).toFixed(2)}
+                          សរុប: {formatUsdTwoDigits(Number(item.stockBaseQty || 0) * Number(item.unitCostBase || 0))}
                         </p>
                       </td>
 
                       {/* Status */}
                       <td className="px-5 py-3.5 text-center">
-                        <StockStatusBadge status={item.status} getStatusClass={getStatusClass} />
+                        <div className="flex flex-col items-center gap-1.5">
+                          <StockStatusBadge status={item.status} getStatusClass={getStatusClass} />
+                          <ExpiryBadge info={nearestExpiry?.info} />
+                        </div>
                       </td>
 
                       {/* Actions */}

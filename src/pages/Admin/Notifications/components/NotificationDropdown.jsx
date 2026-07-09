@@ -14,7 +14,7 @@ export default function NotificationDropdown({
   return (
     <div
       className={[
-        "absolute right-0 top-[calc(100%+0.75rem)] z-50 w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border shadow-2xl",
+        "absolute right-0 top-[calc(100%+0.75rem)] isolate z-[9999] w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-2xl border shadow-2xl",
         isDark
           ? "border-white/10 bg-zinc-900 text-white shadow-black/40"
           : "border-zinc-200 bg-white text-zinc-900 shadow-black/15",
@@ -24,7 +24,7 @@ export default function NotificationDropdown({
         <div>
           <p className="text-sm font-extrabold">ការជូនដំណឹង</p>
           <p className={["mt-0.5 text-xs", isDark ? "text-zinc-400" : "text-zinc-500"].join(" ")}>
-            ការព្រមានស្តុកស្ទើរអស់ពីឃ្លាំង
+            ស្តុកស្ទើរអស់ និងទំនិញជិតផុតកំណត់
           </p>
         </div>
 
@@ -41,7 +41,7 @@ export default function NotificationDropdown({
         </button>
       </div>
 
-      <div className="max-h-65 overflow-y-auto p-3">
+      <div className="max-h-80 overflow-y-auto p-3">
         {isLoading && (
           <div className="space-y-2">
             {[0, 1, 2].map((item) => (
@@ -63,13 +63,13 @@ export default function NotificationDropdown({
         )}
 
         {!isLoading && !isError && alerts.length === 0 && (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 px-4 py-8 text-center dark:border-white/10">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+          <div className="relative z-0 flex flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-zinc-300 bg-white px-4 py-8 text-center dark:border-white/10 dark:bg-zinc-900">
+            <div className="relative z-10 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
               <FiCheckCircle className="text-xl" />
             </div>
-            <p className="mt-3 text-sm font-bold">គ្មានទំនិញស្ទើរអស់</p>
+            <p className="mt-3 text-sm font-bold">គ្មានការជូនដំណឹង</p>
             <p className={["mt-1 text-xs", isDark ? "text-zinc-400" : "text-zinc-500"].join(" ")}>
-              ស្តុកទំនិញទាំងអស់នៅលើសកម្រិតអប្បបរមា។
+              មិនមានស្តុកស្ទើរអស់ ឬទំនិញជិតផុតកំណត់ទេ។
             </p>
           </div>
         )}
@@ -78,7 +78,7 @@ export default function NotificationDropdown({
           <div className="space-y-2">
             {alerts.map((alert) => (
               <NotificationItem
-                key={`${alert.id}-${alert.variantCode}`}
+                key={`${alert.type}-${alert.id}-${alert.variantCode || alert.batchNo || ""}`}
                 alert={alert}
                 isDark={isDark}
                 onClick={() => onItemClick(alert)}

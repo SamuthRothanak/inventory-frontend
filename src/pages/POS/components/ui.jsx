@@ -38,7 +38,7 @@ export function Divider({ className = "" }) {
 }
 
 // ─── PaymentRow ──────────────────────────────────────────────────
-export function PaymentRow({ label, currency, received, applied, change }) {
+export function PaymentRow({ label, currency, received, applied, change, changeCurrency = currency }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
       <p className="mb-2 font-semibold text-slate-800">{label}</p>
@@ -56,7 +56,7 @@ export function PaymentRow({ label, currency, received, applied, change }) {
         <div className="flex justify-between border-t border-slate-200 pt-1.5">
           <span>អាប់</span>
           <span className={cn("font-semibold", change > 0 ? "text-emerald-600" : "text-slate-900")}>
-            {currency === "KHR" ? khr(change) : usd(change)}
+            {changeCurrency === "KHR" ? khr(change) : usd(change)}
           </span>
         </div>
       </div>

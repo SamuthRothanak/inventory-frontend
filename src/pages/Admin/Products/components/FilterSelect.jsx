@@ -73,7 +73,7 @@ export default function FilterSelect({
   };
 
   return (
-    <div className="relative" ref={wrapperRef}>
+    <div className="relative isolate" ref={wrapperRef}>
       <span
         className={`pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-lg ${theme.muted}`}
       >
@@ -83,7 +83,7 @@ export default function FilterSelect({
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className={`flex h-12 w-full items-center justify-between rounded-2xl border pl-11 pr-4 text-left text-sm outline-none transition focus:ring-4 ${theme.select}`}
+        className={`relative z-0 flex h-12 w-full items-center justify-between rounded-2xl border pl-11 pr-4 text-left text-sm outline-none transition focus:ring-4 ${theme.select}`}
       >
         <span className="truncate">{selectedOption?.label || "Select"}</span>
         <FiChevronDown

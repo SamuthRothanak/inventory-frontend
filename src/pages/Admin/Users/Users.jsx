@@ -20,7 +20,12 @@ import UserFormModal from "./components/UserFormModal";
 import UserViewModal from "./components/UserViewModal";
 
 import { userSchema, defaultValues } from "./schemas/userSchema";
-import { extractUsers, getRoleName, getStatusLabel } from "./utils/userUtils";
+import {
+  extractUsers,
+  getRoleLabel,
+  getRoleName,
+  getStatusLabel,
+} from "./utils/userUtils";
 
 function useLockBodyScroll(isOpen) {
   useEffect(() => {
@@ -119,7 +124,14 @@ export default function Users() {
     if (!keyword) return users;
 
     return users.filter((item) =>
-      [item.name, item.username, item.email, item.phone, item.role]
+      [
+        item.name,
+        item.username,
+        item.email,
+        item.phone,
+        item.role,
+        getRoleLabel(item.role),
+      ]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(keyword))
     );

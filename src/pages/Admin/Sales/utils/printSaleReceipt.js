@@ -331,7 +331,7 @@ export function printSaleReceipt(sale, storeName = "Hak Ley Mart") {
       <div class="totals-block">
         <div class="section-heading">សរុប</div>
         <div class="total-row">
-          <span class="total-label">សរុបរង</span>
+          <span class="total-label">តម្លៃមុនបញ្ចុះ</span>
           <span class="total-value">${fmtUsd(sale.subtotal)}</span>
         </div>
         ${Number(sale.discountTotal || 0) > 0 ? `
@@ -353,7 +353,7 @@ export function printSaleReceipt(sale, storeName = "Hak Ley Mart") {
           <span class="grand-label">សរុបទូទៅ</span>
           <div>
             <div class="grand-value">${fmtUsd(sale.grandTotal)}</div>
-            ${grandTotalKhr ? `<div class="grand-khr">≈ ${grandTotalKhr}</div>` : ""}
+            ${grandTotalKhr ? `<div class="grand-khr">= ${grandTotalKhr}</div>` : ""}
           </div>
         </div>
       </div>

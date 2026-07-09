@@ -1358,7 +1358,10 @@ export default function Products() {
           mode={variantFormState.mode}
           product={variantFormState.product}
           variant={variantFormState.variant}
+          units={units}
           theme={theme}
+          activeExchangeRate={activeExchangeRate}
+          activeKhrRounding={activeKhrRounding}
           isSaving={
             createVariantMutation.isPending || updateVariantMutation.isPending
           }

@@ -305,7 +305,7 @@ export default function Sale() {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const [chartPeriod, setChartPeriod] = useState("សប្តាហ៍");
+  const [chartPeriod, setChartPeriod] = useState("សប្ដាហ៍");
 
   const weeklyChartData = useMemo(() => {
     const DAYS = ["ច័ន្ទ", "អង្គារ", "ពុធ", "ព្រ.ហ", "សុក្រ", "សៅរ៏", "អាទិត្យ"];
@@ -329,30 +329,55 @@ export default function Sale() {
   }, [sales]);
 
   const monthlyChartData = useMemo(() => {
-    const MONTHS = ["មករា", "កុម្ភៈ", "មីនា", "មេសា", "ឧសភា", "មិថុនា", "កក្កដា", "សីហា", "កញ្ញា", "តុលា", "វិច្ឆិកា", "ធ្នូ"];
-    const totals = Object.fromEntries(MONTHS.map((m) => [m, 0]));
-    const year = new Date().getFullYear();
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const ranges = [
+      { day: "សប្ដាហ៍ទី 1", range: "ថ្ងៃទី 1–7", from: 1, to: 7, amount: 0 },
+      { day: "សប្ដាហ៍ទី 2", range: "ថ្ងៃទី 8–14", from: 8, to: 14, amount: 0 },
+      { day: "សប្ដាហ៍ទី 3", range: "ថ្ងៃទី 15–21", from: 15, to: 21, amount: 0 },
+      { day: "សប្ដាហ៍ទី 4", range: `ថ្ងៃទី 22–${lastDay}`, from: 22, to: lastDay, amount: 0 },
+    ];
+
     for (const sale of sales) {
       const d = new Date(sale.saleDate);
-      if (d.getFullYear() === year && sale.saleStatus === "completed" && sale.paymentStatus !== "refunded") {
-        totals[MONTHS[d.getMonth()]] += Number(sale.grandTotal || 0);
+      if (
+        d.getFullYear() === year &&
+        d.getMonth() === month &&
+        sale.saleStatus === "completed" &&
+        sale.paymentStatus !== "refunded"
+      ) {
+        const range = ranges.find(
+          ({ from, to }) => d.getDate() >= from && d.getDate() <= to
+        );
+
+        if (range) {
+          range.amount += Number(sale.grandTotal || 0);
+        }
       }
     }
-    return MONTHS.map((day) => ({ day, amount: totals[day] }));
+
+    return ranges.map(({ day, range, amount }) => ({ day, range, amount }));
   }, [sales]);
 
   const yearlyChartData = useMemo(() => {
+    const MONTHS = ["មករា", "កុម្ភៈ", "មីនា", "មេសា", "ឧសភា", "មិថុនា", "កក្កដា", "សីហា", "កញ្ញា", "តុលា", "វិច្ឆិកា", "ធ្នូ"];
     const currentYear = new Date().getFullYear();
-    const START_YEAR = 2026;
-    const years = Array.from({ length: currentYear - START_YEAR + 1 }, (_, i) => START_YEAR + i);
-    const totals = Object.fromEntries(years.map((y) => [String(y), 0]));
+    const totals = Object.fromEntries(MONTHS.map((month) => [month, 0]));
+
     for (const sale of sales) {
-      const y = String(new Date(sale.saleDate).getFullYear());
-      if (totals[y] !== undefined && sale.saleStatus === "completed" && sale.paymentStatus !== "refunded") {
-        totals[y] += Number(sale.grandTotal || 0);
+      const d = new Date(sale.saleDate);
+      if (
+        d.getFullYear() === currentYear &&
+        sale.saleStatus === "completed" &&
+        sale.paymentStatus !== "refunded"
+      ) {
+        totals[MONTHS[d.getMonth()]] += Number(sale.grandTotal || 0);
       }
     }
-    return years.map((y) => ({ day: String(y), amount: totals[String(y)] }));
+
+    return MONTHS.map((day) => ({ day, amount: totals[day] }));
   }, [sales]);
 
   const activeChartData =
@@ -385,7 +410,7 @@ export default function Sale() {
     "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtKhr = (n) =>
     Number(n) > 0
-      ? "≈ " + Math.round(Number(n) * displayRate).toLocaleString() + " ៛"
+      ? "= " + Math.round(Number(n) * displayRate).toLocaleString() + " ៛"
       : null;
 
   const METHOD_LABEL = { cash: "សាច់ប្រាក់", bank_transfer: "ផ្ទេរ", qr: "QR", card: "កាត", other: "ផ្សេងៗ" };
@@ -401,6 +426,21 @@ export default function Sale() {
 
     const labels = sale.payments.map((p) => p.providerName || METHOD_LABEL[p.paymentMethod] || p.paymentMethod);
     return [...new Set(labels)].join(" + ");
+  };
+
+  const getChangeSummary = (sale) => {
+    const totals = sale.payments.reduce((sum, p) => {
+      const change = Number(p.changeAmount || 0);
+      if (change <= 0) return sum;
+      const currency = p.changeCurrency === "KHR" ? "KHR" : "USD";
+      sum[currency] += change;
+      return sum;
+    }, { USD: 0, KHR: 0 });
+
+    return [
+      totals.USD > 0 ? fmtUsd(totals.USD) : null,
+      totals.KHR > 0 ? `${Math.round(totals.KHR).toLocaleString()} ៛` : null,
+    ].filter(Boolean).join(" + ") || null;
   };
 
   const getItemsCount = (sale) => {
@@ -940,6 +980,11 @@ export default function Sale() {
                     <p className={`mt-1 text-xs ${theme.muted}`}>
                       តម្លៃដើម ${Number(sale.subtotal).toFixed(2)}
                     </p>
+                    {getChangeSummary(sale) && (
+                      <p className="mt-1 text-xs font-semibold text-emerald-600">
+                        អាប់ {getChangeSummary(sale)}
+                      </p>
+                    )}
                   </td>
 
                   <td className="px-5 py-4 text-center">

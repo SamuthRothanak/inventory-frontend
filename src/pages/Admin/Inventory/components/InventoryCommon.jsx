@@ -4,6 +4,7 @@ import {
   FiCheck,
   FiCheckCircle,
   FiChevronDown,
+  FiClock,
   FiPackage,
   FiPlusCircle,
   FiX,
@@ -32,6 +33,23 @@ const formatStockValue = (raw) => {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
+
+export const formatUsdTwoDigits = (value) =>
+  `$${Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+export function ExpiryBadge({ info, showAll = false }) {
+  if (!info || (!showAll && !info.shouldWarn)) return null;
+
+  return (
+    <span className={`inline-flex w-fit items-center justify-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${info.className}`}>
+      <FiClock className="shrink-0" />
+      {info.label}
+    </span>
+  );
+}
 
 const sanitizeNumber = (value, allowDecimal = true) => {
   let nextValue = String(value || "").replace(/-/g, "");

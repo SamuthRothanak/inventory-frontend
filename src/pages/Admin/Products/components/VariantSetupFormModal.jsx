@@ -16,7 +16,7 @@ import {
 
 import ModalShell from "./ModalShell";
 import SearchableDropdown from "./SearchableDropdown";
-import { SizeUnitSelect } from "./SizeUnitSelect";
+import { CreatableOptionSelect, SizeUnitSelect } from "./SizeUnitSelect";
 
 const DEFAULT_EXCHANGE_RATE = 0;
 const makeLocalKey = (prefix) => `${prefix}_${Date.now()}_${Math.random()}`;
@@ -41,6 +41,10 @@ function onlyPositiveNumber(value, allowDecimal = true) {
 
 function onlyText(value) {
   return String(value || "").replace(/[0-9]/g, "");
+}
+
+function cleanNamePart(value) {
+  return String(value || "").replace(/[\s\u00A0\u1680\u180E\u2000-\u200D\u202F\u205F\u3000]+/g, " ");
 }
 
 function preventInvalidNumberKey(event, allowDecimal = true) {
@@ -80,6 +84,16 @@ function roundKhr(value, mode = "ceil") {
     case "none":  return Number(amount.toFixed(2));
     default:      return Math.ceil(amount / 100) * 100;
   }
+}
+
+function khrRoundingLabel(value) {
+  const labels = {
+    ceil: "បង្គត់ឡើង",
+    round: "បង្គត់ជិតបំផុត",
+    floor: "បង្គត់ចុះ",
+    none: "តម្លៃពិត (មិនបង្គត់)",
+  };
+  return labels[value] || labels.ceil;
 }
 
 function convertPrice(inputPrice, inputCurrency, exchangeRate, khrMode = "ceil") {
@@ -163,8 +177,6 @@ export default function VariantSetupFormModal({
   const [priceRules, setPriceRules] = useState([makePriceRule(initialUnitKey)]);
   const [formError, setFormError] = useState("");
   const [isAutoName, setIsAutoName] = useState(true);
-  const [showSize, setShowSize] = useState(false);
-  const [showColor, setShowColor] = useState(false);
   const [thresholdUnitKey, setThresholdUnitKey] = useState(null);
   const prevLargestKeyRef = useRef(null);
   const isFirstRunRef = useRef(true);
@@ -400,11 +412,27 @@ export default function VariantSetupFormModal({
 
         <Section theme={theme} icon={<FiPackage />} title="១. ព័ត៌មានមុខទំនិញ">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FormInput label="លេខកូដមុខទំនិញ" required theme={theme} icon={<FiHash />}
-              value={variantForm.variant_code} onChange={(v) => updateVariant("variant_code", v)}
-              placeholder="PV-BEER-330ML-CAN" />
             <div>
-              <div className="mb-2 flex items-center justify-between gap-3">
+              <label className={`mb-2 flex h-7 items-center text-xs font-semibold ${theme.muted}`}>
+                លេខកូដមុខទំនិញ <span className="ml-1 text-red-400">*</span>
+              </label>
+              <div className="relative">
+                <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
+                <input
+                  value={variantForm.variant_code}
+                  onChange={(e) => updateVariant("variant_code", e.target.value)}
+                  placeholder="PV-BEER-330ML-CAN"
+                  className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+                />
+              </div>
+              <div className="min-h-[1.375rem]">
+                <p className={`mt-1.5 text-xs ${theme.muted}`}>
+                  លេខកូដបង្កើតស្វ័យប្រវត្តិ និងអាចកែបានបើចាំបាច់។
+                </p>
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 flex h-7 items-center justify-between gap-3">
                 <label className={`block text-xs font-semibold ${theme.muted}`}>
                   ឈ្មោះមុខទំនិញ <span className="ml-1 text-red-400">*</span>
                 </label>
@@ -437,16 +465,26 @@ export default function VariantSetupFormModal({
                   value={variantNameSuffix}
                   readOnly={isAutoName}
                   onChange={(e) => {
-                    const suffix = e.target.value;
-                    handleVariantNameChange(productName ? `${productName} ${suffix}`.trim() : suffix);
+                    const suffix = cleanNamePart(e.target.value);
+                    handleVariantNameChange(productName ? (suffix ? `${productName} ${suffix}` : productName) : suffix);
                   }}
                   className={`min-w-0 flex-1 bg-transparent px-3 text-sm outline-none ${isAutoName ? "cursor-default text-zinc-500 dark:text-zinc-400" : "text-zinc-900 dark:text-zinc-100"}`}
                 />
               </div>
-              <p className={`mt-1.5 text-xs ${theme.muted}`}>
-                {isAutoName ? "ឈ្មោះបង្កើតស្វ័យប្រវត្តិពី សណ្ឋានទំនិញ និង ទំហំ។" : "កំពុងកែដោយខ្លួនឯង។ ចុច ↺ ស្វ័យប្រវត្តិ ដើម្បីបង្កើតវិញ។"}
-              </p>
+              <div className="min-h-[1.375rem]">
+                <p className={`mt-1.5 text-xs ${theme.muted}`}>
+                  {isAutoName ? "ឈ្មោះបង្កើតស្វ័យប្រវត្តិពី សណ្ឋានទំនិញ និង ទំហំ។" : "កំពុងកែដោយខ្លួនឯង។ ចុច ↺ ស្វ័យប្រវត្តិ ដើម្បីបង្កើតវិញ។"}
+                </p>
+              </div>
             </div>
+          </div>
+
+          <div className="mt-5 border-t border-zinc-200 pt-5 dark:border-white/10">
+            <div className="mb-4">
+              <h5 className="text-sm font-bold">ព័ត៌មានលម្អិតបន្ថែម</h5>
+              <p className={`mt-0.5 text-xs ${theme.muted}`}>សណ្ឋាន ទំហំ ពណ៌ និងរូបភាពសម្រាប់មុខទំនិញនេះ។</p>
+            </div>
+            <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
             <PackageTypeCombobox
               label="សណ្ឋានទំនិញ"
               required
@@ -455,57 +493,30 @@ export default function VariantSetupFormModal({
               onChange={(v) => updateVariant("package_type", v)}
             />
             <div>
-              {showSize ? (
-                <div>
-                  <label className={`mb-2 block text-xs font-semibold ${theme.muted}`}>ទំហំ</label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
-                      <input value={variantForm.size_value}
-                        onChange={(e) => updateVariant("size_value", e.target.value)}
-                        placeholder="330"
-                        className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
-                    </div>
-                    <SizeUnitSelect value={variantForm.size_unit} onChange={(v) => updateVariant("size_unit", v)} theme={theme} />
-                  </div>
-                  <button type="button" onClick={() => { setShowSize(false); updateVariant("size_value", ""); updateVariant("size_unit", ""); }}
-                    className={`mt-1 text-xs ${theme.muted} hover:text-red-500`}>
-                    − លុបទំហំ
-                  </button>
+              <label className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
+                ទំហំ <span className="font-normal">(ស្រេចចិត្ត)</span>
+              </label>
+              <div className="flex h-11 overflow-visible rounded-xl border border-zinc-200 bg-white transition focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-500/20 dark:border-white/10 dark:bg-white/[0.03]">
+                <div className="relative min-w-0 flex-1">
+                  <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
+                  <input value={variantForm.size_value}
+                    onChange={(e) => updateVariant("size_value", e.target.value)}
+                    placeholder="330"
+                    className="h-full w-full bg-transparent pl-10 pr-3 text-sm outline-none" />
                 </div>
-              ) : (
-                <div className="flex h-full items-end pb-1">
-                  <button type="button" onClick={() => setShowSize(true)}
-                    className={`inline-flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-semibold transition hover:border-red-400 hover:text-red-500 dark:border-white/10 dark:hover:border-red-500/60 dark:hover:text-red-400 ${theme.muted}`}>
-                    <FiHash className="text-sm" /> + បន្ថែមទំហំ (ស្រេចចិត្ត)
-                  </button>
-                </div>
-              )}
+                <SizeUnitSelect value={variantForm.size_unit} onChange={(v) => updateVariant("size_unit", v)} theme={theme} embedded />
+              </div>
             </div>
-          </div>
 
-          <div className="mt-4 flex flex-wrap gap-6">
             <div>
-              {showColor ? (
-                <div className="w-52">
-                  <FormInput label="ពណ៌" sanitize="text" theme={theme} icon={<FiTag />}
-                    value={variantForm.color} onChange={(v) => updateVariant("color", v)} placeholder="ក្រហម" />
-                  <button type="button" onClick={() => { setShowColor(false); updateVariant("color", ""); }}
-                    className={`mt-1 text-xs ${theme.muted} hover:text-red-500`}>
-                    − លុបពណ៌
-                  </button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => setShowColor(true)}
-                  className={`inline-flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-semibold transition hover:border-red-400 hover:text-red-500 dark:border-white/10 dark:hover:border-red-500/60 dark:hover:text-red-400 ${theme.muted}`}>
-                  <FiTag className="text-sm" /> + បន្ថែមពណ៌ (ស្រេចចិត្ត)
-                </button>
-              )}
+              <FormInput label="ពណ៌ (ស្រេចចិត្ត)" sanitize="text" theme={theme} icon={<FiTag />}
+                value={variantForm.color} onChange={(v) => updateVariant("color", v)} placeholder="ក្រហម" />
             </div>
 
-            <div className="w-full min-w-[280px] sm:min-w-[420px]">
+            <div>
               <ImageInput label="រូបភាពមុខទំនិញ" theme={theme} previewFile={selectedImage}
                 onChange={(file) => updateVariant("imageFile", file)} />
+            </div>
             </div>
           </div>
         </Section>
@@ -633,7 +644,7 @@ export default function VariantSetupFormModal({
                           <div className="mt-3 flex items-center justify-between">
                             <p className={`text-[11px] ${theme.muted}`}>
                               {Number(activeExchangeRate || 0) > 0
-                                ? `អត្រា: 1 USD = ${Number(activeExchangeRate).toLocaleString()}៛ · ${activeKhrRounding}`
+                                ? `អត្រា: 1 USD = ${Number(activeExchangeRate).toLocaleString()}៛ · ${khrRoundingLabel(activeKhrRounding)}`
                                 : "គ្មានអត្រាប្ដូររូបិយប័ណ្ណ"}
                             </p>
                             <button type="button" onClick={() => removePriceRule(idx)}
@@ -721,29 +732,24 @@ export default function VariantSetupFormModal({
 }
 
 function PackageTypeCombobox({ label, required = false, theme, value = "", onChange }) {
-  const matchedType = PACKAGE_TYPES.find((t) => t.toLowerCase() === (value || "").toLowerCase());
-  const [showCustom, setShowCustom] = React.useState(!!value && !matchedType);
-  const options = [
-    ...PACKAGE_TYPES.map((t) => ({ value: t, label: t })),
-    { value: "__other__", label: "ផ្សេងៗ (វាយខាងក្រោម)…" },
-  ];
-  const handleDropdownChange = (selected) => {
-    if (selected === "__other__") { setShowCustom(true); onChange(""); }
-    else { setShowCustom(false); onChange(selected); }
-  };
   return (
     <div>
-      <SearchableDropdown label={label} required={required} theme={theme} icon={<FiBox />}
-        value={showCustom ? "__other__" : (matchedType || "")}
-        onChange={handleDropdownChange} options={options} searchable={false} />
-      {showCustom && (
-        <div className="relative mt-2">
-          <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiBox /></span>
-          <input autoFocus value={value} onChange={(e) => onChange(e.target.value)}
-            placeholder="វាយសណ្ឋានទំនិញផ្ទាល់ខ្លួន..."
-            className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
-        </div>
-      )}
+      <CreatableOptionSelect
+        label={label}
+        required={required}
+        theme={theme}
+        icon={<FiBox />}
+        value={value}
+        onChange={onChange}
+        groups={[{ options: PACKAGE_TYPES }]}
+        placeholder="-- រើស --"
+        searchPlaceholder="ស្វែងរក ឬបញ្ចូលសណ្ឋានថ្មី"
+        hint="មិនឃើញ? វាយសណ្ឋានថ្មី រួចចុចបន្ថែម។"
+        createLabel="បន្ថែម"
+        existingLabel="ជម្រើសដែលមានស្រាប់"
+        widthClass="w-full"
+        menuWidthClass="w-full"
+      />
     </div>
   );
 }

@@ -5,7 +5,7 @@ export const userSchema = z
     id: z.number().nullable().optional(),
     isEdit: z.boolean().default(false),
     name: z.string().min(1, "សូមបញ្ចូលឈ្មោះពេញ ។"),
-    username: z.string().min(1, "សូមបញ្ចូល Username ។"),
+    username: z.string().min(1, "សូមបញ្ចូលឈ្មោះអ្នកប្រើ ។"),
     email: z.string().email("សូមបញ្ចូលអ៊ីម៉ែលឲត្រឹមត្រូវ ។"),
     phone: z
       .string()

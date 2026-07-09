@@ -63,7 +63,7 @@ export default function UserFormModal({
             <button
               type="button"
               onClick={closeModal}
-              aria-label="Close modal"
+              aria-label="បិទផ្ទាំង"
               disabled={isSaving}
               className="
                 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl
@@ -121,11 +121,11 @@ export default function UserFormModal({
                   />
 
                   <FormInput
-                    label="Username"
+                    label="ឈ្មោះអ្នកប្រើ"
                     required
                     register={register("username")}
                     error={errors.username}
-                    placeholder="បញ្ចូល username"
+                    placeholder="បញ្ចូលឈ្មោះអ្នកប្រើ"
                     theme={theme}
                     icon={<FiHash />}
                   />
@@ -220,10 +220,6 @@ export default function UserFormModal({
                     />
                   )}
                 </div>
-
-                <p className={`mt-3 text-xs leading-5 ${theme.muted}`}>
-                  អ្នកគ្រប់គ្រង អាចគ្រប់គ្រងទិន្ន័យប្រព័ន្ធ ។ អ្នកគិតលុយ សម្រាប់ POS ។ បុគ្គលិក មានសិទ្ធិចំកាត់ ។
-                </p>
               </FormSection>
             </div>
           </div>
