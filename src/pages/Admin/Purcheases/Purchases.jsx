@@ -6,11 +6,13 @@ import {
   FiAlertTriangle,
   FiCalendar,
   FiCheckCircle,
+  FiChevronDown,
   FiChevronLeft,
   FiChevronRight,
   FiClock,
   FiCreditCard,
   FiDollarSign,
+  FiDownload,
   FiEdit2,
   FiEye,
   FiFileText,
@@ -99,6 +101,11 @@ import {
   statusToApi,
   useLockBodyScroll,
 } from "./utils/purchaseUtils";
+import {
+  exportPurchasesCsv,
+  exportPurchasesExcel,
+  exportPurchasesPdf,
+} from "./utils/purchaseExport";
 
 const PURCHASE_ACTION_ICON_CLASS =
   "inline-flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-md ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-4 active:translate-y-0";
@@ -130,6 +137,7 @@ export default function Purchases() {
   const [dateFilter, setDateFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
@@ -359,9 +367,45 @@ export default function Purchases() {
     return Number(subtotal || 0) - Number(form.discountTotal || 0) + Number(form.deliveryFee || 0);
   };
 
-  const calculateLineTotalByPaymentMode = ({ paymentMode, acceptedQty, paidQty, unitCost }) => {
-    if (paymentMode === "pay_after_check") return Number(acceptedQty || 0) * Number(unitCost || 0);
-    return Number(paidQty || 0) * Number(unitCost || 0);
+  const calculateLineTotalsByPaymentMode = ({
+    paymentMode,
+    inputCurrency,
+    inputUnitCost,
+    invoiceTotal,
+    paidAmount,
+    invoicedQty,
+    acceptedQty,
+    paidQty,
+    exchangeRate,
+  }) => {
+    const rate = Number(exchangeRate || 0);
+    const unitCost = Number(inputUnitCost || 0);
+    const payableQty = paymentMode === "pay_after_check" ? Number(acceptedQty || 0) : Number(paidQty || 0);
+    const fullQty = Number(invoicedQty || 0);
+    const exactInvoiceTotal = Number(invoiceTotal || 0);
+    const exactPaidAmount = Number(paidAmount || 0);
+    const currency = String(inputCurrency || "USD").toUpperCase();
+
+    let inputLineTotal = payableQty * unitCost;
+    if (paymentMode !== "pay_after_check" && exactPaidAmount > 0) {
+      inputLineTotal = exactPaidAmount;
+    } else if (exactInvoiceTotal > 0 && fullQty > 0 && Math.abs(payableQty - fullQty) < 0.0001) {
+      inputLineTotal = exactInvoiceTotal;
+    }
+
+    if (!rate || rate <= 0) return { lineTotalUsd: 0, lineTotalKhr: 0 };
+
+    if (currency === "KHR") {
+      return {
+        lineTotalUsd: Number((inputLineTotal / rate).toFixed(2)),
+        lineTotalKhr: Number(inputLineTotal.toFixed(2)),
+      };
+    }
+
+    return {
+      lineTotalUsd: Number(inputLineTotal.toFixed(2)),
+      lineTotalKhr: Number((inputLineTotal * rate).toFixed(2)),
+    };
   };
 
   const calculateBalanceAmount = (grandTotal, paidAmount) => Math.max(0, Number(grandTotal || 0) - Number(paidAmount || 0));
@@ -369,7 +413,7 @@ export default function Purchases() {
   const getClaimRequiredCount = (purchase) => purchase.items.reduce((total, item) => total + Number(item.claimQty || 0), 0);
   const getDamagedCount = (purchase) => purchase.items.reduce((total, item) => total + Number(item.damagedQty || 0), 0);
 
-  const filteredPurchases = useMemo(() => {
+  const filterPurchaseList = (list) => {
     const search = searchTerm.toLowerCase();
     const fmtLocal = (d) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -383,12 +427,13 @@ export default function Purchases() {
 
     const monthStartStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
 
-    return purchases.filter((purchase) => {
+    return list.filter((purchase) => {
+      const lines = purchase.items?.length ? purchase.items : purchase.summaryItems || [];
       const matchesSearch =
         purchase.purchaseNo.toLowerCase().includes(search) ||
         purchase.supplierName.toLowerCase().includes(search) ||
         purchase.note.toLowerCase().includes(search) ||
-        purchase.items.some(
+        lines.some(
           (item) => item.variantName.toLowerCase().includes(search) || item.variantCode.toLowerCase().includes(search)
         );
 
@@ -404,7 +449,29 @@ export default function Purchases() {
 
       return matchesSearch && matchesStatus && matchesPaymentStatus && matchesDate;
     });
+  };
+
+  const filteredPurchases = useMemo(() => {
+    return filterPurchaseList(purchases);
   }, [purchases, searchTerm, statusFilter, paymentStatusFilter, dateFilter]);
+
+  const exportPurchases = useMemo(() => {
+    return filterPurchaseList(allPurchases.length > 0 ? allPurchases : purchases);
+  }, [allPurchases, purchases, searchTerm, statusFilter, paymentStatusFilter, dateFilter]);
+
+  const handleExport = (type) => {
+    setExportMenuOpen(false);
+    if (type === "pdf") {
+      const opened = exportPurchasesPdf(exportPurchases);
+      if (!opened) window.alert("PDF export was blocked. Please allow pop-ups and try again.");
+      return;
+    }
+    if (type === "excel") {
+      exportPurchasesExcel(exportPurchases);
+      return;
+    }
+    exportPurchasesCsv(exportPurchases);
+  };
 
   const totalPurchaseReturnAmount = purchaseReturns.reduce((total, item) => total + Number(item.subtotal || 0), 0);
 
@@ -1054,13 +1121,15 @@ export default function Purchases() {
       damagedQty: item.damagedQty,
       claimQty: item.claimQty,
       inputCurrency: item.inputCurrency || "USD",
-      inputUnitCost: item.inputUnitCost || item.unitCost,
+      inputUnitCost: item.inputUnitCost || item.unitCost ? String(Number(item.inputUnitCost || item.unitCost || 0).toFixed(2)) : "",
       invoiceTotal: (() => {
+        if (item.invoiceTotal) return String(Number(item.invoiceTotal).toFixed(2));
         const cost = Number(item.inputUnitCost || item.unitCost || 0);
         const qty = Number(item.invoicedQty || 0);
         return cost > 0 && qty > 0 ? String(parseFloat((cost * qty).toFixed(2))) : "";
       })(),
       paidAmount: (() => {
+        if (item.paidAmount) return String(Number(item.paidAmount).toFixed(2));
         const cost = Number(item.inputUnitCost || item.unitCost || 0);
         const qty = Number(item.paidQty || 0);
         return cost > 0 && qty > 0 ? String(parseFloat((cost * qty).toFixed(2))) : "";
@@ -1086,10 +1155,10 @@ export default function Purchases() {
       if (field === "invoiceTotal") {
         const qty = Number(next.invoicedQty || 0);
         if (qty > 0 && value !== "") {
-          next.inputUnitCost = String(parseFloat((Number(value) / qty).toFixed(4)));
+          next.inputUnitCost = String(Number(value) / qty > 0 ? Number(Number(value) / qty).toFixed(2) : "0.00");
           next.unitCost = next.inputUnitCost;
           if (purchaseForm.paymentMode === "partial_prepaid" && next.paidAmount !== "") {
-            const newCost = parseFloat((Number(value) / qty).toFixed(4));
+            const newCost = Number(next.inputUnitCost || 0);
             next.paidQty = newCost > 0 ? String(parseFloat((Number(next.paidAmount) / newCost).toFixed(4))) : "";
           }
         }
@@ -1156,9 +1225,9 @@ export default function Purchases() {
     if (!itemForm.variantUnitId) nextErrors.variantUnitId = "សូមជ្រើសប្រភេទផលិតផល";
     if (!itemForm.inputCurrency) nextErrors.inputCurrency = "សូមជ្រើសរូបិយប័ណ្ណ";
     if (!itemForm.invoicedQty || Number(itemForm.invoicedQty) <= 0) nextErrors.invoicedQty = "ចំនួនកម្មង់ត្រូវតែធំជាង 0";
-    if (!itemForm.invoiceTotal || Number(itemForm.invoiceTotal) <= 0) nextErrors.invoiceTotal = "សរុបវិក្កយបត្រត្រូវតែធំជាង 0";
+    if (!itemForm.invoiceTotal || Number(itemForm.invoiceTotal) <= 0) nextErrors.invoiceTotal = "សរុបលុយវិក្កយបត្រត្រូវតែធំជាង 0";
     if (purchaseForm.paymentMode === "partial_prepaid" && (itemForm.paidAmount === "" || Number(itemForm.paidAmount) < 0)) nextErrors.paidAmount = "ទឹកប្រាក់បានបង់ចាំបាច់";
-    if (purchaseForm.paymentMode === "partial_prepaid" && Number(itemForm.paidAmount || 0) > Number(itemForm.invoicedQty || 0) * Number(itemForm.inputUnitCost || 0)) nextErrors.paidAmount = "ទឹកប្រាក់បានបង់មិនអាចលើសសរុបវិក្កយបត្រ";
+    if (purchaseForm.paymentMode === "partial_prepaid" && Number(itemForm.paidAmount || 0) > Number(itemForm.invoicedQty || 0) * Number(itemForm.inputUnitCost || 0)) nextErrors.paidAmount = "ទឹកប្រាក់បានបង់មិនអាចលើសសរុបលុយវិក្កយបត្រ";
     if (itemForm.receivedQty === "" || Number(itemForm.receivedQty) < 0) nextErrors.receivedQty = "ចំនួនទទួលមិនអាចតិចជាង 0";
     if (itemForm.acceptedQty === "" || Number(itemForm.acceptedQty) < 0) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចតិចជាង 0";
     if (Number(itemForm.acceptedQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចលើសចំនួនកម្មង់";
@@ -1208,8 +1277,17 @@ export default function Purchases() {
       claimQty = receivedQty > 0 ? Math.max(0, paidQty - acceptedQty) : 0;
     }
 
-    const lineTotalUsd = calculateLineTotalByPaymentMode({ paymentMode, acceptedQty, paidQty, unitCost: unitCostUsd });
-    const lineTotalKhr = calculateLineTotalByPaymentMode({ paymentMode, acceptedQty, paidQty, unitCost: unitCostKhr });
+    const { lineTotalUsd, lineTotalKhr } = calculateLineTotalsByPaymentMode({
+      paymentMode,
+      inputCurrency,
+      inputUnitCost,
+      invoiceTotal: itemForm.invoiceTotal,
+      paidAmount: itemForm.paidAmount,
+      invoicedQty,
+      acceptedQty,
+      paidQty,
+      exchangeRate,
+    });
     const unitCostBase = unitCostUsd / Number(selectedUnit.conversionQty || 1);
 
     return {
@@ -1229,6 +1307,8 @@ export default function Purchases() {
       claimQty,
       inputCurrency,
       inputUnitCost,
+      invoiceTotal: Number(itemForm.invoiceTotal || 0),
+      paidAmount: Number(itemForm.paidAmount || 0),
       unitCost: unitCostUsd,
       unitCostUsd,
       unitCostKhr,
@@ -1378,6 +1458,17 @@ export default function Purchases() {
       paymentMode === "pay_after_check"
         ? Number(item.acceptedQty || 0)
         : Number(item.paidQty ?? item.invoicedQty ?? 0);
+    const lineTotals = calculateLineTotalsByPaymentMode({
+      paymentMode,
+      inputCurrency,
+      inputUnitCost,
+      invoiceTotal: item.invoiceTotal,
+      paidAmount: item.paidAmount,
+      invoicedQty: item.invoicedQty,
+      acceptedQty: item.acceptedQty,
+      paidQty: item.paidQty ?? item.invoicedQty,
+      exchangeRate,
+    });
 
     return {
       id: item.id,
@@ -1393,8 +1484,8 @@ export default function Purchases() {
       input_unit_cost: inputUnitCost,
       unit_cost_usd: unitCostUsd,
       unit_cost_khr: unitCostKhr,
-      line_total_usd: Number(item.lineTotalUsd ?? item.lineTotal ?? payableQty * unitCostUsd),
-      line_total_khr: Number(item.lineTotalKhr ?? payableQty * unitCostKhr),
+      line_total_usd: Number(item.lineTotalUsd ?? item.lineTotal ?? lineTotals.lineTotalUsd ?? payableQty * unitCostUsd),
+      line_total_khr: Number(item.lineTotalKhr ?? lineTotals.lineTotalKhr ?? payableQty * unitCostKhr),
       expired_date: expiredDate === "-" ? null : expiredDate,
       expiry_date: expiredDate === "-" ? null : expiredDate,
     };
@@ -1464,15 +1555,26 @@ export default function Purchases() {
         purchase.paymentMode === "pay_after_check"
           ? Number(item.acceptedQty || 0)
           : Number(item.paidQty ?? item.invoicedQty ?? 0);
+      const lineTotals = calculateLineTotalsByPaymentMode({
+        paymentMode: purchase.paymentMode,
+        inputCurrency: item.inputCurrency || "USD",
+        inputUnitCost: Number(item.inputUnitCost ?? item.unitCost ?? item.unitCostUsd ?? 0),
+        invoiceTotal: item.invoiceTotal,
+        paidAmount: item.paidAmount,
+        invoicedQty: item.invoicedQty,
+        acceptedQty: item.acceptedQty,
+        paidQty: item.paidQty ?? item.invoicedQty,
+        exchangeRate: Number(purchase.exchangeRateUsed || activeExchangeRate || 0),
+      });
 
       return {
         ...item,
         unitCost: unitCostUsd,
         unitCostUsd,
         unitCostKhr,
-        lineTotal: payableQty * unitCostUsd,
-        lineTotalUsd: payableQty * unitCostUsd,
-        lineTotalKhr: payableQty * unitCostKhr,
+        lineTotal: lineTotals.lineTotalUsd || payableQty * unitCostUsd,
+        lineTotalUsd: lineTotals.lineTotalUsd || payableQty * unitCostUsd,
+        lineTotalKhr: lineTotals.lineTotalKhr || payableQty * unitCostKhr,
       };
     });
 
@@ -2378,7 +2480,44 @@ export default function Purchases() {
 
             <div className="flex items-center justify-between px-5 py-3">
               <p className={`text-xs ${theme.muted}`}>បង្ហាញ {pagination.from || 0}–{pagination.to || filteredPurchases.length} នៃ {pagination.total || purchases.length} ការទិញ</p>
-              <span className={`text-xs ${theme.muted}`}>ចំនួនទាមទារ: {formatMoney(totalPurchaseReturnAmount)}</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs ${theme.muted}`}>ចំនួនទាមទារ: {formatMoney(totalPurchaseReturnAmount)}</span>
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={exportPurchases.length === 0}
+                    onClick={() => exportPurchases.length > 0 && setExportMenuOpen((open) => !open)}
+                    className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:border-red-400 hover:text-red-500`}
+                  >
+                    <FiDownload />
+                    Export
+                    <FiChevronDown className={`transition ${exportMenuOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {exportMenuOpen && (
+                    <div className={`absolute right-0 z-30 mt-2 w-40 overflow-hidden rounded-xl border py-1 shadow-xl ${
+                      isDark ? "border-white/10 bg-zinc-900" : "border-zinc-200 bg-white"
+                    }`}>
+                      {[
+                        ["pdf", "PDF"],
+                        ["csv", "CSV"],
+                        ["excel", "Excel"],
+                      ].map(([type, label]) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => handleExport(type)}
+                          className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold transition ${
+                            isDark ? "text-zinc-100 hover:bg-white/10" : "text-zinc-700 hover:bg-zinc-100"
+                          }`}
+                        >
+                          <FiFileText />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="hidden xl:block">

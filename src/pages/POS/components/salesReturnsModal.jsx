@@ -42,6 +42,17 @@ function usd(v) {
   return `$${Number(v || 0).toFixed(2)}`;
 }
 
+function sanitizeQtyInput(value, maxQty) {
+  let nextValue = String(value || "").replace(/-/g, "").replace(/[^0-9.]/g, "");
+  const parts = nextValue.split(".");
+  const integerPart = (parts[0] || "").replace(/^0+(?=\d)/, "") || (nextValue.startsWith(".") ? "0" : parts[0]);
+  const decimalPart = parts.slice(1).join("").slice(0, 3);
+  const sanitized = parts.length === 1 ? integerPart : `${integerPart || "0"}.${decimalPart}`;
+  const numeric = Number(sanitized || 0);
+  if (Number.isFinite(numeric) && numeric > Number(maxQty || 0)) return String(maxQty);
+  return sanitized;
+}
+
 // ── Returns List Tab ────────────────────────────────────────────────
 function ReturnsList() {
   const { data, isLoading, isError } = useQuery({
@@ -165,7 +176,7 @@ function NewReturn({ onSuccess }) {
             conversionQty:        convQty,
             maxQty,
             checked:       false,
-            qty:           maxQty,
+            qty:           String(maxQty),
             itemCondition: "good",
             stockAction:   "restock",
           };
@@ -194,13 +205,13 @@ function NewReturn({ onSuccess }) {
   }
 
   function handleSubmit() {
-    const selectedItems  = returnItems.filter((i) => i.checked && i.qty > 0);
+    const selectedItems  = returnItems.filter((i) => i.checked && Number(i.qty) > 0);
     if (!foundSale || selectedItems.length === 0) return;
 
     const returnableItems = returnItems.filter((i) => i.maxQty > 0);
     const isFullReturn    =
       selectedItems.length === returnableItems.length &&
-      selectedItems.every((si) => si.qty >= si.maxQty - 0.001);
+      selectedItems.every((si) => Number(si.qty) >= si.maxQty - 0.001);
 
     const payload = {
       sale_id:           foundSale.id,
@@ -210,11 +221,12 @@ function NewReturn({ onSuccess }) {
       reason:            reason || null,
       status:            "completed",
       items: selectedItems.map((item) => {
-        const baseQty = Math.round(item.qty * item.conversionQty * 1000) / 1000;
+        const returnQty = Number(item.qty || 0);
+        const baseQty = Math.round(returnQty * item.conversionQty * 1000) / 1000;
         return {
           sale_item_id:            item.saleItemId,
           product_variant_unit_id: item.productVariantUnitId,
-          qty:                     item.qty,
+          qty:                     returnQty,
           base_qty:                baseQty,
           item_condition:          item.itemCondition,
           stock_action:            item.stockAction,
@@ -227,7 +239,7 @@ function NewReturn({ onSuccess }) {
     mutation.mutate(payload);
   }
 
-  const selectedCount  = returnItems.filter((i) => i.checked && i.qty > 0).length;
+  const selectedCount  = returnItems.filter((i) => i.checked && Number(i.qty) > 0).length;
   const allReturned    = returnItems.length > 0 && returnItems.every((i) => i.maxQty <= 0);
 
   return (
@@ -339,13 +351,11 @@ function NewReturn({ onSuccess }) {
                         <div>
                           <p className="mb-1 text-[10px] font-bold text-slate-500">បរិមាណ</p>
                           <input
-                            type="number"
-                            min="0.001"
-                            max={item.maxQty}
-                            step="0.001"
+                            type="text"
+                            inputMode="decimal"
                             value={item.qty}
                             onChange={(e) =>
-                              updateItem(i, "qty", Math.min(parseFloat(e.target.value) || 0, item.maxQty))
+                              updateItem(i, "qty", sanitizeQtyInput(e.target.value, item.maxQty))
                             }
                             className="h-7 w-full rounded-lg border border-slate-200 px-2 text-xs text-slate-700 outline-none focus:border-red-300"
                           />

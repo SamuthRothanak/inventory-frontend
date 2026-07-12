@@ -18,6 +18,13 @@ import CustomTooltip  from "./components/CustomTooltip";
 import { getDashboardSummaryApi } from "../../../services/dashboard.service";
 import { useAuthStore } from "../../../store/authStore";
 
+const PAYMENT_METHOD_META = {
+  bank_transfer: { label: "ធនាគារ", icon: FiCreditCard, color: "text-violet-500", bg: "bg-violet-500/10" },
+  qr:            { label: "QR Code", icon: FiActivity,   color: "text-pink-500",   bg: "bg-pink-500/10"   },
+  card:          { label: "កាត",     icon: FiCreditCard, color: "text-blue-500",   bg: "bg-blue-500/10"   },
+  other:         { label: "ផ្សេងៗ",  icon: FiTag,        color: "text-amber-500",  bg: "bg-amber-500/10"  },
+};
+
 // ── Static nav links ──────────────────────────────────────────────
 const QUICK_ACTIONS = [
   { label: "បើក POS",          icon: FiZap,         to: "/pos",                bg: "bg-red-500 hover:bg-red-600 text-white",                                              permission: "sales.create"   },
@@ -37,6 +44,16 @@ const ACTIVITY_META = {
 const fmtUsd = (n) =>
   Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtInt = (n) => Number(n ?? 0).toLocaleString("en-US");
+const formatMixedMoney = (usd, khr) => {
+  const usdAmount = Number(usd ?? 0);
+  const khrAmount = Number(khr ?? 0);
+  const parts = [];
+
+  if (usdAmount > 0) parts.push(`$${fmtUsd(usdAmount)}`);
+  if (khrAmount > 0) parts.push(`៛${fmtInt(khrAmount)}`);
+
+  return parts.length > 0 ? parts.join(" / ") : "$0.00";
+};
 
 const fmtCompactUsd = (value) => {
   const amount = Number(value ?? 0);
@@ -85,8 +102,30 @@ function trendPct(today, yesterday) {
   return { pct: Math.abs(pct).toFixed(1), up: pct >= 0 };
 }
 
+function formatKhRelativeTime(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  if (text === "just now" || text === "now") return "ឥឡូវនេះ";
+
+  const match = text.match(/^(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago$/i);
+  if (!match) return text;
+
+  const amount = Number(match[1]);
+  const unitLabel = {
+    second: "វិនាទី",
+    minute: "នាទី",
+    hour: "ម៉ោង",
+    day: "ថ្ងៃ",
+    week: "សប្ដាហ៍",
+    month: "ខែ",
+    year: "ឆ្នាំ",
+  }[match[2].toLowerCase()] ?? match[2];
+
+  return `${amount.toLocaleString("en-US")} ${unitLabel} មុន`;
+}
+
 // ── Sub-components ────────────────────────────────────────────────
-function HeroCard({ theme, title, value, sub, icon, iconBg, trend }) {
+function HeroCard({ theme, title, value, sub, icon, iconBg, trend, details = [] }) {
   const Icon = icon;
   return (
     <div className={`rounded-2xl border p-6 shadow-sm ${theme.card}`}>
@@ -97,11 +136,21 @@ function HeroCard({ theme, title, value, sub, icon, iconBg, trend }) {
         </div>
       </div>
       <h2 className={`mt-4 text-4xl font-extrabold leading-none ${theme.pageTitle}`}>{value}</h2>
+      {details.length > 0 && (
+        <div className={`mt-4 space-y-2 rounded-xl border p-3 ${theme.softCard}`}>
+          {details.map((item) => (
+            <div key={item.label} className="flex items-center justify-between gap-3">
+              <span className={`text-xs font-semibold ${theme.muted}`}>{item.label}</span>
+              <span className={`shrink-0 text-sm font-extrabold ${item.className ?? theme.pageTitle}`}>{item.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="mt-3 flex items-center justify-between">
         <p className={`text-sm ${theme.muted}`}>{sub}</p>
         {trend && (
-          <span className={`flex items-center gap-1 text-sm font-bold ${trend.up ? "text-emerald-500" : "text-red-400"}`}>
-            {trend.up ? <FiArrowUp className="shrink-0" /> : <FiArrowDown className="shrink-0" />}
+          <span className={`flex max-w-[8.5rem] items-center gap-1 text-right text-xs font-bold leading-tight ${trend.up ? "text-emerald-500" : "text-red-400"}`}>
+            {trend.up ? <FiArrowUp className="shrink-0 text-sm" /> : <FiArrowDown className="shrink-0 text-sm" />}
             {trend.pct}% ធៀបម្សិលមិញ
           </span>
         )}
@@ -202,11 +251,19 @@ export default function Dashboard() {
   const d = {
     today: {
       sales_total_usd: 0,
+      sales_total_khr: 0,
       sales_count: 0,
       purchases_total_usd: 0,
+      purchases_total_khr: 0,
+      purchases_paid_usd: 0,
+      purchases_paid_khr: 0,
       purchases_count: 0,
       pending_usd: 0,
+      pending_khr: 0,
       pending_count: 0,
+      purchase_pending_usd: 0,
+      purchase_pending_khr: 0,
+      purchase_pending_count: 0,
       pending_stock_in_count: 0,
       supplier_claims_count: 0,
       sales_returns_today: 0,
@@ -238,8 +295,15 @@ export default function Dashboard() {
       cash_usd: 0,
       cash_khr: 0,
       bank_transfer_usd: 0,
+      bank_transfer_khr: 0,
       qr_usd: 0,
+      qr_khr: 0,
+      card_usd: 0,
+      card_khr: 0,
+      providers: [],
       total_collected_usd: 0,
+      total_collected_actual_usd: 0,
+      total_collected_khr: 0,
       ...(source.payment_breakdown ?? {}),
     },
     recent_activities: source.recent_activities ?? [],
@@ -248,24 +312,20 @@ export default function Dashboard() {
 
   // ── Trends ───────────────────────────────────────────────────────
   const salesTrend    = trendPct(d.today.sales_total_usd, d.yesterday.sales_total_usd);
-  const stockWorkCount =
-    Number(d.today.pending_stock_in_count ?? 0) +
-    Number(d.today.supplier_claims_count ?? 0) +
+  const purchaseTrend = trendPct(d.today.purchases_total_usd, d.yesterday.purchases_total_usd);
+  const stockFollowCount =
     Number(d.inventory.low_stock_count ?? 0) +
+    Number(d.inventory.out_of_stock_count ?? 0) +
     Number(d.inventory.expiring_soon_count ?? d.alerts.expiring_soon.length ?? 0);
+  const returnFollowCount =
+    Number(d.today.sales_returns_today ?? 0) +
+    Number(d.today.purchase_returns_pending ?? 0) +
+    Number(d.today.supplier_claims_count ?? 0);
 
-  // ── Secondary cards (hide if rawValue === 0) ─────────────────────
+  // ── Secondary cards ──────────────────────────────────────────────
   const secondaryCards = [
     {
-      label:  "ស្តុកស្ទើរអស់",
-      value:  fmtInt(d.inventory.low_stock_count),
-      raw:    d.inventory.low_stock_count,
-      icon:   FiAlertTriangle,
-      iconBg: "bg-red-500/10 text-red-500",
-      accent: "border-l-red-500",
-    },
-    {
-      label:  "រង់ចាំទទួលស្តុក",
+      label:  "ចាំទទួលស្តុក",
       value:  fmtInt(d.today.pending_stock_in_count),
       raw:    d.today.pending_stock_in_count,
       icon:   FiPackage,
@@ -273,38 +333,22 @@ export default function Dashboard() {
       accent: "border-l-violet-500",
     },
     {
-      label:  "ការទាមទារ​អ្នកផ្គត់ផ្គង់",
-      value:  fmtInt(d.today.supplier_claims_count),
-      raw:    d.today.supplier_claims_count,
-      icon:   FiTruck,
-      iconBg: "bg-orange-500/10 text-orange-500",
-      accent: "border-l-orange-500",
+      label:  "តាមដានស្តុក",
+      value:  fmtInt(stockFollowCount),
+      raw:    stockFollowCount,
+      icon:   FiAlertTriangle,
+      iconBg: stockFollowCount > 0 ? "bg-amber-500/10 text-amber-500" : "bg-emerald-500/10 text-emerald-500",
+      accent: stockFollowCount > 0 ? "border-l-amber-500" : "border-l-emerald-500",
     },
     {
-      label:  "ជិតផុតកំណត់",
-      value:  fmtInt(d.inventory.expiring_soon_count ?? d.alerts.expiring_soon.length),
-      raw:    Number(d.inventory.expiring_soon_count ?? d.alerts.expiring_soon.length ?? 0),
-      icon:   FiClock,
-      iconBg: "bg-amber-500/10 text-amber-500",
-      accent: "border-l-amber-500",
-    },
-    {
-      label:  "ត្រឡប់ ការលក់",
-      value:  fmtInt(d.today.sales_returns_today),
-      raw:    d.today.sales_returns_today,
+      label:  "ត្រឡប់ / ទាមទារ",
+      value:  fmtInt(returnFollowCount),
+      raw:    returnFollowCount,
       icon:   FiRotateCcw,
-      iconBg: "bg-rose-500/10 text-rose-500",
-      accent: "border-l-rose-500",
+      iconBg: returnFollowCount > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500",
+      accent: returnFollowCount > 0 ? "border-l-rose-500" : "border-l-emerald-500",
     },
-    {
-      label:  "ត្រឡប់ ការទិញ",
-      value:  fmtInt(d.today.purchase_returns_pending),
-      raw:    d.today.purchase_returns_pending,
-      icon:   FiRefreshCw,
-      iconBg: "bg-cyan-500/10 text-cyan-500",
-      accent: "border-l-cyan-500",
-    },
-  ].filter((card) => Number(card.raw ?? 0) > 0);
+  ];
 
   // ── Alerts ───────────────────────────────────────────────────────
   const alerts = [
@@ -338,11 +382,42 @@ export default function Dashboard() {
   const totalAlerts = alerts.reduce((s, a) => s + a.items.length, 0);
 
   // ── Payment methods ───────────────────────────────────────────────
-  const paymentMethods = [
+  const legacyPaymentMethods = [
     { label: "សាច់ប្រាក់ USD", value: `$${fmtUsd(d.payment_breakdown.cash_usd)}`,          icon: FiDollarSign, color: "text-emerald-500", bg: "bg-emerald-500/10" },
     { label: "សាច់ប្រាក់ KHR", value: `៛${fmtInt(d.payment_breakdown.cash_khr)}`,           icon: FiTag,        color: "text-blue-500",    bg: "bg-blue-500/10"    },
-    { label: "ABA / ធនាគារ",   value: `$${fmtUsd(d.payment_breakdown.bank_transfer_usd)}`,  icon: FiCreditCard, color: "text-violet-500",  bg: "bg-violet-500/10"  },
-    { label: "QR Code",         value: `$${fmtUsd(d.payment_breakdown.qr_usd)}`,             icon: FiActivity,   color: "text-pink-500",    bg: "bg-pink-500/10"    },
+    { label: "ABA / ធនាគារ",   value: formatMixedMoney(d.payment_breakdown.bank_transfer_usd, d.payment_breakdown.bank_transfer_khr),  icon: FiCreditCard, color: "text-violet-500",  bg: "bg-violet-500/10"  },
+    { label: "QR Code",         value: formatMixedMoney(d.payment_breakdown.qr_usd, d.payment_breakdown.qr_khr),             icon: FiActivity,   color: "text-pink-500",    bg: "bg-pink-500/10"    },
+  ];
+
+  // ── Dynamic payment provider cards ────────────────────────────────
+  const providerRows = Array.isArray(d.payment_breakdown.providers)
+    ? d.payment_breakdown.providers
+    : [];
+  const providerCards = providerRows
+    .filter((row) => Number(row?.total_usd ?? 0) > 0 || Number(row?.total_khr ?? 0) > 0)
+    .map((row) => {
+      const meta = PAYMENT_METHOD_META[row.method] ?? PAYMENT_METHOD_META.other;
+      const provider = String(row.provider ?? "").trim();
+
+      return {
+        label: provider || meta.label,
+        value: formatMixedMoney(row.total_usd, row.total_khr),
+        icon: meta.icon,
+        color: meta.color,
+        bg: meta.bg,
+      };
+    });
+
+  const legacyProviderCards = [
+    { label: "ធនាគារ", value: formatMixedMoney(d.payment_breakdown.bank_transfer_usd, d.payment_breakdown.bank_transfer_khr), rawUsd: d.payment_breakdown.bank_transfer_usd, rawKhr: d.payment_breakdown.bank_transfer_khr, ...PAYMENT_METHOD_META.bank_transfer },
+    { label: "QR Code", value: formatMixedMoney(d.payment_breakdown.qr_usd, d.payment_breakdown.qr_khr), rawUsd: d.payment_breakdown.qr_usd, rawKhr: d.payment_breakdown.qr_khr, ...PAYMENT_METHOD_META.qr },
+    { label: "កាត", value: formatMixedMoney(d.payment_breakdown.card_usd, d.payment_breakdown.card_khr), rawUsd: d.payment_breakdown.card_usd, rawKhr: d.payment_breakdown.card_khr, ...PAYMENT_METHOD_META.card },
+  ].filter((row) => Number(row.rawUsd ?? 0) > 0 || Number(row.rawKhr ?? 0) > 0);
+
+  const paymentMethods = [
+    legacyPaymentMethods[0],
+    legacyPaymentMethods[1],
+    ...(providerCards.length > 0 ? providerCards : legacyProviderCards),
   ];
 
   // ── Inventory bars ────────────────────────────────────────────────
@@ -365,7 +440,7 @@ export default function Dashboard() {
     .map((a, i) => ({
         id: i,
         ...(ACTIVITY_META[a.type] ?? { icon: FiActivity, color: "text-zinc-400", bg: "bg-zinc-100" }),
-        label: a.label, sub: a.sub, time: a.time,
+        label: a.label, sub: a.sub, time: formatKhRelativeTime(a.time),
       }));
 
   return (
@@ -407,45 +482,74 @@ export default function Dashboard() {
               theme={theme}
               title="ការលក់ថ្ងៃនេះ"
               value={`$${fmtUsd(d?.today.sales_total_usd)}`}
-              sub={`${fmtInt(d?.today.sales_count)} ប្រតិបត្តិការ`}
+              sub={`${fmtInt(d?.today.sales_count)} វិក្កយបត្រលក់`}
               icon={FiDollarSign}
               iconBg="bg-emerald-500/10 text-emerald-500"
               trend={salesTrend}
+              details={[
+                { label: "សរុប KHR", value: `៛${fmtInt(d?.today.sales_total_khr)}` },
+                { label: "សរុបជា USD", value: `$${fmtUsd(d?.today.sales_total_usd)}`, className: "text-emerald-500" },
+              ]}
             />
             <HeroCard
               theme={theme}
-              title="ប្រមូលបានថ្ងៃនេះ"
+              title="ទិញចូលថ្ងៃនេះ"
+              value={`$${fmtUsd(d?.today.purchases_total_usd)}`}
+              sub={`${fmtInt(d?.today.purchases_count)} វិក្កយបត្រទិញ`}
+              icon={FiShoppingCart}
+              iconBg="bg-blue-500/10 text-blue-500"
+              trend={purchaseTrend}
+              details={[
+                { label: "បានបង់ USD", value: `$${fmtUsd(d?.today.purchases_paid_usd)}` },
+                { label: "បានបង់ KHR", value: `៛${fmtInt(d?.today.purchases_paid_khr)}` },
+              ]}
+            />
+            <HeroCard
+              theme={theme}
+              title="ប្រមូលបានសុទ្ធថ្ងៃនេះ"
               value={`$${fmtUsd(d?.payment_breakdown.total_collected_usd)}`}
-              sub="សាច់ប្រាក់ ធនាគារ និង QR"
+              sub="ក្រោយដកលុយអាប់"
               icon={FiDollarSign}
               iconBg="bg-emerald-500/10 text-emerald-500"
               trend={null}
+              details={[
+                { label: "ទទួល USD", value: `$${fmtUsd(d?.payment_breakdown.total_collected_actual_usd)}` },
+                { label: "ទទួល KHR", value: `៛${fmtInt(d?.payment_breakdown.total_collected_khr)}` },
+              ]}
             />
-            <HeroCard
-              theme={theme}
-              title="មិនទាន់បង់ / មួយផ្នែក"
-              value={`$${fmtUsd(d?.today.pending_usd)}`}
-              sub={`${fmtInt(d?.today.pending_count)} មិនទាន់បង់ / មួយផ្នែក`}
-              icon={FiCreditCard}
-              iconBg="bg-amber-500/10 text-amber-500"
-              trend={null}
-            />
-            <HeroCard
-              theme={theme}
-              title="ការងារស្តុក"
-              value={fmtInt(stockWorkCount)}
-              sub="ស្តុកចូល ការទាមទារ ស្តុកស្ទើរអស់ ផុតកំណត់"
-              icon={FiPackage}
-              iconBg="bg-blue-500/10 text-blue-500"
-              trend={null}
-            />
+            <div className={`rounded-2xl border p-6 shadow-sm ${theme.card}`}>
+              <div className="flex items-center justify-between">
+                <p className={`text-sm font-semibold uppercase tracking-wide ${theme.muted}`}>ជំពាក់បច្ចុប្បន្ន</p>
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-xl text-amber-500">
+                  <FiCreditCard />
+                </div>
+              </div>
+              <div className="mt-4 space-y-3">
+                <div>
+                  <p className={`text-xs font-semibold ${theme.muted}`}>អតិថិជនជំពាក់យើង</p>
+                  <div className="mt-1 flex items-end justify-between gap-3">
+                    <p className={`text-3xl font-extrabold leading-none ${theme.pageTitle}`}>${fmtUsd(d?.today.pending_usd)}</p>
+                    <p className={`shrink-0 text-xs ${theme.muted}`}>{fmtInt(d?.today.pending_count)} វិក្កយបត្រ</p>
+                  </div>
+                  <p className={`mt-1 text-xs font-semibold ${theme.muted}`}>KHR: ៛{fmtInt(d?.today.pending_khr)}</p>
+                </div>
+                <div className={`border-t pt-3 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                  <p className={`text-xs font-semibold ${theme.muted}`}>យើងជំពាក់អ្នកផ្គត់ផ្គង់</p>
+                  <div className="mt-1 flex items-end justify-between gap-3">
+                    <p className="text-xl font-extrabold leading-none text-amber-500">${fmtUsd(d?.today.purchase_pending_usd)}</p>
+                    <p className={`shrink-0 text-xs ${theme.muted}`}>{fmtInt(d?.today.purchase_pending_count)} បញ្ជាទិញ</p>
+                  </div>
+                  <p className={`mt-1 text-xs font-semibold ${theme.muted}`}>KHR: ៛{fmtInt(d?.today.purchase_pending_khr)}</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
 
-      {/* ── Secondary Cards (hide if 0) ──────────────────────────────── */}
+      {/* ── Secondary Cards ──────────────────────────────────────────── */}
       {!isLoading && secondaryCards.length > 0 && (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-3">
+        <div className="grid gap-3 md:grid-cols-3">
           {secondaryCards.map((c) => (
             <MiniCard key={c.label} theme={theme} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} accent={c.accent} />
           ))}
@@ -459,12 +563,12 @@ export default function Dashboard() {
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
           <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className={`text-base font-bold ${theme.pageTitle}`}>និន្នាការលក់ & ទិញប្រចាំថ្ងៃ</h3>
-              <p className={`text-xs ${theme.muted}`}>សប្ដាហ៍នេះ - ការប្រែប្រួលនៃការលក់ និងទិញជា USD</p>
+              <h3 className={`text-base font-bold ${theme.pageTitle}`}>និន្នាការលក់ & ទិញតាមម៉ោង</h3>
+              <p className={`text-xs ${theme.muted}`}>ថ្ងៃនេះ - ពី 6 AM ដល់ 6 PM ជា USD សរុប</p>
             </div>
             <div className={`flex items-center gap-2 self-start rounded-xl border px-3 py-1.5 text-xs font-semibold sm:self-auto ${theme.badge}`}>
               <FiActivity className="shrink-0" />
-              <span>សប្ដាហ៍នេះ</span>
+              <span>ថ្ងៃនេះ</span>
               <span className={`border-l pl-2 ${isDark ? "border-white/10" : "border-zinc-300"}`}>
                 ដល់ {fmtCompactUsd(chartScale.max)}
               </span>
@@ -473,8 +577,7 @@ export default function Dashboard() {
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={d?.chart ?? []} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.gridLine} vertical={false} />
-              <XAxis dataKey="day" tick={{ fill: theme.axisColor, fontSize: 12 }} axisLine={false} tickLine={false}
-                tickFormatter={(v) => ({ Sun: "អាទិត្យ", Mon: "ច័ន្ទ", Tue: "អង្គារ", Wed: "ពុធ", Thu: "ព្រ.ហ", Fri: "សុក្រ", Sat: "សៅរ៏" }[v] ?? v)} />
+              <XAxis dataKey="day" tick={{ fill: theme.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis
                 tick={{ fill: theme.axisColor, fontSize: 11 }}
                 axisLine={false} tickLine={false}
@@ -593,8 +696,8 @@ export default function Dashboard() {
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-bold ${theme.pageTitle}`}>ការប្រមូលថ្ងៃនេះ</h3>
-              <p className={`mt-0.5 text-xs ${theme.muted}`}>សាច់ប្រាក់ ធនាគារ និង QR ទទួលបានថ្ងៃនេះ</p>
+              <h3 className={`text-base font-bold ${theme.pageTitle}`}>ការប្រមូលសុទ្ធថ្ងៃនេះ</h3>
+              <p className={`mt-0.5 text-xs ${theme.muted}`}>សាច់ប្រាក់ ធនាគារ និង QR ក្រោយដកលុយអាប់</p>
             </div>
             {can("sales.view") && (
               <Link to="/home/sales" className={`flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:opacity-80 ${theme.badge}`}>
@@ -605,10 +708,11 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 gap-3">
             {isLoading
               ? <div className="col-span-2"><LoadingPanel theme={theme} minH="min-h-[180px]" /></div>
-              : paymentMethods.map((pm) => {
+              : paymentMethods.map((pm, index) => {
                   const Icon = pm.icon;
+                  const isLastOddCard = paymentMethods.length % 2 === 1 && index === paymentMethods.length - 1;
                   return (
-                    <div key={pm.label} className={`flex items-center gap-3 rounded-2xl border p-4 ${theme.softCard}`}>
+                    <div key={pm.label} className={`flex items-center gap-3 rounded-2xl border p-4 ${isLastOddCard ? "col-span-2" : ""} ${theme.softCard}`}>
                       <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ${pm.bg} ${pm.color}`}><Icon /></div>
                       <div className="min-w-0">
                         <p className={`text-xs font-semibold ${theme.muted}`}>{pm.label}</p>
@@ -621,13 +725,13 @@ export default function Dashboard() {
           </div>
           <div className={`mt-4 rounded-2xl border p-4 ${theme.softCard}`}>
             <div className="flex items-center justify-between">
-              <p className={`text-sm font-bold ${theme.pageTitle}`}>សរុបប្រមូលបានថ្ងៃនេះ</p>
+              <p className={`text-sm font-bold ${theme.pageTitle}`}>សរុបប្រមូលបានសុទ្ធថ្ងៃនេះ</p>
               <p className="text-lg font-extrabold text-emerald-500">
                 {isLoading ? "-" : `$${fmtUsd(d?.payment_breakdown.total_collected_usd)}`}
               </p>
             </div>
             <div className="mt-1 flex items-center justify-between">
-              <p className={`text-xs ${theme.muted}`}>រង់ចាំ (មិនទាន់បង់ / មួយផ្នែក)</p>
+              <p className={`text-xs ${theme.muted}`}>អតិថិជនជំពាក់យើង</p>
               <p className="text-sm font-bold text-amber-500">
                 {isLoading ? "-" : `$${fmtUsd(d?.today.pending_usd)}`}
               </p>

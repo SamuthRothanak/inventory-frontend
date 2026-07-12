@@ -10,27 +10,26 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  PieChart,
-  Pie,
-  Cell,
   ResponsiveContainer,
 } from "recharts";
 import {
   FiAlertCircle,
   FiAlertTriangle,
   FiBox,
+  FiChevronDown,
   FiCreditCard,
   FiDollarSign,
+  FiDownload,
+  FiFileText,
+  FiGrid,
   FiPackage,
   FiRotateCcw,
   FiSearch,
   FiShoppingCart,
   FiTrendingDown,
   FiTruck,
-  FiUsers,
 } from "react-icons/fi";
 import ChartTooltip from "./components/ChartTooltip";
-import InsightRow from "./components/InsightRow";
 import SummaryCard from "./components/SummaryCard";
 import TableLoading from "../../../components/TableLoading";
 import {
@@ -40,6 +39,12 @@ import {
   fmtHourRangeLabel,
   fmtUsd,
 } from "./utils/reportFormat";
+import {
+  buildReportExport,
+  exportReportCsv,
+  exportReportExcel,
+  exportReportPdf,
+} from "./utils/reportExport";
 import { getReportSummaryApi } from "../../../services/report.service";
 
 const METHOD_LABEL = {
@@ -87,6 +92,30 @@ const formatReportDate = (value) => {
 
 const formatKhr = (value) => `៛${Math.round(Number(value || 0)).toLocaleString("en-US")}`;
 
+const formatKhRelativeTime = (value) => {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+
+  if (text === "just now" || text === "now") return "ឥឡូវនេះ";
+
+  const match = text.match(/^(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago$/i);
+  if (!match) return text;
+
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  const unitLabel = {
+    second: "វិនាទី",
+    minute: "នាទី",
+    hour: "ម៉ោង",
+    day: "ថ្ងៃ",
+    week: "សប្ដាហ៍",
+    month: "ខែ",
+    year: "ឆ្នាំ",
+  }[unit] ?? unit;
+
+  return `${amount.toLocaleString("en-US")} ${unitLabel} មុន`;
+};
+
 const normalizeProviderKey = (provider, method, index) => {
   const raw = String(provider || "").trim();
   const lower = raw.toLowerCase();
@@ -111,6 +140,17 @@ const getProviderDisplay = (key, provider, method) => {
   };
 };
 
+const getPaymentDonutLabel = (payment) => {
+  const key = normalizeProviderKey(payment?.provider, payment?.method, 0);
+  if (BANK_PROVIDER_META[key]) return BANK_PROVIDER_META[key].name;
+
+  const method = String(payment?.method || "");
+  if (method === "cash") return "សាច់ប្រាក់";
+  if (method === "bank_transfer" || method === "qr") return "ធនាគារ / QR ផ្សេងៗ";
+  if (method === "card") return "កាត";
+  return "វិធីផ្សេងៗ";
+};
+
 const isBankPayment = (payment) => {
   const method = String(payment?.method || "");
   return method !== "cash" && method !== "other";
@@ -133,6 +173,8 @@ export default function Report() {
   const [dateTo,      setDateTo]      = useState(today);
   const [chartPeriod, setChartPeriod] = useState("ខែ");
   const [search,      setSearch]      = useState("");
+  const [followUpTab, setFollowUpTab] = useState("purchase");
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const applyPeriod = (period) => {
     const now = new Date();
@@ -180,7 +222,9 @@ export default function Report() {
   const payBreakdown  = d?.payment_breakdown ?? EMPTY_LIST;
   const paymentSummary = d?.payment_summary ?? {};
   const outstanding    = d?.outstanding ?? {};
-  const insights      = d?.insights       ?? {};
+  const purchaseMoney  = d?.purchase_money ?? {};
+  const insights       = d?.insights ?? {};
+  const salesByType    = d?.sales_by_type ?? {};
   const queryErrorMessage = error?.response?.data?.message
     || error?.message
     || "មិនអាចទាញទិន្នន័យរបាយការណ៍បានទេ។";
@@ -199,6 +243,7 @@ export default function Report() {
     badge:     isDark ? "border-white/10 bg-white/5 text-zinc-200"          : "border-zinc-200 bg-zinc-100 text-zinc-700",
     softCard:  isDark ? "border-white/10 bg-white/[0.04]"                   : "border-zinc-200 bg-zinc-50",
     section:   isDark ? "border-white/10 bg-[#18181b]"                      : "border-zinc-200 bg-white",
+    border:    isDark ? "border-white/10"                                    : "border-zinc-200",
     gridLine:  isDark ? "rgba(255,255,255,0.06)"                            : "rgba(0,0,0,0.06)",
     axisColor: isDark ? "#71717a"                                           : "#a1a1aa",
   };
@@ -217,10 +262,7 @@ export default function Report() {
       const amount = Math.max(0, Number(payment.amountUsd ?? 0));
       if (amount <= 0) return;
 
-      const label = payment.provider
-        || METHOD_LABEL[payment.method]
-        || payment.method
-        || "ផ្សេងទៀត";
+      const label = getPaymentDonutLabel(payment);
 
       grouped.set(label, (grouped.get(label) ?? 0) + amount);
     });
@@ -229,18 +271,12 @@ export default function Report() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
 
-    if (sorted.length <= 5) return sorted;
-
-    return [
-      ...sorted.slice(0, 4),
-      {
-        name: "ផ្សេងៗ",
-        value: sorted.slice(4).reduce((sum, item) => sum + item.value, 0),
-      },
-    ];
+    return sorted;
   }, [payBreakdown]);
 
   const paymentDonutTotal = paymentDonutData.reduce((sum, item) => sum + item.value, 0);
+  const DAY_KH = { Sun: "អាទិត្យ", Mon: "ច័ន្ទ", Tue: "អង្គារ", Wed: "ពុធ", Thu: "ព្រហ", Fri: "សុក្រ", Sat: "សៅរ៍", Sunday: "អាទិត្យ", Monday: "ច័ន្ទ", Tuesday: "អង្គារ", Wednesday: "ពុធ", Thursday: "ព្រហ", Friday: "សុក្រ", Saturday: "សៅរ៍" };
+  const dayKh = (day) => DAY_KH[day] ?? day ?? "—";
 
   const paymentProviderCards = useMemo(() => {
     const grouped = new Map();
@@ -289,14 +325,14 @@ export default function Report() {
       {[
         ["ទទួល USD", fmtUsd(item.receivedUsd), theme.pageTitle],
         ["អាប់ USD", fmtUsd(item.changeUsd), "text-amber-600"],
-        ["សុទ្ធ USD", fmtUsd(item.usd), "text-emerald-600"],
-        ["ទទួល រៀល", formatKhr(item.receivedKhr), theme.pageTitle],
-        ["អាប់ រៀល", formatKhr(item.changeKhr), "text-amber-600"],
-        ["សុទ្ធ រៀល", formatKhr(item.khr), "text-emerald-600"],
+        ["លក់បាន USD", fmtUsd(item.usd), "text-emerald-600"],
+        ["ទទួល KHR", formatKhr(item.receivedKhr), theme.pageTitle],
+        ["អាប់ KHR", formatKhr(item.changeKhr), "text-amber-600"],
+        ["លក់បាន KHR", formatKhr(item.khr), "text-emerald-600"],
       ].map(([label, value, valueClass]) => (
-        <div key={label} className={`flex items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 ${isDark ? "bg-black/15" : "bg-white"}`}>
-          <p className={`min-w-0 truncate text-[11px] font-semibold ${theme.muted}`}>{label}</p>
-          <p className={`shrink-0 text-xs font-extrabold tabular-nums ${valueClass}`}>{value}</p>
+        <div key={label} className={`flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 ${isDark ? "bg-black/15" : "bg-white"}`}>
+          <p className={`min-w-0 truncate text-xs font-semibold ${theme.muted}`}>{label}</p>
+          <p className={`shrink-0 text-sm font-extrabold tabular-nums ${valueClass}`}>{value}</p>
         </div>
       ))}
     </div>
@@ -304,8 +340,7 @@ export default function Report() {
 
   const totalSales     = stats.total_sales_usd     ?? 0;
   const totalPurchases = stats.total_purchases_usd ?? 0;
-  const totalReturns   = stats.sales_returns_usd   ?? 0;
-  const salesByType    = d?.sales_by_type          ?? {};
+  const totalReturns   = stats.gross_return_usd     ?? stats.sales_returns_usd ?? 0;
   const selectedDayCount = dateFrom && dateTo
     ? Math.max(1, Math.round((new Date(`${dateTo}T00:00:00`) - new Date(`${dateFrom}T00:00:00`)) / 86_400_000) + 1)
     : 0;
@@ -337,7 +372,7 @@ export default function Report() {
     {
       title:    "ការលក់សរុប",
       value:    fmtUsd(stats.total_sales_usd),
-      subtitle: `${stats.total_sales_count ?? 0} ប្រតិបត្តិការ`,
+      subtitle: `${stats.total_sales_count ?? 0} វិក្កយបត្រលក់`,
       icon:     <FiShoppingCart />,
       iconBg:   "bg-emerald-500/10 text-emerald-500",
       accent:   "border-l-emerald-500",
@@ -347,7 +382,7 @@ export default function Report() {
     {
       title:    "ការទិញសរុប",
       value:    fmtUsd(stats.total_purchases_usd),
-      subtitle: `${stats.total_purchases_count ?? 0} បញ្ជាទិញ`,
+      subtitle: `${stats.total_purchases_count ?? 0} វិក្កយបត្រទិញ`,
       icon:     <FiTruck />,
       iconBg:   "bg-blue-500/10 text-blue-500",
       accent:   "border-l-blue-500",
@@ -385,22 +420,81 @@ export default function Report() {
       trendType: "down",
     },
     {
-      title:    "ប្រាក់ជំពាក់",
+      title:    "លុយមិនទាន់ទូទាត់",
       value:    fmtUsd(stats.outstanding_balance_usd),
       subtitle: `${stats.outstanding_balance_count ?? 0} វិក្កយបត្រ`,
       icon:     <FiAlertCircle />,
       iconBg:   "bg-red-500/10 text-red-500",
       accent:   "border-l-red-500",
-      trend:    (stats.outstanding_balance_count ?? 0) > 0 ? "ត្រូវទូទាត់" : null,
+      trend:    (stats.outstanding_balance_count ?? 0) > 0 ? "មិនទាន់ទូទាត់" : null,
       trendType: "down",
     },
   ];
+
+  const reportExport = useMemo(() => buildReportExport({
+    dateFrom,
+    dateTo,
+    stats,
+    salesByType,
+    chartData,
+    chartGranularity,
+    topProducts,
+    paymentSummary,
+    paymentBreakdown: payBreakdown,
+    lowStock,
+    outstanding,
+    purchaseMoney,
+    insights,
+    recentActivities: recentActs,
+  }), [
+    chartData,
+    chartGranularity,
+    dateFrom,
+    dateTo,
+    insights,
+    lowStock,
+    outstanding,
+    payBreakdown,
+    paymentSummary,
+    purchaseMoney,
+    recentActs,
+    salesByType,
+    stats,
+    topProducts,
+  ]);
+
+  const canExport = !suppressReport && Boolean(d);
+
+  const handlePdfExport = () => {
+    if (!canExport) return;
+    const opened = exportReportPdf(reportExport);
+    if (!opened) {
+      window.alert("PDF export was blocked by the browser. Please allow pop-ups and try again.");
+    }
+  };
+
+  const handleExport = (type) => {
+    if (!canExport) return;
+    setExportMenuOpen(false);
+
+    if (type === "pdf") {
+      handlePdfExport();
+      return;
+    }
+
+    if (type === "excel") {
+      exportReportExcel(reportExport);
+      return;
+    }
+
+    exportReportCsv(reportExport);
+  };
 
   return (
     <section className="space-y-6">
 
       {/* â"€â"€ Filters + Actions â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
-      <div className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm ${theme.card}`}>
+      <div className={`relative rounded-2xl border p-4 shadow-sm ${theme.card} ${exportMenuOpen ? "mb-14" : ""}`}>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
 
           {/* Left: filters */}
@@ -440,25 +534,62 @@ export default function Report() {
             </button>
           </div>
 
-          {/* Right: quick presets */}
-          <div className="flex items-center gap-1.5">
-            {PRESETS.map((p) => {
-              const active = chartPeriod === p;
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => applyPeriod(p)}
-                  className={`h-9 rounded-xl border px-3.5 text-xs font-semibold transition ${
-                    active
-                      ? "border-red-500 bg-red-500 text-white shadow-sm"
-                      : `${theme.badge} hover:border-red-400 hover:text-red-500`
-                  }`}
-                >
-                  {p}
-                </button>
-              );
-            })}
+          {/* Right: quick presets + export */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {PRESETS.map((p) => {
+                const active = chartPeriod === p;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => applyPeriod(p)}
+                    className={`h-9 rounded-xl border px-3.5 text-xs font-semibold transition ${
+                      active
+                        ? "border-red-500 bg-red-500 text-white shadow-sm"
+                        : `${theme.badge} hover:border-red-400 hover:text-red-500`
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="relative sm:border-l sm:pl-2 sm:dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => canExport && setExportMenuOpen((open) => !open)}
+                disabled={!canExport}
+                aria-haspopup="menu"
+                aria-expanded={exportMenuOpen}
+                className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-3.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:border-red-400 hover:text-red-500`}
+              >
+                <FiDownload />
+                Export
+                <FiChevronDown className={`transition ${exportMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {exportMenuOpen && (
+                <div className={`absolute right-0 z-30 mt-2 w-44 overflow-hidden rounded-xl border py-1 shadow-xl ${isDark ? "border-white/10 bg-zinc-900" : "border-zinc-200 bg-white"}`} role="menu">
+                  {[
+                    ["pdf", "PDF", FiFileText],
+                    ["excel", "Excel", FiGrid],
+                    ["csv", "CSV", FiDownload],
+                  ].map(([type, label, Icon]) => (
+                    <button
+                      key={type}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => handleExport(type)}
+                      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition ${isDark ? "text-zinc-100 hover:bg-white/10" : "text-zinc-700 hover:bg-zinc-100"}`}
+                    >
+                      <Icon className="text-base" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
         </div>
@@ -526,7 +657,7 @@ export default function Report() {
               <p className={`mt-0.5 text-xs ${theme.muted}`}>
                 លក់ធៀបនឹងទិញ និងផលប៉ះពាល់ត្រឡប់ · {chartIntervalLabel}
               </p>
-              <p className={`mt-1 text-[11px] ${theme.muted}`}>
+              <p className={`mt-1 text-xs ${theme.muted}`}>
                 តម្លៃខាងលើជាសរុបរយៈពេល ខណៈចំណុចលើក្រាបជាតម្លៃក្នុងចន្លោះនីមួយៗ។
               </p>
             </div>
@@ -543,9 +674,9 @@ export default function Report() {
           {/* Mini metrics */}
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {[
-              { label: "លក់",     value: fmtUsd(totalSales),     cls: "text-emerald-500" },
-              { label: "ទិញ",    value: fmtUsd(totalPurchases), cls: "text-blue-500"    },
-              { label: "ត្រឡប់", value: fmtUsd(totalReturns),   cls: "text-amber-500"   },
+              { label: "ការលក់សរុប", value: fmtUsd(totalSales), cls: "text-emerald-500" },
+              { label: "ការទិញសរុប",    value: fmtUsd(totalPurchases), cls: "text-blue-500"    },
+              { label: "ត្រឡប់ទំនិញសរុប", value: fmtUsd(totalReturns),   cls: "text-amber-500"   },
             ].map((m) => (
               <div key={m.label} className={`rounded-xl border p-3 ${theme.softCard}`}>
                 <p className={`text-xs font-semibold ${theme.muted}`}>{m.label}</p>
@@ -583,9 +714,9 @@ export default function Report() {
               <Tooltip content={<ChartTooltip theme={theme} labelFormatter={formatChartTooltipLabel} />}
                 cursor={{ stroke: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)", strokeWidth: 1 }} />
               <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12, color: theme.axisColor }} iconType="circle" iconSize={8} />
-              <Area dataKey="sales"     name="លក់"     type="monotone" stroke="#22c55e" strokeWidth={2.5} fill="url(#gradSales)"     dot={showChartDots ? { r: 3, fill: isDark ? "#18181b" : "#fff", stroke: "#22c55e", strokeWidth: 2 } : false} activeDot={{ r: 5 }} />
-              <Area dataKey="purchases" name="ទិញ" type="monotone" stroke="#3b82f6" strokeWidth={2.5} fill="url(#gradPurchases)" dot={showChartDots ? { r: 3, fill: isDark ? "#18181b" : "#fff", stroke: "#3b82f6", strokeWidth: 2 } : false} activeDot={{ r: 5 }} />
-              <Line dataKey="returns"   name="ត្រឡប់"   type="monotone" stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 3"
+              <Area dataKey="sales"     name="ការលក់សរុប"     type="monotone" stroke="#22c55e" strokeWidth={2.5} fill="url(#gradSales)"     dot={showChartDots ? { r: 3, fill: isDark ? "#18181b" : "#fff", stroke: "#22c55e", strokeWidth: 2 } : false} activeDot={{ r: 5 }} />
+              <Area dataKey="purchases" name="ការទិញសរុប" type="monotone" stroke="#3b82f6" strokeWidth={2.5} fill="url(#gradPurchases)" dot={showChartDots ? { r: 3, fill: isDark ? "#18181b" : "#fff", stroke: "#3b82f6", strokeWidth: 2 } : false} activeDot={{ r: 5 }} />
+              <Line dataKey="returns"   name="ត្រឡប់ទំនិញសរុប"   type="monotone" stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 3"
                 dot={showChartDots ? { r: 3, fill: isDark ? "#18181b" : "#fff", stroke: "#f59e0b", strokeWidth: 2 } : false} activeDot={{ r: 5 }} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -664,61 +795,16 @@ export default function Report() {
         </div>
       </div>
 
-      {/* ── Insights + Activities (two columns) ── */}
-      <div className={`${suppressReport ? "hidden" : ""} flex flex-col gap-6 xl:flex-row xl:items-stretch`}>
+      {/* ── Payment overview + follow-up ── */}
+      <div className={`${suppressReport ? "hidden" : ""} flex flex-col gap-6`}>
 
-        {/* Insights */}
-        <div className={`flex w-full shrink-0 flex-col rounded-2xl border p-5 shadow-sm xl:w-90 ${theme.card}`}>
-          <div className="mb-4">
-            <h2 className={`text-base font-bold ${theme.pageTitle}`}>ការយល់ដឹងរបាយការណ៍</h2>
-            <p className={`mt-0.5 text-xs ${theme.muted}`}>ការវាស់វែងសំខាន់ក្នុងរយៈពេលនេះ</p>
-          </div>
-          {(() => {
-            const DAY_KH = { Sun: "អាទិត្យ", Mon: "ច័ន្ទ", Tue: "អង្គារ", Wed: "ពុធ", Thu: "ព្រ.ហ", Fri: "សុក្រ", Sat: "សៅរ៏", Sunday: "អាទិត្យ", Monday: "ច័ន្ទ", Tuesday: "អង្គារ", Wednesday: "ពុធ", Thursday: "ព្រ.ហ", Friday: "សុក្រ", Saturday: "សៅរ៏" };
-            const dayKh = (d) => DAY_KH[d] ?? d;
-            return (
+        {/* Payment share */}
+        <div className={`flex w-full flex-col rounded-2xl border p-5 shadow-sm ${theme.card}`}>
           <div className="space-y-4">
-            {/* ── ថ្ងៃល្អបំផុត ── */}
-            <div>
-              <p className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${theme.muted}`}>ថ្ងៃល្អបំផុត</p>
-              <div className="space-y-2">
-                <InsightRow theme={theme} label="ថ្ងៃលក់ល្អបំផុត"     value={insights.best_sales_day    ? dayKh(insights.best_sales_day.day)    : "—"} badge={insights.best_sales_day    ? fmtUsd(insights.best_sales_day.amount)    : "—"} badgeColor="emerald" />
-                <InsightRow theme={theme} label="ថ្ងៃទិញខ្ពស់បំផុត"   value={insights.best_purchase_day ? dayKh(insights.best_purchase_day.day) : "—"} badge={insights.best_purchase_day ? fmtUsd(insights.best_purchase_day.amount) : "—"} badgeColor="blue"    />
-                <InsightRow theme={theme} label="ថ្ងៃត្រឡប់ច្រើនបំផុត" value={insights.most_return_day   ? dayKh(insights.most_return_day.day)   : "—"} badge={insights.most_return_day   ? fmtUsd(insights.most_return_day.amount)   : "—"} badgeColor="amber"   />
-              </div>
-            </div>
-
-            <div className={`border-t ${isDark ? "border-white/10" : "border-zinc-200"}`} />
-
-            {/* ── ចំណែកការលក់ ── */}
-            <div>
-              <p className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${theme.muted}`}>ចំណែកការលក់</p>
-              <div className="space-y-2">
-                <InsightRow theme={theme} label="លក់រាយ" value={`${salesByType.retail?.count ?? 0} ប្រតិបត្តិការ`}    badge={fmtUsd(salesByType.retail?.totalUsd)}    badgeColor="emerald" />
-                <InsightRow theme={theme} label="លក់ដុំ"  value={`${salesByType.wholesale?.count ?? 0} ប្រតិបត្តិការ`} badge={fmtUsd(salesByType.wholesale?.totalUsd)} badgeColor="blue"    />
-              </div>
-            </div>
-
-            <div className={`border-t ${isDark ? "border-white/10" : "border-zinc-200"}`} />
-
-            {/* ── ការព្រមាន ── */}
-            <div>
-              <p className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${theme.muted}`}>ការព្រមាន</p>
-              <div className="space-y-2">
-                <InsightRow theme={theme} label="ប្រាក់ជំពាក់"              value={`${stats.outstanding_balance_count ?? 0} វិក្កយបត្រ`} badge={fmtUsd(stats.outstanding_balance_usd)} badgeColor="red"    />
-                <InsightRow theme={theme} label="ការទាមទារអ្នកផ្គត់ផ្គង់" value={`${stats.pending_claims_count ?? 0} ការទាមទារ`}    badge="ពិនិត្យ"                               badgeColor="red"    />
-                <InsightRow theme={theme} label="ស្តុកស្ទើរអស់"            value={`${stats.low_stock_count ?? 0} មុខ`}              badge="បន្ទាន់"                               badgeColor="orange" />
-                <InsightRow theme={theme} label="ស្តុកបច្ចុប្បន្ន"          value={`${(stats.stock_on_hand ?? 0).toLocaleString()} ខ្នាតទំនិញ`} badgeColor="zinc"                />
-              </div>
-            </div>
-
-            <div className={`border-t ${isDark ? "border-white/10" : "border-zinc-200"}`} />
-
-            <div>
               <div className="mb-1 flex items-end justify-between gap-3">
                 <div>
-                  <p className={`text-[10px] font-bold uppercase tracking-wider ${theme.muted}`}>ចំណែកការទូទាត់</p>
-                  <p className={`mt-1 text-[10px] ${theme.muted}`}>គណនាភាគរយតាមតម្លៃសមមូល USD</p>
+                  <p className={`text-xs font-bold uppercase tracking-wider ${theme.muted}`}>ចំណែកការទូទាត់</p>
+                  <p className={`mt-1 text-xs ${theme.muted}`}>គណនាភាគរយតាមតម្លៃសមមូល USD</p>
                 </div>
               </div>
 
@@ -728,88 +814,94 @@ export default function Report() {
                 </div>
               ) : (
                 <>
-                  <div className="relative mx-auto h-48 w-full max-w-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={paymentDonutData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={52}
-                          outerRadius={76}
-                          paddingAngle={3}
-                          stroke="none"
-                        >
-                          {paymentDonutData.map((item, index) => (
-                            <Cell
-                              key={item.name}
-                              fill={PAYMENT_DONUT_COLORS[index % PAYMENT_DONUT_COLORS.length]}
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value, name) => [fmtUsd(value), name]}
-                          contentStyle={{
-                            borderRadius: 12,
-                            border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e4e4e7",
-                            background: isDark ? "#18181b" : "#ffffff",
-                            color: isDark ? "#ffffff" : "#18181b",
-                            fontSize: 12,
-                          }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                      <p className={`text-[10px] font-semibold ${theme.muted}`}>ប្រាក់ទទួល</p>
-                      <p className={`mt-0.5 text-lg font-extrabold ${theme.pageTitle}`}>{fmtUsd(paymentDonutTotal)}</p>
-                    </div>
+                  <div className={`rounded-xl border p-3 ${theme.softCard}`}>
+                    <p className={`text-xs font-semibold ${theme.muted}`}>ប្រាក់ទទួលសរុប</p>
+                    <p className={`mt-1 text-2xl font-extrabold tabular-nums ${theme.pageTitle}`}>{fmtUsd(paymentDonutTotal)}</p>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {paymentDonutData.map((item, index) => {
                       const percent = paymentDonutTotal > 0
                         ? (item.value / paymentDonutTotal) * 100
                         : 0;
+                      const color = PAYMENT_DONUT_COLORS[index % PAYMENT_DONUT_COLORS.length];
 
                       return (
-                        <div key={item.name} className="flex items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: PAYMENT_DONUT_COLORS[index % PAYMENT_DONUT_COLORS.length] }}
-                            />
-                            <span className={`truncate text-xs font-semibold ${theme.pageTitle}`}>{item.name}</span>
+                        <div key={item.name} className={`rounded-xl border p-3 ${theme.softCard}`}>
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                              <span className={`truncate text-sm font-bold ${theme.pageTitle}`}>{item.name}</span>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <span className={`text-sm font-extrabold tabular-nums ${theme.pageTitle}`}>{fmtUsd(item.value)}</span>
+                              <span className={`ml-2 text-xs font-semibold ${theme.muted}`}>{percent.toFixed(percent >= 10 ? 0 : 1)}%</span>
+                            </div>
                           </div>
-                          <div className="shrink-0 text-right">
-                            <span className={`text-xs font-bold ${theme.pageTitle}`}>{fmtUsd(item.value)}</span>
-                            <span className={`ml-2 text-[10px] ${theme.muted}`}>{percent.toFixed(percent >= 10 ? 0 : 1)}%</span>
+                          <div className={`h-2 overflow-hidden rounded-full ${isDark ? "bg-white/10" : "bg-zinc-200"}`}>
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{ width: `${Math.max(2, percent)}%`, backgroundColor: color }}
+                            />
                           </div>
                         </div>
                       );
                     })}
                   </div>
+
+                  <div className={`border-t pt-3 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                    <p className={`mb-2 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>ការយល់ដឹងរបាយការណ៍</p>
+                    <div className="space-y-1.5">
+                      {[
+                        {
+                          label: "ថ្ងៃលក់ល្អ",
+                          value: insights.best_sales_day ? dayKh(insights.best_sales_day.day) : "—",
+                          badge: insights.best_sales_day ? fmtUsd(insights.best_sales_day.amount) : "—",
+                          badgeClass: "bg-emerald-500/10 text-emerald-600",
+                        },
+                        {
+                          label: "ថ្ងៃទិញខ្ពស់",
+                          value: insights.best_purchase_day ? dayKh(insights.best_purchase_day.day) : "—",
+                          badge: insights.best_purchase_day ? fmtUsd(insights.best_purchase_day.amount) : "—",
+                          badgeClass: "bg-blue-500/10 text-blue-600",
+                        },
+                        {
+                          label: "ថ្ងៃត្រឡប់ច្រើន",
+                          value: insights.most_return_day ? dayKh(insights.most_return_day.day) : "—",
+                          badge: insights.most_return_day ? fmtUsd(insights.most_return_day.amount) : "—",
+                          badgeClass: "bg-amber-500/10 text-amber-600",
+                        },
+                      ].map((row) => (
+                        <div key={row.label} className={`flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 ${isDark ? "bg-black/15" : "bg-zinc-50"}`}>
+                          <div className="min-w-0">
+                            <p className={`truncate text-xs font-semibold ${theme.pageTitle}`}>{row.label}</p>
+                            <p className={`truncate text-xs ${theme.muted}`}>{row.value}</p>
+                          </div>
+                          <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-extrabold tabular-nums ${row.badgeClass}`}>
+                            {row.badge}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                 </>
               )}
-            </div>
           </div>
-            );
-          })()}
         </div>
 
-        {/* Right column: Activities + Payment stacked */}
-        <div className="flex flex-1 flex-col gap-6">
+        {/* Payment + follow-up */}
+        <div className="contents">
 
         {/* Payment summary card */}
-        <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+        <div className={`w-full rounded-2xl border p-5 shadow-sm ${theme.card}`}>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <h2 className={`text-base font-bold ${theme.pageTitle}`}>សេចក្តីសង្ខេបការទូទាត់</h2>
-              <p className={`mt-0.5 text-xs ${theme.muted}`}>បំបែកសាច់ប្រាក់ និងធនាគារ / QR តាម USD និងរៀល</p>
+              <p className={`mt-0.5 text-xs ${theme.muted}`}>បំបែកសាច់ប្រាក់ និងធនាគារ / QR តាម USD និង KHR</p>
             </div>
             <div className={`shrink-0 rounded-xl border px-3 py-2 text-right ${theme.badge}`}>
-              <p className={`text-[10px] ${theme.muted}`}>សរុបសុទ្ធក្រោយសង</p>
+              <p className={`text-xs ${theme.muted}`}>សរុបលក់បានក្រោយសង</p>
               <p className={`text-sm font-extrabold ${theme.pageTitle}`}>{fmtUsd(paymentSummary.netEquivalentUsd)}</p>
             </div>
           </div>
@@ -872,18 +964,18 @@ export default function Report() {
                     </div>
                     <div className="min-w-0">
                       <p className={`truncate text-sm font-bold ${theme.pageTitle}`}>{item.label}</p>
-                      <p className={`mt-0.5 truncate text-[10px] ${theme.muted}`}>{item.subLabel}</p>
+                      <p className={`mt-0.5 truncate text-xs ${theme.muted}`}>{item.subLabel}</p>
                     </div>
                   </div>
 
                   {item.ledger ? renderPaymentLedger(item) : (
                     <div className="mt-3 space-y-2">
                       <div className={`flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 ${isDark ? "bg-black/15" : "bg-white"}`}>
-                        <p className={`min-w-0 truncate text-[11px] font-semibold ${theme.muted}`}>សរុប USD</p>
+                        <p className={`min-w-0 truncate text-xs font-semibold ${theme.muted}`}>សរុប USD</p>
                         <p className={`shrink-0 text-sm font-extrabold tabular-nums ${theme.pageTitle}`}>{fmtUsd(item.usd)}</p>
                       </div>
                       <div className={`flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 ${isDark ? "bg-black/15" : "bg-white"}`}>
-                        <p className={`min-w-0 truncate text-[11px] font-semibold ${theme.muted}`}>សរុប រៀល</p>
+                        <p className={`min-w-0 truncate text-xs font-semibold ${theme.muted}`}>សរុប KHR</p>
                         <p className={`shrink-0 text-sm font-extrabold tabular-nums ${theme.pageTitle}`}>{formatKhr(item.khr)}</p>
                       </div>
                     </div>
@@ -897,123 +989,157 @@ export default function Report() {
             <p className={`mt-3 py-2 text-center text-xs ${theme.muted}`}>គ្មានការទូទាត់តាមធនាគារ / QR ក្នុងរយៈពេលនេះ</p>
           ) : (
             <div className={`mt-4 border-t pt-3 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
-              <p className={`mb-2 text-[10px] font-bold uppercase tracking-wide ${theme.muted}`}>លម្អិតតាមធនាគារ / QR</p>
+              <p className={`mb-3 text-xs font-bold uppercase tracking-wide ${theme.muted}`}>លម្អិតតាមធនាគារ / QR</p>
               <div className={`grid grid-cols-1 gap-2.5 ${paymentProviderCards.length > 1 ? "sm:grid-cols-2" : ""}`}>
-                {paymentProviderCards.map((pm) => (
-                  <div key={pm.key} className={`rounded-xl border p-3 ${theme.softCard}`}>
+                {paymentProviderCards.map((pm, index) => {
+                  const isLastOddCard = paymentProviderCards.length > 1
+                    && paymentProviderCards.length % 2 === 1
+                    && index === paymentProviderCards.length - 1;
+
+                  return (
+                  <div key={pm.key} className={`rounded-xl border p-3 ${isLastOddCard ? "sm:col-span-2" : ""} ${theme.softCard}`}>
                     <div className="mb-2 flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className={`truncate text-sm font-bold ${theme.pageTitle}`}>{pm.name}</p>
-                        <p className={`mt-0.5 truncate text-[10px] ${theme.muted}`}>{pm.subLabel}</p>
+                        <p className={`mt-0.5 truncate text-xs ${theme.muted}`}>{pm.subLabel}</p>
                       </div>
-                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${theme.badge}`}>
+                      <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-bold ${theme.badge}`}>
                         ធនាគារ / QR
                       </span>
                     </div>
 
                     {renderPaymentLedger(pm, true)}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
         </div>
 
-        {/* Outstanding sales */}
-        <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
-          <div className="mb-4 flex items-start justify-between gap-3">
+        {/* Follow-up details */}
+        <div className={`w-full rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className={`text-base font-bold ${theme.pageTitle}`}>លក់ជំពាក់ / មិនទាន់បង់</h2>
-              <p className={`mt-0.5 text-xs ${theme.muted}`}>មិនរាប់បញ្ចូលក្នុងលុយទទួលពិត។ ប្រើសម្រាប់តាមដានប្រាក់ត្រូវប្រមូល។</p>
+              <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>តាមដានបន្ថែម</h2>
+              <p className={`mt-1 text-sm ${theme.muted}`}>តាមដានការទិញ មិនទាន់ទូទាត់ និងសកម្មភាពចុងក្រោយ</p>
             </div>
-            <div className={`shrink-0 rounded-xl border px-3 py-2 text-right ${theme.badge}`}>
-              <p className={`text-[10px] ${theme.muted}`}>{outstanding.count ?? 0} វិក្កយបត្រ</p>
-              <p className={`text-sm font-extrabold text-red-500`}>{fmtUsd(outstanding.totalUsd)}</p>
+            <div className={`grid grid-cols-3 rounded-2xl border p-1 ${theme.badge}`}>
+              {[
+                ["purchase", "ការទិញ"],
+                ["debt", "មិនទាន់ទូទាត់"],
+                ["activity", "សកម្មភាព"],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setFollowUpTab(key)}
+                  className={`rounded-xl px-4 py-2 text-sm font-bold transition ${followUpTab === key ? "bg-red-500 text-white shadow-sm" : theme.muted}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <div className={`rounded-xl border p-3.5 ${theme.softCard}`}>
-              <div className="mb-3 flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
-                  <FiAlertCircle />
+          {followUpTab === "purchase" && (
+            <div>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-500/10 text-lg text-blue-500"><FiPackage /></div>
+                <div>
+                  <p className={`text-base font-extrabold ${theme.pageTitle}`}>Purchases / លុយចេញ</p>
+                  <p className={`text-sm ${theme.muted}`}>{purchaseMoney.count ?? 0} វិក្កយបត្រទិញ</p>
                 </div>
-                <p className={`text-sm font-bold ${theme.pageTitle}`}>អាយុកាលជំពាក់</p>
               </div>
-              <div className="space-y-2">
-                {(outstanding.aging ?? []).map((item) => (
-                  <div key={item.key} className={`flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 ${isDark ? "bg-black/15" : "bg-white"}`}>
-                    <div className="min-w-0">
-                      <p className={`truncate text-xs font-semibold ${theme.pageTitle}`}>{item.label}</p>
-                      <p className={`text-[10px] ${theme.muted}`}>{item.count} វិក្កយបត្រ</p>
-                    </div>
-                    <p className="shrink-0 text-xs font-extrabold tabular-nums text-red-500">{fmtUsd(item.totalUsd)}</p>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[
+                  ["បានបង់ USD", fmtUsd(purchaseMoney.paidUsd), theme.pageTitle],
+                  ["បានបង់ KHR", formatKhr(purchaseMoney.paidKhr), theme.pageTitle],
+                  ["មិនទាន់បង់ USD", fmtUsd(purchaseMoney.outstandingUsd), "text-amber-600"],
+                  ["មិនទាន់បង់ KHR", formatKhr(purchaseMoney.outstandingKhr), "text-amber-600"],
+                ].map(([label, value, valueClass]) => (
+                  <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                    <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
+                    <p className={`mt-1 truncate text-lg font-extrabold tabular-nums ${valueClass}`}>{value}</p>
                   </div>
                 ))}
               </div>
-            </div>
-
-            <div className={`rounded-xl border p-3.5 ${theme.softCard}`}>
-              <div className="mb-3 flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500">
-                  <FiUsers />
+              {(purchaseMoney.suppliers ?? []).length > 0 && (
+                <div className={`mt-4 border-t pt-4 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                  <div className="mb-3">
+                    <p className={`text-sm font-bold ${theme.pageTitle}`}>មិនទាន់បង់អ្នកផ្គត់ផ្គង់សរុប</p>
+                    <p className={`mt-0.5 text-xs ${theme.muted}`}>បង្ហាញបំណុលអ្នកផ្គត់ផ្គង់ដែលនៅមិនទាន់បង់ទាំងអស់</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {(purchaseMoney.suppliers ?? []).map((item) => (
+                      <div key={item.supplierName} className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                        <div className="min-w-0">
+                          <p className={`truncate text-sm font-bold ${theme.pageTitle}`}>{item.supplierName}</p>
+                          <p className={`text-sm ${theme.muted}`}>{item.count} វិក្កយបត្រទិញ</p>
+                        </div>
+                        <p className="shrink-0 text-sm font-extrabold tabular-nums text-amber-600">{fmtUsd(item.totalUsd)}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <p className={`text-sm font-bold ${theme.pageTitle}`}>អតិថិជនជំពាក់ច្រើន</p>
-              </div>
-              <div className="space-y-2">
-                {(outstanding.customers ?? []).length === 0 ? (
-                  <p className={`rounded-lg px-2.5 py-4 text-center text-xs ${theme.muted} ${isDark ? "bg-black/15" : "bg-white"}`}>គ្មានប្រាក់ជំពាក់</p>
-                ) : (outstanding.customers ?? []).map((item) => (
-                  <div key={item.customerName} className={`flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 ${isDark ? "bg-black/15" : "bg-white"}`}>
-                    <div className="min-w-0">
-                      <p className={`truncate text-xs font-semibold ${theme.pageTitle}`}>{item.customerName}</p>
-                      <p className={`text-[10px] ${theme.muted}`}>{item.count} វិក្កយបត្រ</p>
-                    </div>
-                    <p className="shrink-0 text-xs font-extrabold tabular-nums text-red-500">{fmtUsd(item.totalUsd)}</p>
+              )}
+            </div>
+          )}
+
+          {followUpTab === "debt" && (
+            <div>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[
+                  ["សរុបមិនទាន់ទូទាត់", fmtUsd(outstanding.totalUsd), "text-red-500"],
+                  ...((outstanding.aging ?? []).slice(0, 3).map((item) => [item.label, fmtUsd(item.totalUsd), "text-red-500"])),
+                ].map(([label, value, valueClass]) => (
+                  <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                    <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
+                    <p className={`mt-1 truncate text-lg font-extrabold tabular-nums ${valueClass}`}>{value}</p>
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Recent activities */}
-        <div className={`rounded-2xl border p-4 shadow-sm ${theme.card}`}>
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className={`text-sm font-bold ${theme.pageTitle}`}>សកម្មភាពថ្មីៗ</h2>
-              <p className={`mt-0.5 text-[11px] ${theme.muted}`}>Transaction ចុងក្រោយសម្រាប់ផ្ទៀងផ្ទាត់លឿន</p>
-            </div>
-            <span className={`text-[11px] font-semibold ${theme.muted}`}>6 ចុងក្រោយ</span>
-          </div>
-          <div className="space-y-2">
-            {isLoading && (
-              <div className={`flex min-h-24 items-center justify-center rounded-xl border ${theme.softCard}`}>
-                <FiRotateCcw className={`animate-spin text-2xl ${theme.muted}`} />
-              </div>
-            )}
-            {recentActs.length === 0 && !isLoading && (
-              <p className={`py-4 text-center text-xs ${theme.muted}`}>គ្មានសកម្មភាព</p>
-            )}
-            {recentActs.slice(0, 6).map((act, i) => {
-              const Icon  = act.type === "purchase" ? FiTruck : FiDollarSign;
-              const color = act.type === "purchase" ? "text-blue-500" : "text-emerald-500";
-              const bg    = act.type === "purchase" ? "bg-blue-500/10" : "bg-emerald-500/10";
-              return (
-                <div key={i} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 ${theme.softCard}`}>
-                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm ${bg} ${color}`}>
-                    <Icon />
+              {(outstanding.customers ?? []).length > 0 && (
+                <div className={`mt-4 border-t pt-4 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                  <p className={`mb-3 text-sm font-bold ${theme.pageTitle}`}>អតិថិជនមិនទាន់ទូទាត់</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {(outstanding.customers ?? []).map((item) => (
+                      <div key={item.customerName} className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                        <div className="min-w-0">
+                          <p className={`truncate text-sm font-bold ${theme.pageTitle}`}>{item.customerName}</p>
+                          <p className={`text-sm ${theme.muted}`}>{item.count} វិក្កយបត្រ</p>
+                        </div>
+                        <p className="shrink-0 text-sm font-extrabold tabular-nums text-red-500">{fmtUsd(item.totalUsd)}</p>
+                      </div>
+                    ))}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className={`truncate text-xs font-bold ${theme.pageTitle}`}>{act.label}</p>
-                    <p className={`truncate text-[10px] ${theme.muted}`}>{act.desc}</p>
-                  </div>
-                  <span className={`shrink-0 text-[10px] ${theme.muted}`}>{act.time}</span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
+              )}
+            </div>
+          )}
+
+          {followUpTab === "activity" && (
+            <div className="space-y-3">
+              {isLoading && <div className={`flex min-h-24 items-center justify-center rounded-xl border ${theme.softCard}`}><FiRotateCcw className={`animate-spin text-2xl ${theme.muted}`} /></div>}
+              {recentActs.length === 0 && !isLoading && <p className={`py-6 text-center text-sm ${theme.muted}`}>គ្មានសកម្មភាព</p>}
+              {recentActs.slice(0, 6).map((act, i) => {
+                const Icon  = act.type === "purchase" ? FiTruck : FiDollarSign;
+                const color = act.type === "purchase" ? "text-blue-500" : "text-emerald-500";
+                const bg    = act.type === "purchase" ? "bg-blue-500/10" : "bg-emerald-500/10";
+                return (
+                  <div key={i} className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${bg} ${color}`}><Icon /></div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`truncate text-sm font-bold ${theme.pageTitle}`}>{act.label}</p>
+                      <p className={`truncate text-sm ${theme.muted}`}>{act.desc}</p>
+                    </div>
+                    <span className={`shrink-0 text-sm ${theme.muted}`}>{formatKhRelativeTime(act.time)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+                </div>
 
       </div>{/* end right column */}
 

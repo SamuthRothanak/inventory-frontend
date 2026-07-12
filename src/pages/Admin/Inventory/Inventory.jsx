@@ -80,6 +80,41 @@
     getPageNumbers,
     getToday,
   } from "./utils/inventoryConstants";
+  import {
+    exportInventoryCsv,
+    exportInventoryExcel,
+    exportInventoryPdf,
+  } from "./utils/inventoryExport";
+
+  const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const parseMovementDate = (value) => {
+    if (!value) return null;
+    const date = new Date(String(value).replace(" ", "T"));
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+  const isInPeriod = (value, period) => {
+    if (period === "All") return true;
+    const date = parseMovementDate(value);
+    if (!date) return false;
+
+    const today = startOfDay(new Date());
+    const target = startOfDay(date);
+
+    if (period === "today") return target.getTime() === today.getTime();
+    if (period === "week") {
+      const day = today.getDay() || 7;
+      const start = new Date(today);
+      start.setDate(today.getDate() - day + 1);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      return target >= start && target <= end;
+    }
+    if (period === "month") {
+      return target.getFullYear() === today.getFullYear() && target.getMonth() === today.getMonth();
+    }
+    if (period === "year") return target.getFullYear() === today.getFullYear();
+    return true;
+  };
 
   export default function Inventory() {
     const outlet = useOutletContext();
@@ -99,6 +134,7 @@
     const [statusFilter, setStatusFilter] = useState("All");
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(10);
+    const [exportMenuOpen, setExportMenuOpen] = useState(false);
     const [activeTab, setActiveTab] = useState("stock");
     const [adjustmentSearchTerm, setAdjustmentSearchTerm] = useState("");
     const [adjustmentStatusFilter, setAdjustmentStatusFilter] = useState("All");
@@ -109,6 +145,7 @@
     const [movementSearchTerm, setMovementSearchTerm] = useState("");
     const [movementDirectionFilter, setMovementDirectionFilter] = useState("All");
     const [movementTypeFilter, setMovementTypeFilter] = useState("All");
+    const [movementPeriodFilter, setMovementPeriodFilter] = useState("All");
     const [movementPage, setMovementPage] = useState(1);
     const [movementPerPage, setMovementPerPage] = useState(10);
 
@@ -136,7 +173,7 @@
 
     useEffect(() => {
       setMovementPage(1);
-    }, [movementSearchTerm, movementDirectionFilter, movementTypeFilter, movementPerPage]);
+    }, [movementSearchTerm, movementDirectionFilter, movementTypeFilter, movementPeriodFilter, movementPerPage]);
 
     const stockBalancesQuery = useQuery({
       queryKey: ["stock-balances", "inventory-page"],
@@ -905,13 +942,16 @@
           movementTypeFilter === "All" ||
           movement.type === movementTypeFilter;
 
-        return matchesSearch && matchesDirection && matchesType;
+        const matchesPeriod = isInPeriod(movement.createdAt, movementPeriodFilter);
+
+        return matchesSearch && matchesDirection && matchesType && matchesPeriod;
       });
     }, [
       serverMovements,
       movementSearchTerm,
       movementDirectionFilter,
       movementTypeFilter,
+      movementPeriodFilter,
     ]);
 
     const inventoryLoading =
@@ -941,6 +981,20 @@
       const start = (inventoryPagination.currentPage - 1) * perPage;
       return filteredInventory.slice(start, start + perPage);
     }, [filteredInventory, inventoryPagination.currentPage, perPage]);
+
+    const handleInventoryExport = (type) => {
+      setExportMenuOpen(false);
+      if (type === "pdf") {
+        const opened = exportInventoryPdf(filteredInventory);
+        if (!opened) window.alert("Browser បាន block popup។ សូមអនុញ្ញាត popup រួច Export ម្តងទៀត។");
+        return;
+      }
+      if (type === "excel") {
+        exportInventoryExcel(filteredInventory);
+        return;
+      }
+      exportInventoryCsv(filteredInventory);
+    };
 
     const inventoryPageNumbers = useMemo(
       () => getPageNumbers(inventoryPagination.currentPage, inventoryPagination.lastPage),
@@ -1565,7 +1619,7 @@
 
           <SummaryCard
             theme={theme}
-            title="តម្លៃស្តុក"
+            title="តម្លៃដើមស្តុក"
             rawValue={stockValue}
             icon={<FiDollarSign className="text-[34px] text-emerald-500" />}
             iconBg="bg-emerald-500/10"
@@ -1791,6 +1845,10 @@
           getStatusClass={getStatusClass}
           openViewModal={openViewModal}
           openAdjustmentModal={openAdjustmentModal}
+          canExport={filteredInventory.length > 0}
+          exportMenuOpen={exportMenuOpen}
+          setExportMenuOpen={setExportMenuOpen}
+          handleExport={handleInventoryExport}
         />
           </>
         )}
@@ -1892,7 +1950,7 @@
         {activeTab === "movements" && (
           <>
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_220px_230px_180px]">
+              <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_190px_190px_190px_150px]">
                 <div className="relative">
                   <FiSearch
                     className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -1936,7 +1994,24 @@
                         label: formatMovementTypeKh(type),
                       })),
                     ]}
-                    searchable={serverMovements.length > 8}
+                    heightClass="h-12"
+                    roundedClass="rounded-2xl"
+                  />
+                </div>
+
+                <div className="relative">
+                  <InventoryDropdown
+                    value={movementPeriodFilter}
+                    onChange={setMovementPeriodFilter}
+                    theme={theme}
+                    icon={<FiClock />}
+                    options={[
+                      { value: "All", label: "ពេលវេលាទាំងអស់" },
+                      { value: "today", label: "ថ្ងៃនេះ" },
+                      { value: "week", label: "អាទិត្យនេះ" },
+                      { value: "month", label: "ខែនេះ" },
+                      { value: "year", label: "ឆ្នាំនេះ" },
+                    ]}
                     heightClass="h-12"
                     roundedClass="rounded-2xl"
                   />

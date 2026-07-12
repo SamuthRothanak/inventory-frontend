@@ -84,6 +84,23 @@ export function PurchaseFormModal({
   const title = mode === "add" ? "បន្ថែមការទិញ" : isReceiveMode ? "ទទួលទំនិញ" : "កែការទិញ";
 
   const currencyPreview = calculateCurrencyPreview({ items, form });
+  const getItemDisplayTotal = (item) => {
+    const lineTotalUsd = Number(item.lineTotalUsd ?? item.lineTotal ?? 0);
+    const lineTotalKhr = Number(item.lineTotalKhr ?? 0);
+    if (lineTotalUsd > 0 || lineTotalKhr > 0) {
+      return { usd: lineTotalUsd, khr: lineTotalKhr };
+    }
+
+    const invoiceTotal = Number(item.invoiceTotal || 0) || Number(item.inputUnitCost || item.unitCost || 0) * Number(item.invoicedQty || 0);
+    const rate = Number(form.exchangeRateUsed || item.exchangeRateUsed || 0);
+    if (!invoiceTotal || !rate) return { usd: 0, khr: 0 };
+
+    if (String(item.inputCurrency || form.inputCurrency || "USD").toUpperCase() === "KHR") {
+      return { usd: invoiceTotal / rate, khr: invoiceTotal };
+    }
+
+    return { usd: invoiceTotal, khr: invoiceTotal * rate };
+  };
 
 
 
@@ -139,7 +156,7 @@ export function PurchaseFormModal({
                 <>
                   <Controller control={control} name="inputCurrency" render={({ field }) => <FormSelect label="រូបិយប័ណ្ណវិក្កយបត្រ" required value={field.value} error={fieldError("inputCurrency")} onChange={bindField("inputCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
 
-                  <Controller control={control} name="exchangeRateUsed" render={({ field }) => <FormInput label="អត្រាប្ដូររូបិយប័ណ្ណ" required type="number" value={field.value} error={fieldError("exchangeRateUsed")} onChange={bindField("exchangeRateUsed", field.onChange)} theme={theme} icon={<FiCreditCard />} helper={Number(field.value || 0) > 0 ? `1 USD = ${Number(field.value).toLocaleString()} KHR` : "ឧ: 1 USD = 4000 KHR"} />} />
+                  <Controller control={control} name="exchangeRateUsed" render={({ field }) => <FormInput label="អត្រាប្ដូររូបិយប័ណ្ណ" required type="number" value={field.value} error={fieldError("exchangeRateUsed")} onChange={bindField("exchangeRateUsed", field.onChange)} theme={theme} icon={<FiCreditCard />} decimalPlaces={2} helper={Number(field.value || 0) > 0 ? `1 USD = ${Number(field.value).toLocaleString()} KHR` : "ឧ: 1 USD = 4000 KHR"} />} />
                 </>
               )}
 
@@ -243,7 +260,12 @@ export function PurchaseFormModal({
 
                       <td className="px-3 py-3">{formatDateOnly(item.expiredDate)}</td>
 
-                      <td className="px-3 py-3 font-semibold">{formatCurrencyPair(item.lineTotalUsd ?? item.lineTotal, item.lineTotalKhr)}</td>
+                      <td className="px-3 py-3 font-semibold">
+                        {(() => {
+                          const total = getItemDisplayTotal(item);
+                          return formatCurrencyPair(total.usd, total.khr);
+                        })()}
+                      </td>
 
                       <td className="px-3 py-3"><div className="flex items-center justify-center gap-2"><button type="button" onClick={() => onEditItem(item, index)} className="flex h-8 items-center justify-center gap-1 rounded-lg bg-blue-600 px-2 text-xs font-semibold text-white hover:bg-blue-700"><FiEdit2 size={14} />{isReceiveMode ? "ទទួល" : "កែ"}</button>{!isReceiveMode && <button type="button" onClick={() => onRemoveItem(index)} className="flex h-8 items-center justify-center gap-1 rounded-lg bg-red-500 px-2 text-xs font-semibold text-white hover:bg-red-600"><FiTrash size={14} />លុប</button>}</div></td>
 
@@ -281,17 +303,17 @@ export function PurchaseFormModal({
 
               {form.deliveryOption !== "none" && <Controller control={control} name="deliveryFeeCurrency" render={({ field }) => <FormSelect label="រូបិយប័ណ្ណដឹក" value={field.value} error={fieldError("deliveryFeeCurrency")} onChange={bindField("deliveryFeeCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />}
 
-              {form.deliveryOption !== "none" && <Controller control={control} name="deliveryFee" render={({ field }) => <FormInput label="ថ្លៃដឹក" type="number" value={field.value} error={fieldError("deliveryFee")} onChange={bindField("deliveryFee", field.onChange)} theme={theme} icon={form.deliveryFeeCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />} />} />}
+              {form.deliveryOption !== "none" && <Controller control={control} name="deliveryFee" render={({ field }) => <FormInput label="ថ្លៃដឹក" type="number" value={field.value} error={fieldError("deliveryFee")} onChange={bindField("deliveryFee", field.onChange)} theme={theme} decimalPlaces={2} icon={form.deliveryFeeCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />} />} />}
 
               <Controller control={control} name="discountCurrency" render={({ field }) => <FormSelect label="រូបិយប័ណ្ណបញ្ចុះ" value={field.value} error={fieldError("discountCurrency")} onChange={bindField("discountCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
 
-              <Controller control={control} name="discountTotal" render={({ field }) => <FormInput label="ចំនួនបញ្ចុះ" type="number" value={field.value} error={fieldError("discountTotal")} onChange={bindField("discountTotal", field.onChange)} theme={theme} icon={<FiCreditCard />} />} />
+              <Controller control={control} name="discountTotal" render={({ field }) => <FormInput label="ចំនួនបញ្ចុះ" type="number" value={field.value} error={fieldError("discountTotal")} onChange={bindField("discountTotal", field.onChange)} theme={theme} decimalPlaces={2} icon={<FiCreditCard />} />} />
 
               {!isPayAfterCheck && (
                 <>
                   <Controller control={control} name="paidCurrency" render={({ field }) => <FormSelect label="រូបិយប័ណ្ណបង់" value={field.value} error={fieldError("paidCurrency")} onChange={bindField("paidCurrency", field.onChange)} theme={theme} icon={<FiDollarSign />} options={[{ value: "USD", label: "USD" }, { value: "KHR", label: "KHR" }]} />} />
 
-                  <Controller control={control} name="paidAmount" render={({ field }) => <FormInput label="ចំនួនបង់" type="number" value={form.paymentStatus === "paid" ? (form.paidCurrency === "KHR" ? currencyPreview.grandTotalKhr : currencyPreview.grandTotalUsd) : field.value} error={fieldError("paidAmount")} onChange={bindField("paidAmount", field.onChange)} theme={theme} icon={form.paidCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />} />} />
+                  <Controller control={control} name="paidAmount" render={({ field }) => <FormInput label="ចំនួនបង់" type="number" value={form.paymentStatus === "paid" ? (form.paidCurrency === "KHR" ? currencyPreview.grandTotalKhr : currencyPreview.grandTotalUsd) : field.value} error={fieldError("paidAmount")} onChange={bindField("paidAmount", field.onChange)} theme={theme} decimalPlaces={2} icon={form.paidCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />} />} />
                 </>
               )}
 

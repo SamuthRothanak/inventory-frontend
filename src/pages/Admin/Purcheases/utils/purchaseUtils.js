@@ -159,6 +159,20 @@ export function formatCurrencyPair(usd, khr) {
 
 }
 
+export function formatActualPaidAmount(purchase = {}) {
+  if (purchase.paymentStatus === "unpaid") return "$0.00";
+
+  const currency = normalizeCurrency(purchase.paidCurrency || purchase.inputCurrency || "USD");
+  const amount = Number(
+    purchase.paidAmount ??
+      (currency === "KHR" ? purchase.paidAmountKhr : purchase.paidAmountUsd) ??
+      0
+  );
+
+  if (currency === "KHR") return `\u17db${Math.round(amount).toLocaleString("en-US")}`;
+  return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export function formatDateOnly(value) {
   if (!value) return "-";
   const text = String(value);

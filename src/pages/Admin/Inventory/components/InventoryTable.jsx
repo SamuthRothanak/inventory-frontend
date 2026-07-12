@@ -1,7 +1,10 @@
 import {
   FiChevronLeft,
   FiChevronRight,
+  FiChevronDown,
+  FiDownload,
   FiEye,
+  FiFileText,
   FiPackage,
   FiSearch,
   FiTrendingDown,
@@ -30,6 +33,10 @@ export default function InventoryTable({
     getStatusClass,
     openViewModal,
     openAdjustmentModal,
+    canExport,
+    exportMenuOpen,
+    setExportMenuOpen,
+    handleExport,
   }) {
     return (
       <div className={`overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}>
@@ -42,6 +49,33 @@ export default function InventoryTable({
                 ? "រង់ចាំបន្តិច..."
                 : `បង្ហាញ ${pagination.from || 0}–${pagination.to || filteredInventory.length} នៃ ${pagination.total} ស្តុក`}
             </p>
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              disabled={!canExport}
+              onClick={() => canExport && setExportMenuOpen?.((open) => !open)}
+              className={`inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge}`}
+            >
+              <FiDownload />
+              Export
+              <FiChevronDown className={`transition ${exportMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+            {exportMenuOpen && (
+              <div className={`absolute right-0 z-30 mt-2 w-44 overflow-hidden rounded-xl border shadow-xl ${theme.card}`}>
+                {["pdf", "excel", "csv"].map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => handleExport?.(type)}
+                    className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 ${theme.text}`}
+                  >
+                    <FiFileText />
+                    {type.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

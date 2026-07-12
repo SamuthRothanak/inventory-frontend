@@ -3,12 +3,16 @@ import { FiCheck, FiChevronDown, FiX } from "react-icons/fi";
 import { RETURN_STATUS_LABEL, STATUS_LABEL } from "../utils/purchaseConstants";
 
 const isDarkTheme = (theme) => String(theme?.select || "").includes("bg-[#1b1b1f]");
-const sanitizeNumber = (value, allowDecimal = true) => {
+const sanitizeNumber = (value, allowDecimal = true, decimalPlaces = null) => {
   let nextValue = String(value || "").replace(/-/g, "");
   if (!allowDecimal) return nextValue.replace(/[^0-9]/g, "");
   nextValue = nextValue.replace(/[^0-9.]/g, "");
   const parts = nextValue.split(".");
-  return parts.length > 2 ? `${parts[0]}.${parts.slice(1).join("")}` : nextValue;
+  const integerPart = (parts[0] || "").replace(/^0+(?=\d)/, "") || (nextValue.startsWith(".") ? "0" : parts[0]);
+  const decimalPart = parts.slice(1).join("");
+  if (parts.length === 1) return integerPart;
+  const limitedDecimal = decimalPlaces === null ? decimalPart : decimalPart.slice(0, decimalPlaces);
+  return `${integerPart || "0"}.${limitedDecimal}`;
 };
 
 export function FilterSelect({ value, setValue, theme, icon, options, searchable = false }) {
@@ -242,7 +246,7 @@ export function StatusBadge({ status, getStatusClass, getStatusIcon }) {
 
 
 
-export function FormInput({ label, required = false, value, onChange, theme, error = "", type = "text", placeholder = "", icon, disabled = false, helper = "", allowDecimal = true }) {
+export function FormInput({ label, required = false, value, onChange, theme, error = "", type = "text", placeholder = "", icon, disabled = false, helper = "", allowDecimal = true, decimalPlaces = null }) {
 
   return (
 
@@ -254,7 +258,7 @@ export function FormInput({ label, required = false, value, onChange, theme, err
 
         {icon && <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>{icon}</span>}
 
-        <input type={type} value={value} disabled={disabled} placeholder={placeholder} inputMode={type === "number" ? "decimal" : undefined} onChange={(event) => onChange(type === "number" ? sanitizeNumber(event.target.value, allowDecimal) : event.target.value)} className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 text-sm outline-none transition focus:ring-4 disabled:cursor-not-allowed disabled:opacity-70 ${theme.input} ${error ? "border-red-500 focus:border-red-500" : ""}`} />
+        <input type={type === "number" ? "text" : type} value={value} disabled={disabled} placeholder={placeholder} inputMode={type === "number" ? "decimal" : undefined} onChange={(event) => onChange(type === "number" ? sanitizeNumber(event.target.value, allowDecimal, decimalPlaces) : event.target.value)} onBlur={(event) => type === "number" && onChange(sanitizeNumber(event.target.value, allowDecimal, decimalPlaces))} className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 text-sm outline-none transition focus:ring-4 disabled:cursor-not-allowed disabled:opacity-70 ${theme.input} ${error ? "border-red-500 focus:border-red-500" : ""}`} />
 
       </div>
 
@@ -458,5 +462,3 @@ export function EmptyState({ theme, icon, title, description }) {
   );
 
 }
-
-

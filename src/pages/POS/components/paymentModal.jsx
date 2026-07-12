@@ -61,6 +61,16 @@ const BASE_TABS = [
 const OTHER_PROVIDER = "ផ្សេងៗ";
 const PROVIDERS = ["ABA", "Wing", "ACLEDA", "Bakong", OTHER_PROVIDER];
 
+const sanitizeMoneyInput = (value, currency = "USD") => {
+  const decimalPlaces = currency === "KHR" ? 0 : 2;
+  let nextValue = String(value || "").replace(/-/g, "").replace(/[^0-9.]/g, "");
+  const parts = nextValue.split(".");
+  const integerPart = (parts[0] || "").replace(/^0+(?=\d)/, "") || (nextValue.startsWith(".") ? "0" : parts[0]);
+  if (decimalPlaces === 0 || parts.length === 1) return integerPart || "";
+  const decimalPart = parts.slice(1).join("").slice(0, decimalPlaces);
+  return `${integerPart || "0"}.${decimalPart}`;
+};
+
 // ─── Print receipt ────────────────────────────────────────────────
 function printReceipt(data) {
   const {
@@ -76,7 +86,8 @@ function printReceipt(data) {
     </tr>`).join("");
 
   const paymentRows = data.isCredit
-    ? `<tr><td style="color:#dc2626;font-weight:bold">ចំនួនជំពាក់</td><td style="text-align:right;color:#dc2626;font-weight:bold">${usd(total)}</td></tr>`
+    ? `<tr><td style="color:#2563eb;font-weight:bold">មិនទាន់ទូទាត់</td><td style="text-align:right;color:#2563eb;font-weight:bold">${usd(total)}<br/><span style="font-size:11px;font-weight:normal;color:#64748b">${khr(total * exchangeRate)}</span></td></tr>
+       <tr><td colspan="2" style="color:#888;font-size:11px">វិធីបង់ប្រាក់ និងរូបិយប័ណ្ណនឹងកត់ត្រាពេលអតិថិជនបង់ប្រាក់</td></tr>`
     : payments.map((p) => `
     <tr>
       <td>${p.providerName} (${p.currencyCode})</td>
@@ -139,7 +150,7 @@ function ReceiptView({ receiptData, onClose, onNewSale, onPrint }) {
       <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
         <div className={`flex items-center gap-2 ${isCredit ? "text-blue-600" : "text-green-600"}`}>
           <CheckCircle className="h-5 w-5" />
-          <span className="font-bold text-slate-900">{isCredit ? "លក់ជំពាក់ — ទំនិញបានផ្តល់" : "ការលក់បញ្ចប់"}</span>
+          <span className="font-bold text-slate-900">{isCredit ? "លក់មិនទាន់ទូទាត់ — ទំនិញបានផ្តល់" : "ការលក់បញ្ចប់"}</span>
         </div>
         <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100">
           <X className="h-4 w-4" />
@@ -200,12 +211,15 @@ function ReceiptView({ receiptData, onClose, onNewSale, onPrint }) {
         {/* Payments / Balance Due */}
         <div className="mt-4">
           {isCredit ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-center justify-between">
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-red-400">ចំនួនជំពាក់</p>
-                <p className="mt-0.5 text-xs text-red-400">{customerName} — ទូទាត់ក្រោយ</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-500">មិនទាន់ទូទាត់</p>
+                <p className="mt-0.5 text-xs text-blue-500">{customerName} — មិនទាន់កត់ត្រាវិធីបង់ប្រាក់</p>
               </div>
-              <p className="text-xl font-extrabold text-red-600">{usd(total)}</p>
+              <div className="text-right">
+                <p className="text-xl font-extrabold text-blue-600">{usd(total)}</p>
+                <p className="text-xs font-semibold text-blue-500">{khr(total * exchangeRate)}</p>
+              </div>
             </div>
           ) : (
             <>
@@ -281,7 +295,7 @@ export default function PaymentModal({
 }) {
   const allTabs = [
     ...BASE_TABS,
-    ...(saleMode === "wholesale" && selectedCustomer ? [{ id: "credit", label: "ជំពាក់" }] : []),
+    ...(saleMode === "wholesale" && selectedCustomer ? [{ id: "credit", label: "មិនទាន់ទូទាត់" }] : []),
   ];
 
   const [tab,               setTab]               = useState("cash");
@@ -290,6 +304,9 @@ export default function PaymentModal({
   const [transferProvider,  setTransferProvider]   = useState("ABA");
   const [transferOther,     setTransferOther]      = useState("");
   const [transferCurrency,  setTransferCurrency]   = useState("USD");
+  const [transferAmount,    setTransferAmount]     = useState("");
+  const [transferChangeCurrency, setTransferChangeCurrency] = useState("USD");
+  const [transferChange,    setTransferChange]     = useState("");
   const [splitProvider,     setSplitProvider]      = useState("ABA");
   const [splitOther,        setSplitOther]         = useState("");
   const [splitTransferCurrency, setSplitTransferCurrency] = useState("USD");
@@ -315,15 +332,23 @@ export default function PaymentModal({
 
   // ── Transfer calculations ──
   const resolvedTransferProvider = transferProvider === OTHER_PROVIDER
-    ? transferOther.trim()
+    ? (transferOther.trim() || OTHER_PROVIDER)
     : transferProvider;
-  const transferReceived    = transferCurrency === "USD" ? total : Math.ceil(total * exchangeRate);
-  const transferApplied     = total;
-  const canCompleteTransfer = total > 0 && Boolean(resolvedTransferProvider);
+  const transferReceived    = transferAmount !== "" ? Number(transferAmount) : (transferCurrency === "USD" ? total : Math.ceil(total * exchangeRate));
+  const transferReceivedUsd = transferCurrency === "USD" ? transferReceived : transferReceived / exchangeRate;
+  const transferApplied     = Math.min(transferReceivedUsd, total);
+  const transferChangeDueUsd = Math.max(transferReceivedUsd - total, 0);
+  const transferChangeAmt   = Number(transferChange || 0);
+  const transferChangeUsd   = transferChangeCurrency === "USD" ? transferChangeAmt : transferChangeAmt / exchangeRate;
+  const transferExpectedChange = transferChangeCurrency === "USD" ? transferChangeDueUsd.toFixed(2) : Math.ceil(transferChangeDueUsd * exchangeRate);
+  const transferChangeValid = transferChangeDueUsd <= 0 || Math.abs(transferChangeUsd - transferChangeDueUsd) < 0.01;
+  const canCompleteTransfer = total > 0
+    && transferApplied >= total
+    && transferChangeValid;
 
   // ── Split calculations ──
   const resolvedSplitProvider = splitProvider === OTHER_PROVIDER
-    ? splitOther.trim()
+    ? (splitOther.trim() || OTHER_PROVIDER)
     : splitProvider;
   const splitTransferAmt     = Number(splitTransfer || 0);
   const splitTransferUsd     = splitTransferCurrency === "USD" ? splitTransferAmt : splitTransferAmt / exchangeRate;
@@ -341,7 +366,6 @@ export default function PaymentModal({
   const splitChangeValid     = splitChangeDueUsd <= 0 || Math.abs(splitChangeUsd - splitChangeDueUsd) < 0.01;
   const canCompleteSplit     = total > 0
     && splitTotal >= total
-    && (splitTransferAmt <= 0 || Boolean(resolvedSplitProvider))
     && splitChangeValid;
 
   // ── Build payment objects (aligned with flow: payments.exchange_rate_used) ──
@@ -368,9 +392,9 @@ export default function PaymentModal({
         currencyCode: transferCurrency,
         amountReceived: transferReceived,
         exchangeRateUsed: exchangeRate,
-        amountAppliedInvoiceCurrency: total,
-        changeAmount: 0,
-        changeCurrency: transferCurrency,
+        amountAppliedInvoiceCurrency: transferApplied,
+        changeAmount: transferChangeDueUsd > 0 ? transferChangeAmt : 0,
+        changeCurrency: transferChangeDueUsd > 0 ? transferChangeCurrency : transferCurrency,
         paidAt: now,
       }];
     }
@@ -703,9 +727,10 @@ export default function PaymentModal({
                 <div>
                   <p className="mb-1.5 text-xs font-semibold text-slate-500">ចំនួនទទួល</p>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={cashAmount}
-                    onChange={(e) => setCashAmount(e.target.value)}
+                    onChange={(e) => setCashAmount(sanitizeMoneyInput(e.target.value, cashCurrency))}
                     placeholder={cashCurrency === "USD" ? total.toFixed(2) : Math.ceil(total * exchangeRate).toString()}
                     className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
                   />
@@ -801,18 +826,11 @@ export default function PaymentModal({
                         maxLength={255}
                         autoFocus
                         placeholder="ឧ. Canadia, Sathapana, Woori..."
-                        className={cn(
-                          "h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:ring-2",
-                          transferOther.trim()
-                            ? "border-slate-200 focus:border-red-300 focus:ring-red-100"
-                            : "border-red-300 focus:border-red-400 focus:ring-red-100"
-                        )}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
                       />
-                      {!transferOther.trim() && (
-                        <p className="mt-1.5 text-xs font-medium text-red-500">
-                          សូមបញ្ចូលឈ្មោះធនាគារដែលទទួលប្រាក់។
-                        </p>
-                      )}
+                      <p className="mt-1.5 text-xs text-slate-400">
+                        បើមិនដឹង ទុកទទេបាន។ ប្រព័ន្ធនឹងកត់ជា ផ្សេងៗ។
+                      </p>
                     </div>
                   )}
                 </div>
@@ -825,7 +843,7 @@ export default function PaymentModal({
                       <button
                         key={c.v}
                         type="button"
-                        onClick={() => setTransferCurrency(c.v)}
+                        onClick={() => { setTransferCurrency(c.v); setTransferAmount(""); setTransferChange(""); }}
                         className={cn(
                           "flex-1 h-10 rounded-xl text-sm font-bold transition",
                           transferCurrency === c.v
@@ -839,28 +857,82 @@ export default function PaymentModal({
                   </div>
                 </div>
 
-                {/* Locked amount */}
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500">ចំនួន Transfer ({transferCurrency})</p>
-                      <p className="mt-0.5 text-xs text-slate-400">
-                        ពិតប្រាកដ — តាម {resolvedTransferProvider || "មិនទាន់បញ្ជាក់"}
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-5 space-y-3">
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold text-slate-500">ចំនួនដែលអតិថិជនបាញ់ ({transferCurrency})</p>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={transferAmount}
+                      onChange={(e) => setTransferAmount(sanitizeMoneyInput(e.target.value, transferCurrency))}
+                      placeholder={transferCurrency === "USD" ? total.toFixed(2) : Math.ceil(total * exchangeRate)}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
+                    />
+                    {transferCurrency === "KHR" && transferReceived > 0 && (
+                      <p className="mt-1.5 text-xs text-slate-400">
+                        USD equivalent: <span className="font-semibold text-slate-600">{usd(transferReceivedUsd)}</span>
                       </p>
-                    </div>
-                    <p className="text-2xl font-extrabold text-slate-900">
-                      {transferCurrency === "USD" ? usd(total) : khr(Math.ceil(total * exchangeRate))}
-                    </p>
+                    )}
                   </div>
-                  <div className="mt-4 border-t border-slate-200 pt-4 text-xs text-slate-400 space-y-1.5">
-                    <p>· អ្នកទទួលប្រាក់ transfer ហើយ → click Complete</p>
-                    {transferCurrency === "USD"
-                      ? <p>· KHR equivalent: <span className="font-semibold text-slate-600">{khr(total * exchangeRate)}</span></p>
-                      : <p>· USD equivalent: <span className="font-semibold text-slate-600">{usd(total)}</span></p>
-                    }
-                    <p>· អត្រា: 1 USD = {exchangeRate.toLocaleString()} KHR</p>
+                  <div className="border-t border-slate-200 pt-3 text-xs text-slate-400 space-y-1.5">
+                    <p>· តាម {resolvedTransferProvider || "មិនទាន់បញ្ជាក់"} · អត្រា: 1 USD = {exchangeRate.toLocaleString()} KHR</p>
+                    <p>· ត្រូវទូទាត់: <span className="font-semibold text-slate-600">{usd(total)}</span></p>
                   </div>
                 </div>
+
+                {transferChangeDueUsd > 0 && (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">លុយអាប់</p>
+                      <span className="rounded-lg bg-white px-2 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+                        ត្រូវអាប់: {transferChangeCurrency === "USD" ? usd(transferChangeDueUsd) : `${Math.ceil(transferChangeDueUsd * exchangeRate).toLocaleString()} ៛`}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold text-slate-500">រូបិយប័ណ្ណអាប់</p>
+                      <div className="flex gap-2">
+                        {[{ v: "USD", l: "USD ($)" }, { v: "KHR", l: "KHR (៛)" }].map((c) => (
+                          <button
+                            key={c.v}
+                            type="button"
+                            onClick={() => { setTransferChangeCurrency(c.v); setTransferChange(""); }}
+                            className={cn(
+                              "flex-1 h-9 rounded-xl text-xs font-bold transition",
+                              transferChangeCurrency === c.v
+                                ? "bg-red-500 text-white shadow-sm shadow-red-200"
+                                : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                            )}
+                          >
+                            {c.l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold text-slate-500">ចំនួនអាប់ ({transferChangeCurrency})</p>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={transferChange}
+                        onChange={(e) => setTransferChange(sanitizeMoneyInput(e.target.value, transferChangeCurrency))}
+                        placeholder={String(transferExpectedChange)}
+                        className={cn(
+                          "h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:ring-2",
+                          transferChangeValid ? "border-slate-200 focus:border-red-300 focus:ring-red-100" : "border-red-300 focus:border-red-400 focus:ring-red-100"
+                        )}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <PaymentRow
+                  label={resolvedTransferProvider || "ធនាគារ / QR"}
+                  currency={transferCurrency}
+                  received={transferReceived}
+                  applied={transferApplied}
+                  change={transferChangeDueUsd > 0 ? transferChangeAmt : 0}
+                  changeCurrency={transferChangeCurrency}
+                />
 
                 <button
                   type="button"
@@ -915,18 +987,11 @@ export default function PaymentModal({
                           onChange={(event) => setSplitOther(event.target.value)}
                           maxLength={255}
                           placeholder="ឧ. Canadia, Sathapana, Woori..."
-                          className={cn(
-                            "h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:ring-2",
-                            splitOther.trim() || splitTransferAmt <= 0
-                              ? "border-slate-200 focus:border-red-300 focus:ring-red-100"
-                              : "border-red-300 focus:border-red-400 focus:ring-red-100"
-                          )}
+                          className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
                         />
-                        {!splitOther.trim() && splitTransferAmt > 0 && (
-                          <p className="mt-1.5 text-xs font-medium text-red-500">
-                            សូមបញ្ចូលឈ្មោះធនាគារដែលទទួលប្រាក់។
-                          </p>
-                        )}
+                        <p className="mt-1.5 text-xs text-slate-400">
+                          បើមិនដឹង ទុកទទេបាន។ ប្រព័ន្ធនឹងកត់ជា ផ្សេងៗ។
+                        </p>
                       </div>
                     )}
                   </div>
@@ -953,9 +1018,10 @@ export default function PaymentModal({
                   <div>
                     <p className="mb-1.5 text-xs font-semibold text-slate-500">ចំនួន ({splitTransferCurrency})</p>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={splitTransfer}
-                      onChange={(e) => setSplitTransfer(e.target.value)}
+                      onChange={(e) => setSplitTransfer(sanitizeMoneyInput(e.target.value, splitTransferCurrency))}
                       placeholder={splitTransferCurrency === "USD" ? total.toFixed(2) : Math.ceil(total * exchangeRate)}
                       className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
                     />
@@ -998,9 +1064,10 @@ export default function PaymentModal({
                   <div>
                     <p className="mb-1.5 text-xs font-semibold text-slate-500">ចំនួន</p>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={splitCash}
-                      onChange={(e) => setSplitCash(e.target.value)}
+                      onChange={(e) => setSplitCash(sanitizeMoneyInput(e.target.value, splitCashCurrency))}
                       placeholder={splitCashCurrency === "USD" ? usd(remainingAfter).replace("$", "") : Math.ceil(remainingAfter * exchangeRate)}
                       className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
                     />
@@ -1038,9 +1105,10 @@ export default function PaymentModal({
                     <div>
                       <p className="mb-1.5 text-xs font-semibold text-slate-500">ចំនួនអាប់ ({splitChangeCurrency})</p>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={splitChange}
-                        onChange={(e) => setSplitChange(e.target.value)}
+                        onChange={(e) => setSplitChange(sanitizeMoneyInput(e.target.value, splitChangeCurrency))}
                         placeholder={String(splitExpectedChange)}
                         className={cn(
                           "h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:ring-2",
@@ -1086,10 +1154,10 @@ export default function PaymentModal({
             {/* ── Credit ── */}
             {tab === "credit" && (
               <div className="space-y-4">
-                <p className="font-bold text-slate-900">លក់ជំពាក់ (ទូទាត់ក្រោយ)</p>
+                <p className="font-bold text-slate-900">មិនទាន់ទូទាត់</p>
 
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-1.5">
-                  <p className="text-sm font-semibold text-blue-800">ទំនិញបានផ្តល់ — ទូទាត់ក្រោយ</p>
+                  <p className="text-sm font-semibold text-blue-800">ទំនិញបានផ្តល់ — មិនទាន់ទូទាត់</p>
                   <p className="text-xs text-blue-600">អតិថិជន: <strong>{selectedCustomer?.shopName}</strong></p>
                   {selectedCustomer?.phone && (
                     <p className="text-xs text-blue-500">ទូរស័ព្ទ: {selectedCustomer.phone}</p>
@@ -1102,13 +1170,16 @@ export default function PaymentModal({
                     <span className="font-bold text-slate-900">{usd(total)}</span>
                   </div>
                   <div className="flex justify-between border-t border-slate-200 pt-2">
-                    <span className="font-bold text-red-600">ចំនួនជំពាក់</span>
-                    <span className="text-xl font-extrabold text-red-600">{usd(total)}</span>
+                    <span className="font-bold text-blue-700">មិនទាន់ទូទាត់</span>
+                    <span className="text-right text-xl font-extrabold text-blue-700">
+                      {usd(total)}
+                      <span className="mt-0.5 block text-xs font-semibold text-blue-500">{khr(total * exchangeRate)}</span>
+                    </span>
                   </div>
                 </div>
 
                 <p className="text-xs text-slate-400">
-                  ការលក់នេះនឹងត្រូវកត់ត្រាជា <strong className="text-slate-600">មិនទាន់បង់</strong> ។ អ្នកអាចទូទាត់ក្រោយពីទំព័រ Sales ។
+                  ការលក់នេះនឹងត្រូវកត់ត្រាជា <strong className="text-slate-600">មិនទាន់បង់</strong> ។ វិធីបង់ប្រាក់ និងរូបិយប័ណ្ណនឹងកត់ត្រាពេលអតិថិជនបង់ប្រាក់នៅទំព័រ Sales ។
                 </p>
 
                 <button
@@ -1121,7 +1192,7 @@ export default function PaymentModal({
                     ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                     : <CheckCircle className="h-4 w-4" />
                   }
-                  {isSubmitting ? "កំពុងដំណើរការ..." : `ផ្តល់ជំពាក់ — ${usd(total)}`}
+                  {isSubmitting ? "កំពុងដំណើរការ..." : `បញ្ចប់មិនទាន់ទូទាត់ — ${usd(total)} / ${khr(total * exchangeRate)}`}
                 </button>
               </div>
             )}

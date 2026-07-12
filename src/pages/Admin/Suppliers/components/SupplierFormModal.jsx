@@ -24,6 +24,7 @@ import SupplierDropdown from "./SupplierDropdown";
 const sanitizeInputValue = (value, mode) => {
   if (mode === "number") return String(value || "").replace(/[^0-9]/g, "");
   if (mode === "phone") return String(value || "").replace(/[^0-9+\-\s(),/]/g, "");
+  if (mode === "shopName") return String(value || "").replace(/[^\p{L}\p{M}\p{N}\s&.,'()/-]/gu, "");
   if (mode === "text") return String(value || "").replace(/[^\p{L}\p{M}\s]/gu, "");
   return value;
 };
@@ -189,7 +190,7 @@ export default function SupplierFormModal({
               theme={theme}
               placeholder="ដារ៉ា មីនីម៉ាត"
               icon={<FiTruck />}
-              sanitize="text"
+              sanitize="shopName"
             />
 
             <FormInput

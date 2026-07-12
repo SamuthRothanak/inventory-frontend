@@ -17,6 +17,8 @@ import {
   FiUser,
   FiHash,
   FiClock,
+  FiChevronDown,
+  FiDownload,
   FiFileText,
 } from "react-icons/fi";
 
@@ -32,10 +34,12 @@ import TableLoading from "../../../components/TableLoading";
 import PermissionGate from "../../../components/PermissionGate";
 import { defaultReturnForm, validateSaleReturn } from "./schemas/saleReturnSchema";
 import { useLockBodyScroll } from "./utils/useLockBodyScroll";
+import { exportSalesCsv, exportSalesExcel, exportSalesPdf } from "./utils/salesExport";
 import { getSalesApi, recordSalePaymentApi } from "../../../services/sale.service";
 import { createSalesReturnApi } from "../../../services/salesReturn.service";
 
 function transformSale(s) {
+  const roundUsd = (value) => Number(Number(value || 0).toFixed(2));
   const soldAt = new Date(s.sold_at || s.created_at);
   return {
     id: s.id,
@@ -49,17 +53,17 @@ function transformSale(s) {
     exchangeRateKhrPerUsd: s.exchange_rate_khr_per_usd,
     saleDate: soldAt.toISOString().slice(0, 10),
     displayDate: soldAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-    subtotal: s.subtotal_usd,
-    discountTotal: s.discount_total_usd,
+    subtotal: roundUsd(s.subtotal_usd),
+    discountTotal: roundUsd(s.discount_total_usd),
     deliveryRequired: Boolean(s.delivery_option && s.delivery_option !== "customer_pickup" && s.delivery_option !== "none"),
     deliveryOption: s.delivery_option,
     deliveryFee: s.delivery_fee_input,
     deliveryFeeCurrency: s.delivery_fee_currency,
     deliveryAddress: s.delivery_address,
     deliveryStatus: s.delivery_status,
-    grandTotal: s.grand_total_usd,
-    paidTotal: s.paid_total_usd || 0,
-    balanceTotal: s.balance_total_usd ?? s.grand_total_usd ?? 0,
+    grandTotal: roundUsd(s.grand_total_usd),
+    paidTotal: roundUsd(s.paid_total_usd || 0),
+    balanceTotal: roundUsd(s.balance_total_usd ?? s.grand_total_usd ?? 0),
     saleStatus: s.sale_status,
     paymentStatus: s.payment_status,
     isPrinted: s.is_printed,
@@ -126,6 +130,7 @@ export default function Sale() {
   const [saleStatusFilter, setSaleStatusFilter] = useState("All");
   const [perPage, setPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedSale, setSelectedSale] = useState(null);
@@ -133,10 +138,16 @@ export default function Sale() {
   const [returnErrors, setReturnErrors] = useState({});
   const [returnItems, setReturnItems] = useState([]);
   const [rpForm, setRpForm] = useState({
+    payment_mode: "full",
     payment_method: "cash",
-    provider_name: "",
     currency_code: "USD",
     amount_received: "",
+    cash_currency_code: "USD",
+    cash_amount_received: "",
+    transfer_currency_code: "USD",
+    transfer_amount_received: "",
+    provider_name: "ABA",
+    provider_other_name: "",
     exchange_rate_used: "",
     reference_no: "",
     paid_at: "",
@@ -284,6 +295,22 @@ export default function Sale() {
     return filteredSales.slice(startIndex, startIndex + perPage);
   }, [filteredSales, safeCurrentPage, perPage]);
 
+  const handleExport = (type) => {
+    setExportMenuOpen(false);
+    if (type === "pdf") {
+      const opened = exportSalesPdf(filteredSales);
+      if (!opened) {
+        window.alert("PDF export was blocked by the browser. Please allow pop-ups and try again.");
+      }
+      return;
+    }
+    if (type === "excel") {
+      exportSalesExcel(filteredSales);
+      return;
+    }
+    exportSalesCsv(filteredSales);
+  };
+
   const pageNumbers = useMemo(() => {
     const maxButtons = 5;
     const half = Math.floor(maxButtons / 2);
@@ -309,7 +336,7 @@ export default function Sale() {
 
   const weeklyChartData = useMemo(() => {
     const DAYS = ["ច័ន្ទ", "អង្គារ", "ពុធ", "ព្រ.ហ", "សុក្រ", "សៅរ៏", "អាទិត្យ"];
-    const totals = Object.fromEntries(DAYS.map((d) => [d, 0]));
+    const totals = Object.fromEntries(DAYS.map((d) => [d, { received: 0, deferred: 0 }]));
     const now = new Date();
     const weekStart = new Date(now);
     const currentDay = now.getDay();
@@ -322,10 +349,11 @@ export default function Sale() {
       const d = new Date(sale.saleDate);
       if (d >= weekStart && d < weekEnd && sale.saleStatus === "completed" && sale.paymentStatus !== "refunded") {
         const mondayBasedDayIndex = (d.getDay() + 6) % 7;
-        totals[DAYS[mondayBasedDayIndex]] += Number(sale.grandTotal || 0);
+        totals[DAYS[mondayBasedDayIndex]].received += Number(sale.paidTotal || 0);
+        totals[DAYS[mondayBasedDayIndex]].deferred += Number(sale.balanceTotal || 0);
       }
     }
-    return DAYS.map((day) => ({ day, amount: totals[day] }));
+    return DAYS.map((day) => ({ day, received: totals[day].received, deferred: totals[day].deferred }));
   }, [sales]);
 
   const monthlyChartData = useMemo(() => {
@@ -334,10 +362,10 @@ export default function Sale() {
     const month = now.getMonth();
     const lastDay = new Date(year, month + 1, 0).getDate();
     const ranges = [
-      { day: "សប្ដាហ៍ទី 1", range: "ថ្ងៃទី 1–7", from: 1, to: 7, amount: 0 },
-      { day: "សប្ដាហ៍ទី 2", range: "ថ្ងៃទី 8–14", from: 8, to: 14, amount: 0 },
-      { day: "សប្ដាហ៍ទី 3", range: "ថ្ងៃទី 15–21", from: 15, to: 21, amount: 0 },
-      { day: "សប្ដាហ៍ទី 4", range: `ថ្ងៃទី 22–${lastDay}`, from: 22, to: lastDay, amount: 0 },
+      { day: "សប្ដាហ៍ទី 1", range: "ថ្ងៃទី 1–7", from: 1, to: 7, received: 0, deferred: 0 },
+      { day: "សប្ដាហ៍ទី 2", range: "ថ្ងៃទី 8–14", from: 8, to: 14, received: 0, deferred: 0 },
+      { day: "សប្ដាហ៍ទី 3", range: "ថ្ងៃទី 15–21", from: 15, to: 21, received: 0, deferred: 0 },
+      { day: "សប្ដាហ៍ទី 4", range: `ថ្ងៃទី 22–${lastDay}`, from: 22, to: lastDay, received: 0, deferred: 0 },
     ];
 
     for (const sale of sales) {
@@ -353,18 +381,19 @@ export default function Sale() {
         );
 
         if (range) {
-          range.amount += Number(sale.grandTotal || 0);
+          range.received += Number(sale.paidTotal || 0);
+          range.deferred += Number(sale.balanceTotal || 0);
         }
       }
     }
 
-    return ranges.map(({ day, range, amount }) => ({ day, range, amount }));
+    return ranges.map(({ day, range, received, deferred }) => ({ day, range, received, deferred }));
   }, [sales]);
 
   const yearlyChartData = useMemo(() => {
     const MONTHS = ["មករា", "កុម្ភៈ", "មីនា", "មេសា", "ឧសភា", "មិថុនា", "កក្កដា", "សីហា", "កញ្ញា", "តុលា", "វិច្ឆិកា", "ធ្នូ"];
     const currentYear = new Date().getFullYear();
-    const totals = Object.fromEntries(MONTHS.map((month) => [month, 0]));
+    const totals = Object.fromEntries(MONTHS.map((month) => [month, { received: 0, deferred: 0 }]));
 
     for (const sale of sales) {
       const d = new Date(sale.saleDate);
@@ -373,11 +402,12 @@ export default function Sale() {
         sale.saleStatus === "completed" &&
         sale.paymentStatus !== "refunded"
       ) {
-        totals[MONTHS[d.getMonth()]] += Number(sale.grandTotal || 0);
+        totals[MONTHS[d.getMonth()]].received += Number(sale.paidTotal || 0);
+        totals[MONTHS[d.getMonth()]].deferred += Number(sale.balanceTotal || 0);
       }
     }
 
-    return MONTHS.map((day) => ({ day, amount: totals[day] }));
+    return MONTHS.map((day) => ({ day, received: totals[day].received, deferred: totals[day].deferred }));
   }, [sales]);
 
   const activeChartData =
@@ -441,6 +471,17 @@ export default function Sale() {
       totals.USD > 0 ? fmtUsd(totals.USD) : null,
       totals.KHR > 0 ? `${Math.round(totals.KHR).toLocaleString()} ៛` : null,
     ].filter(Boolean).join(" + ") || null;
+  };
+
+  const shouldShowTotalEquivalent = (sale) =>
+    sale.paymentStatus === "unpaid" || sale.paymentStatus === "partial" || sale.payments.length === 0;
+
+  const getSaleTotalDisplay = (sale) => {
+    if (!shouldShowTotalEquivalent(sale) && sale.payments.length === 1 && sale.payments[0].currencyCode === "KHR") {
+      return `${Math.round(sale.grandTotal * sale.exchangeRateKhrPerUsd).toLocaleString()} ៛`;
+    }
+
+    return `$${Number(sale.grandTotal).toFixed(2)}`;
   };
 
   const getItemsCount = (sale) => {
@@ -530,11 +571,17 @@ export default function Sale() {
   const openRecordPaymentModal = (sale) => {
     setSelectedSale(sale);
     setRpForm({
+      payment_mode: "full",
       payment_method: "cash",
-      provider_name: "",
       currency_code: "USD",
       amount_received: Number(sale.balanceTotal).toFixed(2),
-      exchange_rate_used: "",
+      cash_currency_code: "USD",
+      cash_amount_received: "",
+      transfer_currency_code: "USD",
+      transfer_amount_received: "",
+      provider_name: "ABA",
+      provider_other_name: "",
+      exchange_rate_used: Number(sale.exchangeRateKhrPerUsd || 4100),
       reference_no: "",
       paid_at: new Date().toISOString().slice(0, 10),
       note: "",
@@ -543,36 +590,102 @@ export default function Sale() {
   };
 
   const handleRpFormChange = (field, value) => {
-    setRpForm((prev) => ({ ...prev, [field]: value }));
+    setRpForm((prev) => ({
+      ...prev,
+      ...(field === "payment_mode" && value === "partial"
+        ? { amount_received: "", cash_amount_received: "", transfer_amount_received: "" }
+        : {}),
+      ...(field === "payment_mode" && value === "full" && selectedSale
+        ? { amount_received: Number(selectedSale.balanceTotal).toFixed(2) }
+        : {}),
+      ...(field === "payment_method"
+        ? { amount_received: "", cash_amount_received: "", transfer_amount_received: "" }
+        : {}),
+      [field]: value,
+    }));
   };
 
   const recordPaymentMutation = useMutation({
     mutationFn: ({ id, payload }) => recordSalePaymentApi(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-sales"] });
-      closeModal();
     },
   });
 
-  const handleRecordPayment = () => {
+  const handleRecordPayment = async () => {
     if (!selectedSale) return;
-    if (!rpForm.amount_received || Number(rpForm.amount_received) <= 0) return;
-    const payload = {
-      payment_method: rpForm.payment_method,
-      currency_code: rpForm.currency_code,
-      amount_received: Number(rpForm.amount_received),
-      ...(rpForm.provider_name && { provider_name: rpForm.provider_name }),
+    const balance = Number(selectedSale.balanceTotal);
+    const rate = Number(rpForm.exchange_rate_used) || Number(selectedSale.exchangeRateKhrPerUsd) || 4100;
+    const toUsd = (amount, currency) => (currency === "KHR" ? Number(amount || 0) / rate : Number(amount || 0));
+    const fullAmountFor = (currency) => (currency === "KHR" ? Math.round(balance * rate) : Number(balance.toFixed(2)));
+    const providerName = rpForm.provider_name === "ផ្សេងៗ" ? rpForm.provider_other_name : rpForm.provider_name;
+    const basePayload = {
       ...(rpForm.exchange_rate_used && { exchange_rate_used: Number(rpForm.exchange_rate_used) }),
       ...(rpForm.reference_no && { reference_no: rpForm.reference_no }),
       ...(rpForm.paid_at && { paid_at: rpForm.paid_at }),
       ...(rpForm.note && { note: rpForm.note }),
     };
-    recordPaymentMutation.mutate({ id: selectedSale.id, payload });
+
+    const buildPayment = (paymentMethod, currencyCode, amountReceived, provider = "") => ({
+      ...basePayload,
+      payment_method: paymentMethod,
+      currency_code: currencyCode,
+      amount_received: Number(amountReceived),
+      ...(provider && { provider_name: provider }),
+    });
+
+    let payments = [];
+
+    if (rpForm.payment_method === "split") {
+      const transferAmount = Number(rpForm.transfer_amount_received || 0);
+      const cashAmount = Number(rpForm.cash_amount_received || 0);
+      const totalUsd =
+        toUsd(transferAmount, rpForm.transfer_currency_code) +
+        toUsd(cashAmount, rpForm.cash_currency_code);
+
+      if (totalUsd <= 0 || totalUsd > balance + 0.001) return;
+      if (rpForm.payment_mode === "full" && Math.abs(totalUsd - balance) > 0.001) return;
+
+      if (transferAmount > 0) {
+        payments.push(buildPayment("bank_transfer", rpForm.transfer_currency_code, transferAmount, providerName || "ធនាគារ / QR"));
+      }
+      if (cashAmount > 0) {
+        payments.push(buildPayment("cash", rpForm.cash_currency_code, cashAmount));
+      }
+    } else {
+      const currencyCode = rpForm.currency_code;
+      const amountReceived =
+        rpForm.payment_mode === "full" ? fullAmountFor(currencyCode) : Number(rpForm.amount_received || 0);
+      const amountUsd = toUsd(amountReceived, currencyCode);
+
+      if (amountUsd <= 0 || amountUsd > balance + 0.001) return;
+
+      payments.push(
+        buildPayment(
+          rpForm.payment_method === "bank_transfer" ? "bank_transfer" : "cash",
+          currencyCode,
+          amountReceived,
+          rpForm.payment_method === "bank_transfer" ? providerName || "ធនាគារ / QR" : ""
+        )
+      );
+    }
+
+    if (!payments.length) return;
+
+    try {
+      for (const payload of payments) {
+        await recordPaymentMutation.mutateAsync({ id: selectedSale.id, payload });
+      }
+      closeModal();
+    } catch (error) {
+      console.error("Failed to record sale payment", error);
+    }
   };
 
   const handleReturnFormChange = (field, value) => {
     setReturnForm((previous) => ({
       ...previous,
+      ...(field === "resolutionType" && value === "replacement" ? { totalAmount: "" } : {}),
       [field]: value,
     }));
 
@@ -664,7 +777,7 @@ export default function Sale() {
       resolution_type:     returnForm.resolutionType,
       reason:              returnForm.reason.trim(),
       status:              returnForm.status,
-      refund_amount_input: returnForm.totalAmount ? Number(returnForm.totalAmount) : undefined,
+      refund_amount_input: returnForm.resolutionType !== "replacement" && returnForm.totalAmount ? Number(returnForm.totalAmount) : undefined,
       items: returnItems
         .filter((item) => item.selected)
         .map((item) => ({
@@ -704,7 +817,7 @@ export default function Sale() {
 
         <SummaryCard
           theme={theme}
-          title="ប្រាក់ជំពាក់"
+          title="លុយមិនទាន់ទូទាត់"
           value={fmtUsd(pendingPaymentAmount)}
           subValue={fmtKhr(pendingPaymentAmount)}
           icon={<FiClock className="text-[34px] text-amber-500" />}
@@ -737,7 +850,7 @@ export default function Sale() {
         <div className="flex items-center gap-0 border-b border-zinc-200 px-4 dark:border-white/10">
           {[
             { id: "all",      label: "ទាំងអស់",       icon: <FiShoppingCart />, count: sales.length,                                                                                        alert: false },
-            { id: "pending",  label: "ជំពាក់",       icon: <FiClock />,        count: sales.filter((s) => s.paymentStatus === "unpaid" || s.paymentStatus === "partial").length,           alert: true  },
+            { id: "pending",  label: "មិនទាន់ទូទាត់", icon: <FiClock />,        count: sales.filter((s) => s.paymentStatus === "unpaid" || s.paymentStatus === "partial").length,           alert: true  },
             { id: "refunded", label: "ត្រឡប់",         icon: <FiRefreshCcw />,   count: sales.filter((s) => s.paymentStatus === "refunded" || s.returnsCount > 0).length,               alert: false },
           ].map((tab) => (
             <button
@@ -840,6 +953,38 @@ export default function Sale() {
           <p className={`text-xs ${theme.muted}`}>
             បង្ហាញ {paginationStart}-{paginationEnd} នៃ {filteredSales.length} វិក្កយបត្រ
           </p>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => filteredSales.length > 0 && setExportMenuOpen((open) => !open)}
+              disabled={filteredSales.length === 0}
+              className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:border-red-400 hover:text-red-500`}
+            >
+              <FiDownload />
+              Export
+              <FiChevronDown className={`transition ${exportMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {exportMenuOpen && (
+              <div className={`absolute right-0 z-30 mt-2 w-40 overflow-hidden rounded-xl border py-1 shadow-xl ${isDark ? "border-white/10 bg-zinc-900" : "border-zinc-200 bg-white"}`}>
+                {[
+                  ["pdf", "PDF"],
+                  ["csv", "CSV"],
+                  ["excel", "Excel"],
+                ].map(([type, label]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => handleExport(type)}
+                    className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold transition ${isDark ? "text-zinc-100 hover:bg-white/10" : "text-zinc-700 hover:bg-zinc-100"}`}
+                  >
+                    <FiFileText />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -862,7 +1007,7 @@ export default function Sale() {
                   ថ្លៃដឹក
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-semibold">
-                  សរុប
+                  តម្លៃសរុប
                 </th>
                 <th className="px-4 py-3 text-center text-sm font-semibold">
                   ស្ថានភាព
@@ -972,13 +1117,17 @@ export default function Sale() {
 
                   <td className="px-5 py-4">
                     <p className="text-sm font-bold">
-                      {sale.payments.length === 1 && sale.payments[0].currencyCode === "KHR"
-                        ? `${Math.round(sale.grandTotal * sale.exchangeRateKhrPerUsd).toLocaleString()} ៛`
-                        : `$${Number(sale.grandTotal).toFixed(2)}`}
+                      {getSaleTotalDisplay(sale)}
                     </p>
 
+                    {shouldShowTotalEquivalent(sale) && (
+                      <p className={`mt-1 text-xs ${theme.muted}`}>
+                        = {Math.round(Number(sale.grandTotal || 0) * Number(sale.exchangeRateKhrPerUsd || 0)).toLocaleString()} ៛
+                      </p>
+                    )}
+
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      តម្លៃដើម ${Number(sale.subtotal).toFixed(2)}
+                      តម្លៃមុនបញ្ចុះ ${Number(sale.subtotal).toFixed(2)}
                     </p>
                     {getChangeSummary(sale) && (
                       <p className="mt-1 text-xs font-semibold text-emerald-600">

@@ -11,7 +11,7 @@ import {
   FiXCircle,
 } from "react-icons/fi";
 import { STATUS } from "../utils/purchaseConstants";
-import { formatCurrencyPair, formatPaymentMode, getPurchaseItemSummary } from "../utils/purchaseUtils";
+import { formatActualPaidAmount, formatCurrencyPair, formatPaymentMode, getPurchaseItemSummary } from "../utils/purchaseUtils";
 import { EmptyState, StatusBadge, SummaryMiniBox } from "./PurchaseCommon";
 import PermissionGate from "../../../../components/PermissionGate";
 
@@ -183,7 +183,7 @@ export function PurchaseTable({
                 }`}>{{ paid: "បានបង់", partial: "បង់មួយផ្នែក", unpaid: "មិនទាន់បង់" }[purchase.paymentStatus] ?? purchase.paymentStatus}</p>
                 {purchase.paymentStatus === "partial" && (
                   <p className={`mt-1 break-words text-xs ${theme.muted}`}>
-                    បានបង់ {formatCurrencyPair(purchase.paidAmountUsd ?? purchase.paidAmount, purchase.paidAmountKhr)}
+                    បានបង់ {formatActualPaidAmount(purchase)}
                   </p>
                 )}
               </div>

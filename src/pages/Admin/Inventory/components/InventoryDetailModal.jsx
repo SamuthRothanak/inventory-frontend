@@ -32,8 +32,19 @@ export default function InventoryDetailModal({
     const [showDepleted, setShowDepleted] = useState(false);
     const batches = Array.isArray(item.batches) ? item.batches : [];
     const movements = Array.isArray(item.movements) ? item.movements : [];
-    const activeBatches = batches.filter((b) => Number(b.qtyRemainingBase) > 0);
-    const depletedBatches = batches.filter((b) => Number(b.qtyRemainingBase) <= 0);
+    const getBatchExpirySortValue = (batch) => {
+      if (!batch?.expiredDate || batch.expiredDate === "-") return Number.POSITIVE_INFINITY;
+      const time = new Date(batch.expiredDate).getTime();
+      return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+    };
+    const sortBatchesByFifo = (list) =>
+      [...list].sort(
+        (a, b) =>
+          getBatchExpirySortValue(a) - getBatchExpirySortValue(b) ||
+          Number(a.id || 0) - Number(b.id || 0)
+      );
+    const activeBatches = sortBatchesByFifo(batches.filter((b) => Number(b.qtyRemainingBase) > 0));
+    const depletedBatches = sortBatchesByFifo(batches.filter((b) => Number(b.qtyRemainingBase) <= 0));
     const nearestExpiry = getNearestExpiryInfo(activeBatches);
     const nearestExpiryBatch = nearestExpiry?.batch || activeBatches[0] || batches[0];
     const totalRemaining = batches.reduce(
@@ -169,7 +180,7 @@ export default function InventoryDetailModal({
               <SectionTitle
                 icon={<FiPackage />}
                 title="Batch ស្តុក"
-                subtitle="តាមដាន Batch ស្តុក និងថ្ងៃផុតកំណត់"
+                subtitle="តាមដាន Batch ស្តុកតាមលំដាប់ថ្ងៃផុតកំណត់"
                 theme={theme}
               />
 
@@ -327,6 +338,13 @@ export default function InventoryDetailModal({
                               })()}
                               {movement.sourcePurchaseNo ? ` · ${movement.sourcePurchaseNo}` : ""}
                             </p>
+
+                            {(movement.batchNo || movement.lotNo) && (
+                              <p className={`mt-2 text-xs leading-5 ${theme.muted}`}>
+                                Batch: {truncateBatchNo(movement.batchNo)}
+                                {movement.lotNo ? ` · Lot ${movement.lotNo}` : ""}
+                              </p>
+                            )}
 
                             <p className={`mt-2 line-clamp-2 text-xs leading-5 ${theme.muted}`}>
                               {translateNote(movement.note) || "-"}

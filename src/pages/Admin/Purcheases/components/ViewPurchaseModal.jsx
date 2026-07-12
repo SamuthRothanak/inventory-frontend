@@ -12,7 +12,7 @@ import {
 } from "react-icons/fi";
 import { getStockMovementsApi } from "../../../../services/inventory.service";
 import { STATUS, STATUS_LABEL } from "../utils/purchaseConstants";
-import { extractApiData, formatCondition, formatCurrencyPair, formatDateOnly, formatPaymentMode, formatResolutionType } from "../utils/purchaseUtils";
+import { extractApiData, formatActualPaidAmount, formatCondition, formatCurrencyPair, formatDateOnly, formatPaymentMode, formatResolutionType } from "../utils/purchaseUtils";
 import { EmptyState, FormSection, InfoLine, ModalShell, StatusBadge, SummaryMiniBox } from "./PurchaseCommon";
 
 export function ViewPurchaseModal({
@@ -211,7 +211,7 @@ export function ViewPurchaseModal({
               <SummaryMiniBox theme={theme} label="តម្លៃមុនបញ្ចុះ" value={formatCurrencyPair(purchase.subtotalUsd ?? purchase.subtotal, purchase.subtotalKhr)} />
               <SummaryMiniBox theme={theme} label="បញ្ចុះតម្លៃ" value={formatCurrencyPair(purchase.discountTotalUsd ?? purchase.discountTotal, purchase.discountTotalKhr)} />
               <SummaryMiniBox theme={theme} label="ថ្លៃដឹក" value={formatCurrencyPair(purchase.deliveryFeeUsd ?? purchase.deliveryFee, purchase.deliveryFeeKhr)} />
-              <SummaryMiniBox theme={theme} label="បានបង់" value={formatCurrencyPair(purchase.paidAmountUsd ?? purchase.paidAmount, purchase.paidAmountKhr)} />
+              <SummaryMiniBox theme={theme} label="បានបង់" value={formatActualPaidAmount(purchase)} />
               <SummaryMiniBox theme={theme} label="នៅសល់" value={formatCurrencyPair(purchase.balanceAmountUsd ?? purchase.balanceAmount, purchase.balanceAmountKhr)} strong />
               <SummaryMiniBox theme={theme} label="តម្លៃសរុប" value={formatCurrencyPair(purchase.grandTotalUsd ?? purchase.grandTotal, purchase.grandTotalKhr)} strong />
               {hasSupplierDeduction && (

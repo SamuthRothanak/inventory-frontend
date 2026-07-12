@@ -190,7 +190,7 @@ export function PurchaseReturnModal({
                 ]}
                 searchable
               />
-              <FormInput label="ចំនួនទាមទារ" required type="number" value={itemForm.qtyReturned} error={itemErrors.qtyReturned} onChange={(value) => onItemChange("qtyReturned", value)} theme={theme} icon={<FiHash />} />
+              <FormInput label="ចំនួនទាមទារ" required type="number" value={itemForm.qtyReturned} error={itemErrors.qtyReturned} onChange={(value) => onItemChange("qtyReturned", value)} theme={theme} icon={<FiHash />} decimalPlaces={4} />
               <FormSelect label="លក្ខខណ្ឌ" required value={itemForm.condition} error={itemErrors.condition} onChange={(value) => onItemChange("condition", value)} theme={theme} icon={<FiAlertTriangle />} options={conditionOptions} />
               <FormInput label="មូលហេតុ" required value={itemForm.reason} error={itemErrors.reason} onChange={(value) => onItemChange("reason", value)} theme={theme} icon={<FiFileText />} />
               <div className="flex items-end">

@@ -123,11 +123,20 @@ export function ReturnSaleModal({
                     <div>
                       <p className={`mb-1.5 text-xs font-semibold ${theme.muted}`}>ចំនួន</p>
                       <input
-                        type="number"
-                        min="1"
-                        max={item.maxQty}
+                        type="text"
+                        inputMode="decimal"
                         value={item.qty}
-                        onChange={(e) => onItemChange(item.id, "qty", e.target.value)}
+                        onChange={(e) => {
+                          const sanitized = e.target.value
+                            .replace(/-/g, "")
+                            .replace(/[^0-9.]/g, "")
+                            .split(".")
+                            .reduce((value, part, index) => index === 0 ? (part.replace(/^0+(?=\d)/, "") || "") : `${value}.${part}`, "")
+                            .split(".");
+                          const nextValue = sanitized.length === 1 ? sanitized[0] : `${sanitized[0] || "0"}.${sanitized.slice(1).join("").slice(0, 3)}`;
+                          const numeric = Number(nextValue || 0);
+                          onItemChange(item.id, "qty", Number.isFinite(numeric) && numeric > Number(item.maxQty || 0) ? String(item.maxQty) : nextValue);
+                        }}
                         className={`h-10 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${theme.input}`}
                       />
                     </div>
@@ -200,6 +209,7 @@ export function ReturnSaleModal({
               ]}
             />
 
+            {form.resolutionType !== "replacement" && (
             <FormInput
               label="ចំនួនត្រឡប់ (ស្រេចចិត្ត)"
               type="number"
@@ -209,7 +219,9 @@ export function ReturnSaleModal({
               theme={theme}
               placeholder="0.00"
               icon={<FiDollarSign />}
+              decimalPlaces={2}
             />
+            )}
 
             <FormSelect
               label="ស្ថានភាព"

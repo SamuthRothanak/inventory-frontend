@@ -61,7 +61,18 @@ export function FormSection({ title, subtitle, icon, theme, children }) {
   );
 }
 
-export function FormInput({ label, required = false, value, onChange, theme, error = "", type = "text", placeholder = "", icon }) {
+const sanitizeNumber = (value, decimalPlaces = null) => {
+  let nextValue = String(value || "").replace(/-/g, "").replace(/[^0-9.]/g, "");
+  const parts = nextValue.split(".");
+  const integerPart = (parts[0] || "").replace(/^0+(?=\d)/, "") || (nextValue.startsWith(".") ? "0" : parts[0]);
+  if (decimalPlaces === 0) return integerPart || "";
+  if (parts.length === 1) return integerPart || "";
+  const decimalPart = parts.slice(1).join("");
+  const limitedDecimal = decimalPlaces === null ? decimalPart : decimalPart.slice(0, decimalPlaces);
+  return `${integerPart || "0"}.${limitedDecimal}`;
+};
+
+export function FormInput({ label, required = false, value, onChange, theme, error = "", type = "text", placeholder = "", icon, decimalPlaces = null }) {
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
@@ -75,10 +86,12 @@ export function FormInput({ label, required = false, value, onChange, theme, err
           </span>
         )}
         <input
-          type={type}
+          type={type === "number" ? "text" : type}
           value={value}
           placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value)}
+          inputMode={type === "number" ? "decimal" : undefined}
+          onChange={(e) => onChange(type === "number" ? sanitizeNumber(e.target.value, decimalPlaces) : e.target.value)}
+          onBlur={(e) => type === "number" && onChange(sanitizeNumber(e.target.value, decimalPlaces))}
           className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${error ? "border-red-500 focus:border-red-500" : ""}`}
         />
       </div>

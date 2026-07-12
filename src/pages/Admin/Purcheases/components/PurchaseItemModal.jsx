@@ -107,8 +107,19 @@ export function PurchaseItemModal({
     inputUnitCost,
     exchangeRate: exchangeRateUsed,
   });
-  const lineTotalUsd = paymentMode === "pay_after_check" ? acceptedQty * unitCostUsd : paidQty * unitCostUsd;
-  const lineTotalKhr = paymentMode === "pay_after_check" ? acceptedQty * unitCostKhr : paidQty * unitCostKhr;
+  const payableQty = paymentMode === "pay_after_check" ? acceptedQty : paidQty;
+  const exactInvoiceTotal = Number(form.invoiceTotal || 0);
+  const exactPaidAmount = Number(form.paidAmount || 0);
+  let inputLineTotal = payableQty * inputUnitCost;
+  if (paymentMode !== "pay_after_check" && exactPaidAmount > 0) {
+    inputLineTotal = exactPaidAmount;
+  } else if (exactInvoiceTotal > 0 && invoicedQty > 0 && Math.abs(payableQty - invoicedQty) < 0.0001) {
+    inputLineTotal = exactInvoiceTotal;
+  }
+  const lineTotalUsd =
+    inputCurrency === "KHR" ? Number((inputLineTotal / Number(exchangeRateUsed || 1)).toFixed(2)) : Number(inputLineTotal.toFixed(2));
+  const lineTotalKhr =
+    inputCurrency === "KHR" ? Number(inputLineTotal.toFixed(2)) : Number((inputLineTotal * Number(exchangeRateUsed || 0)).toFixed(2));
   const isPartialPrepaidCreate = !isReceiveMode && (paymentMode === "partial_prepaid" || paymentMode === "pay_after_check" || paymentMode === "prepaid");
   const modalTitle = mode === "add" ? "បន្ថែមទំនិញការទិញ" : isReceiveMode ? "ទទួលទំនិញការទិញ" : "កែទំនិញការទិញ";
   const modalSubtitle = isReceiveMode
@@ -221,6 +232,7 @@ export function PurchaseItemModal({
                   onChange={bindField("invoicedQty", field.onChange)}
                   theme={theme}
                   icon={<FiHash />}
+                  decimalPlaces={4}
                 />
               )}
             />}
@@ -229,7 +241,7 @@ export function PurchaseItemModal({
               name="invoiceTotal"
               render={({ field }) => (
                 <FormInput
-                  label="សរុបវិក្កយបត្រ"
+                  label="សរុបលុយវិក្កយបត្រ"
                   required
                   type="number"
                   value={field.value}
@@ -237,6 +249,7 @@ export function PurchaseItemModal({
                   onChange={bindField("invoiceTotal", field.onChange)}
                   theme={theme}
                   placeholder="0.00"
+                  decimalPlaces={2}
                   icon={form.inputCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />}
                 />
               )}
@@ -253,6 +266,7 @@ export function PurchaseItemModal({
                   onChange={bindField("inputUnitCost", field.onChange)}
                   theme={theme}
                   placeholder="0.00"
+                  decimalPlaces={2}
                   icon={form.inputCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />}
                 />
               )}
@@ -271,6 +285,7 @@ export function PurchaseItemModal({
                     onChange={bindField("paidAmount", field.onChange)}
                     theme={theme}
                     placeholder="0.00"
+                    decimalPlaces={2}
                     icon={form.inputCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />}
                   />
                 )}
@@ -289,6 +304,7 @@ export function PurchaseItemModal({
                   onChange={bindField("receivedQty", field.onChange)}
                   theme={theme}
                   icon={<FiTruck />}
+                  decimalPlaces={4}
                 />
               )}
             />}
@@ -304,6 +320,7 @@ export function PurchaseItemModal({
                   onChange={bindField("damagedQty", field.onChange)}
                   theme={theme}
                   icon={<FiAlertTriangle />}
+                  decimalPlaces={4}
                 />
               )}
             />}
@@ -320,6 +337,7 @@ export function PurchaseItemModal({
                   onChange={bindField("acceptedQty", field.onChange)}
                   theme={theme}
                   icon={<FiCheckCircle />}
+                  decimalPlaces={4}
                 />
               )}
             />}

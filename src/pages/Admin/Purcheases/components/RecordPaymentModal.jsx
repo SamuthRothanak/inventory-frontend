@@ -115,6 +115,7 @@ export function RecordPaymentModal({ purchase, theme, onClose, onSubmit, isSavin
             theme={theme}
             icon={<FiCreditCard />}
             error={error}
+            decimalPlaces={2}
           />
         </div>
 
