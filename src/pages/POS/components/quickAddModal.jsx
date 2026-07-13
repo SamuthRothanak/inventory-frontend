@@ -17,33 +17,40 @@ export default function QuickAddModal({
   onClose,
   onAddToCart,
 }) {
-  const [isFresh, setIsFresh] = useState(true);
+  const [isFresh, setIsFresh] = useState(false);
 
-  useEffect(() => { setIsFresh(true); }, [selectedProduct]);
+  useEffect(() => { setIsFresh(false); }, [selectedProduct]);
 
   if (!selectedProduct) return null;
 
   const isOutOfStock = selectedProduct.stockBaseQty <= 0;
   const isOverStock  = qty > availableUnits;
+  const isInvalidQty = Number(qty) <= 0;
 
   function handleNumpad(key) {
     if (key === "⌫") {
-      setQty((v) => Math.max(1, Math.floor(v / 10)));
-      setIsFresh(false);
+      setQty((v) => {
+        if (Number(v) < 10) {
+          setIsFresh(true);
+          return 0;
+        }
+        setIsFresh(false);
+        return Math.floor(Number(v) / 10);
+      });
       return;
     }
     if (key === "×5") {
-      setQty((v) => Math.min(v * 5, 9999));
+      setQty((v) => Math.min(Math.max(Number(v), 1) * 5, 9999));
       setIsFresh(false);
       return;
     }
-    if (isFresh && key !== "0") {
+    if (Number(qty) === 0) {
       setQty(parseInt(key, 10));
       setIsFresh(false);
     } else {
       setQty((v) => {
         const next = parseInt(`${v}${key}`, 10);
-        return isNaN(next) || next < 1 ? 1 : Math.min(next, 9999);
+        return isNaN(next) ? 0 : Math.min(next, 9999);
       });
     }
   }
@@ -219,7 +226,7 @@ export default function QuickAddModal({
           <button
             type="button"
             onClick={onAddToCart}
-            disabled={!appliedRule || isOverStock || isOutOfStock}
+            disabled={!appliedRule || isInvalidQty || isOverStock || isOutOfStock}
             className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-red-500 to-rose-500 text-sm font-extrabold text-white shadow-md shadow-red-200 transition hover:from-red-600 hover:to-rose-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
           >
             <ShoppingCart className="h-4 w-4" />

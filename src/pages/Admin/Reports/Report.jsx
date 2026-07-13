@@ -26,6 +26,7 @@ import {
   FiRotateCcw,
   FiSearch,
   FiShoppingCart,
+  FiTag,
   FiTrendingDown,
   FiTruck,
 } from "react-icons/fi";
@@ -319,6 +320,13 @@ export default function Report() {
 
     return [...grouped.values()].sort((a, b) => (a.order - b.order) || a.name.localeCompare(b.name));
   }, [payBreakdown]);
+
+  const realSalesUsd = Number(paymentSummary.cashUsd || 0)
+    + Number(paymentSummary.electronicUsd || 0)
+    - Number(paymentSummary.refundUsd || 0);
+  const realSalesKhr = Number(paymentSummary.cashKhr || 0)
+    + Number(paymentSummary.electronicKhr || 0)
+    - Number(paymentSummary.refundKhr || 0);
 
   const renderPaymentLedger = (item, compact = false) => (
     <div className={compact ? "space-y-1.5" : "mt-3 space-y-2"}>
@@ -903,6 +911,24 @@ export default function Report() {
             <div className={`shrink-0 rounded-xl border px-3 py-2 text-right ${theme.badge}`}>
               <p className={`text-xs ${theme.muted}`}>សរុបលក់បានក្រោយសង</p>
               <p className={`text-sm font-extrabold ${theme.pageTitle}`}>{fmtUsd(paymentSummary.netEquivalentUsd)}</p>
+            </div>
+          </div>
+
+          <div className={`mb-4 rounded-2xl border p-3 ${isDark ? "border-emerald-500/20 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50"}`}>
+            <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <p className={`text-sm font-extrabold ${isDark ? "text-emerald-100" : "text-emerald-950"}`}>លុយលក់បានពិត</p>
+              <p className={`text-xs font-semibold ${isDark ? "text-emerald-200/75" : "text-emerald-700"}`}>សម្រាប់ផ្ទៀងផ្ទាត់លុយក្រៅប្រព័ន្ធ</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className={`rounded-xl border px-3 py-2.5 ${isDark ? "border-white/10 bg-black/20" : "border-emerald-100 bg-white"}`}>
+                <p className={`text-xs font-bold ${theme.muted}`}>លក់បាន USD</p>
+                <p className="text-xl font-extrabold tabular-nums text-emerald-700">{fmtUsd(realSalesUsd)}</p>
+              </div>
+              <div className={`rounded-xl border px-3 py-2.5 ${isDark ? "border-white/10 bg-black/20" : "border-emerald-100 bg-white"}`}>
+                <p className={`text-xs font-bold ${theme.muted}`}>លក់បាន KHR</p>
+                <p className="text-xl font-extrabold tabular-nums text-emerald-700">{formatKhr(realSalesKhr)}</p>
+              </div>
             </div>
           </div>
 

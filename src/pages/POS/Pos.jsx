@@ -294,22 +294,26 @@ export default function Pos() {
   const appliedRule    = selectedUnit ? getAppliedRule(selectedUnit, qty, appliesTo) : null;
   const unitPrice      = appliedRule?.usd || 0;
   const lineTotal      = qty * unitPrice;
+  const cartBaseQtyForSelectedProduct = selectedProduct
+    ? cart.reduce((sum, item) => item.productId === selectedProduct.id ? sum + (Number(item.baseQty) || 0) : sum, 0)
+    : 0;
   const availableUnits = selectedProduct && selectedUnit
-    ? Math.floor(selectedProduct.stockBaseQty / selectedUnit.conversionQty) : 0;
+    ? Math.floor(Math.max(0, selectedProduct.stockBaseQty - cartBaseQtyForSelectedProduct) / selectedUnit.conversionQty) : 0;
 
   const subtotal   = cart.reduce((s, item) => s + item.lineTotal, 0);
   const totalItems = cart.reduce((s, item) => s + item.qty, 0);
 
   const discountAmount = useMemo(() => {
-    if (discountType === "percent") return subtotal * (Math.min(parseFloat(discountValue || 0), 100) / 100);
-    if (discountType === "amount")  return Math.min(parseFloat(discountValue || 0), subtotal);
-    if (discountType === "khr")     return Math.min((parseFloat(discountValue || 0) / exchangeRate), subtotal);
+    const value = Math.max(0, Number.parseFloat(String(discountValue || "0").replace(/,/g, "")) || 0);
+    if (discountType === "percent") return subtotal * (Math.min(value, 100) / 100);
+    if (discountType === "amount")  return Math.min(value, subtotal);
+    if (discountType === "khr")     return Math.min(value / exchangeRate, subtotal);
     return 0;
   }, [discountType, discountValue, subtotal, exchangeRate]);
 
   const deliveryFeeUsd = useMemo(() => {
     if (!deliveryRequired) return 0;
-    const fee = parseFloat(deliveryFee || 0);
+    const fee = Math.max(0, Number.parseFloat(String(deliveryFee || "0").replace(/,/g, "")) || 0);
     return deliveryFeeCurrency === "KHR" ? fee / exchangeRate : fee;
   }, [deliveryRequired, deliveryFee, deliveryFeeCurrency, exchangeRate]);
 
@@ -340,13 +344,23 @@ export default function Pos() {
   function addToCart() {
     if (!selectedProduct || !selectedUnit || !appliedRule) return;
     setCart((prev) => {
+      const requestedQty = Math.max(0, Number(qty) || 0);
+      const requestedBaseQty = requestedQty * selectedUnit.conversionQty;
+      const usedBaseQty = prev.reduce((sum, item) => (
+        item.productId === selectedProduct.id ? sum + (Number(item.baseQty) || 0) : sum
+      ), 0);
+      const remainingBaseQty = Math.max(0, selectedProduct.stockBaseQty - usedBaseQty);
+      const addBaseQty = Math.min(requestedBaseQty, remainingBaseQty);
+      const addQty = Math.floor(addBaseQty / selectedUnit.conversionQty);
+      if (addQty <= 0) return prev;
+
       const existingIdx = prev.findIndex(
         (item) => item.productId === selectedProduct.id && item.unitId === selectedUnit.id
       );
       if (existingIdx !== -1) {
         return prev.map((item, i) => {
           if (i !== existingIdx) return item;
-          const newQty   = item.qty + qty;
+          const newQty   = item.qty + addQty;
           const newRule  = getAppliedRule(selectedUnit, newQty, appliesTo);
           const newPrice = newRule?.usd ?? item.unitPrice;
           return {
@@ -368,10 +382,10 @@ export default function Pos() {
         image:        selectedProduct.image,
         unitId:       selectedUnit.id,
         unitName:     selectedUnit.name,
-        qty,
-        baseQty:          qty * selectedUnit.conversionQty,
+        qty:          addQty,
+        baseQty:          addQty * selectedUnit.conversionQty,
         unitPrice,
-        lineTotal,
+        lineTotal:        addQty * unitPrice,
         appliedRuleId:    appliedRule.id,
         appliedRuleLabel: appliedRule.label,
       }];
@@ -382,8 +396,25 @@ export default function Pos() {
   function updateQtyInCart(id, delta) {
     setCart((prev) => prev.map((item) => {
       if (item.id !== id) return item;
-      const nextQty = Math.max(1, item.qty + delta);
-      return { ...item, qty: nextQty, baseQty: (item.baseQty / item.qty) * nextQty, lineTotal: item.unitPrice * nextQty };
+      const product = products.find((p) => p.id === item.productId);
+      const unit = product?.units?.find((u) => u.id === item.unitId);
+      const conversionQty = unit?.conversionQty || (item.baseQty / item.qty) || 1;
+      const otherBaseQty = prev.reduce((sum, row) => (
+        row.id !== item.id && row.productId === item.productId ? sum + (Number(row.baseQty) || 0) : sum
+      ), 0);
+      const maxQty = product ? Math.floor(Math.max(0, product.stockBaseQty - otherBaseQty) / conversionQty) : Infinity;
+      const nextQty = Math.max(1, Math.min(item.qty + delta, maxQty));
+      const newRule = unit ? getAppliedRule(unit, nextQty, appliesTo) : null;
+      const newPrice = newRule?.usd ?? item.unitPrice;
+      return {
+        ...item,
+        qty: nextQty,
+        baseQty: conversionQty * nextQty,
+        unitPrice: newPrice,
+        lineTotal: newPrice * nextQty,
+        appliedRuleId: newRule?.id ?? item.appliedRuleId,
+        appliedRuleLabel: newRule?.label ?? item.appliedRuleLabel,
+      };
     }));
   }
 

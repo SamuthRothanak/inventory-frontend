@@ -85,6 +85,7 @@
     exportInventoryExcel,
     exportInventoryPdf,
   } from "./utils/inventoryExport";
+  import { getNearestExpiryInfo } from "./utils/inventoryExpiry";
 
   const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const parseMovementDate = (value) => {
@@ -866,8 +867,14 @@
           item.variantCode.toLowerCase().includes(search) ||
           item.category.toLowerCase().includes(search);
 
+        const hasExpiryWarning = Boolean(getNearestExpiryInfo(item.batches)?.info?.shouldWarn);
+
         const matchesStatus =
-          statusFilter === "All" || item.status === statusFilter;
+          statusFilter === "All" ||
+          (statusFilter === "Needs Action" &&
+            (item.status === "Low Stock" || item.status === "Out of Stock")) ||
+          (statusFilter === "Expiring Stock" && hasExpiryWarning) ||
+          item.status === statusFilter;
 
         return matchesSearch && matchesStatus;
       });
@@ -1683,6 +1690,8 @@
                 icon={<FiFilter />}
                 options={[
                   { value: "All", label: "ស្ថានភាពទាំងអស់" },
+                  { value: "Needs Action", label: "ត្រូវការចាត់វិធានការ" },
+                  { value: "Expiring Stock", label: "ជិតផុតកំណត់" },
                   { value: "In Stock", label: "មានស្តុក" },
                   { value: "Low Stock", label: "ស្តុកស្ទើរអស់" },
                   { value: "Out of Stock", label: "អស់ស្តុក" },
@@ -1812,7 +1821,7 @@
               </div>
 
               <div>
-                <h3 className="text-base font-bold">ជូនដំណឹងស្តុកស្ទើរអស់</h3>
+                <h3 className="text-base font-bold">ជូនដំណឹងស្តុកត្រូវការ</h3>
 
                 <p className={`mt-1 text-sm ${theme.muted}`}>
                   {lowStockList.length} មុខត្រូវការចាត់វិធានការ
@@ -1822,11 +1831,11 @@
 
             <button
               type="button"
-              onClick={() => setStatusFilter("Low Stock")}
+              onClick={() => setStatusFilter("Needs Action")}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white hover:bg-amber-600"
             >
               <FiList />
-              មើលស្តុកស្ទើរអស់
+              មើលស្តុកត្រូវការ
             </button>
           </div>
         )}
