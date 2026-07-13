@@ -1,9 +1,8 @@
-import React, { useEffect, useId } from "react";
+﻿import React, { useEffect, useId } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   FiCheckCircle,
-  FiChevronDown,
   FiFileText,
   FiImage,
   FiSave,
@@ -15,10 +14,17 @@ import {
 
 import ModalShell from "./ModalShell";
 import CategoryImage from "./CategoryImage";
+import CategoryDropdown from "./CategoryDropdown";
 import {
   categoryDefaultValues,
   categorySchema,
 } from "../schemas/categorySchema";
+
+const sanitizeInputValue = (value, mode) => {
+  if (mode === "number") return String(value || "").replace(/[^0-9]/g, "");
+  if (mode === "text") return String(value || "").replace(/[^\p{L}\p{M}\s]/gu, "");
+  return value;
+};
 
 export default function CategoryFormModal({
   mode,
@@ -75,12 +81,12 @@ export default function CategoryFormModal({
     });
   };
 
-  const title = isEdit ? "Edit Category" : "Add Category";
+  const title = isEdit ? "កែប្រភេទ" : "បន្ថែមប្រភេទ";
 
   return (
     <ModalShell
       title={title}
-      subtitle="Category image is optional but useful for POS category filters."
+      subtitle="រូបភាពប្រភេទជា optional តែមានប្រយោជន៍សម្រាប់ POS។"
       theme={theme}
       onClose={onClose}
       footer={
@@ -90,7 +96,7 @@ export default function CategoryFormModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Cancel
+            បោះបង់
           </button>
 
           <button
@@ -100,7 +106,7 @@ export default function CategoryFormModal({
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FiSave />
-            {isSaving ? "Saving..." : "Save Category"}
+            {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកប្រភេទ"}
           </button>
         </>
       }
@@ -118,37 +124,40 @@ export default function CategoryFormModal({
 
         <SectionTitle
           icon={<FiTag />}
-          title="Basic Information"
-          subtitle="Required category details for product management."
+          title="ព័ត៌មានមូលដ្ឋាន"
+          subtitle="ព័ត៌មានចាំបាច់សម្រាប់ការគ្រប់គ្រងផលិតផល។"
           theme={theme}
         />
 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormInput
-              label="Category Name"
+              label="ឈ្មោះប្រភេទ"
               required
               error={errors.name?.message}
               theme={theme}
-              placeholder="Beverage"
+              placeholder="ភេសជ្ជៈ"
               icon={<FiTag />}
               inputProps={register("name")}
+              sanitize="text"
             />
 
             <FormSelect
-              label="Status"
+              label="ស្ថានភាព"
               theme={theme}
               icon={status === "Active" ? <FiCheckCircle /> : <FiXCircle />}
+              value={status}
+              onChange={(value) => setValue("status", value, { shouldValidate: true })}
               inputProps={register("status")}
               options={[
-                { value: "Active", label: "Active" },
-                { value: "Inactive", label: "Inactive" },
+                { value: "Active", label: "ដំណើរការ" },
+                { value: "Inactive", label: "មិនដំណើរការ" },
               ]}
             />
 
             <div className="md:col-span-2">
               <FormImageInput
-                label="Image"
+                label="រូបភាព"
                 file={imageFile}
                 preview={imagePath}
                 error={errors.imageFile?.message || errors.imagePath?.message}
@@ -183,9 +192,9 @@ export default function CategoryFormModal({
 
           <div className="mt-4">
             <FormTextarea
-              label="Description"
+              label="ការពិពណ៌នា"
               theme={theme}
-              placeholder="Drinks, soda, water, and juice"
+              placeholder="ភេសជ្ជៈជំនួយរាងកាយ...."
               icon={<FiFileText />}
               inputProps={register("description")}
               error={errors.description?.message}
@@ -195,8 +204,8 @@ export default function CategoryFormModal({
 
         <SectionTitle
           icon={<FiImage />}
-          title="Preview"
-          subtitle="How this category may appear in the POS screen."
+          title="មើលជាមុន"
+          subtitle="របៀបដែលប្រភេទនេះអាចលេចឡើងក្នុងអេក្រង់ POS។"
           theme={theme}
         />
 
@@ -204,16 +213,16 @@ export default function CategoryFormModal({
           <div className="flex items-center gap-4">
             <CategoryImage
               image={imagePath}
-              name={watch("name") || "Category"}
+              name={watch("name") || "ប្រភេទ"}
             />
 
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">
-                {watch("name") || "Category Name"}
+                {watch("name") || "ឈ្មោះប្រភេទ"}
               </p>
 
               <p className={`mt-1 line-clamp-2 text-xs ${theme.muted}`}>
-                {watch("description") || "Category description"}
+                {watch("description") || "ការពិពណ៌នាប្រភេទ"}
               </p>
 
               <span
@@ -224,7 +233,7 @@ export default function CategoryFormModal({
                 }`}
               >
                 {status === "Active" ? <FiCheckCircle /> : <FiXCircle />}
-                {status}
+                {status === "Active" ? "ដំណើរការ" : "មិនដំណើរការ"}
               </span>
             </div>
           </div>
@@ -258,7 +267,16 @@ function FormInput({
   inputProps,
   type = "text",
   placeholder = "",
+  sanitize = "",
 }) {
+  const sanitizedInputProps = {
+    ...inputProps,
+    onChange: (event) => {
+      event.target.value = sanitizeInputValue(event.target.value, sanitize);
+      inputProps?.onChange?.(event);
+    },
+  };
+
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
@@ -278,7 +296,8 @@ function FormInput({
         <input
           type={type}
           placeholder={placeholder}
-          {...inputProps}
+          {...sanitizedInputProps}
+          inputMode={sanitize === "number" ? "numeric" : undefined}
           className={`h-11 w-full rounded-xl border ${
             icon ? "pl-10" : "px-3"
           } pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${
@@ -332,40 +351,33 @@ function FormTextarea({
   );
 }
 
-function FormSelect({ label, theme, icon, inputProps, options }) {
+function FormSelect({ label, theme, icon, inputProps, value, onChange, options }) {
+  const handleChange = (nextValue) => {
+    if (onChange) {
+      onChange(nextValue);
+      return;
+    }
+
+    inputProps?.onChange?.({
+      target: {
+        name: inputProps.name,
+        value: nextValue,
+      },
+    });
+  };
+
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <select
-          {...inputProps}
-          className={`h-11 w-full appearance-none rounded-xl border ${
-            icon ? "pl-10" : "pl-3"
-          } pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-        >
-          {options.map((option) => (
-            <option key={String(option.value)} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        <FiChevronDown
-          className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-        />
-      </div>
-    </label>
+    <CategoryDropdown
+      label={label}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={handleChange}
+      options={options}
+      searchable={options.length > 6}
+      heightClass="h-11"
+      roundedClass="rounded-xl"
+    />
   );
 }
 
@@ -390,7 +402,7 @@ function FormImageInput({
         className={`rounded-2xl border border-dashed p-4 transition ${
           error
             ? "border-red-500 bg-red-500/5"
-            : "border-zinc-300 bg-white/0 hover:border-red-400 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500"
+            : "border-zinc-300 bg-white/0 hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500"
         }`}
       >
         <div className="flex flex-col gap-4 md:flex-row md:items-center">
@@ -412,7 +424,7 @@ function FormImageInput({
               className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
             >
               <FiUploadCloud className="text-lg" />
-              Choose Image
+              ជ្រើសរើសរូបភាព
             </label>
 
             <input
@@ -427,7 +439,7 @@ function FormImageInput({
             />
 
             <p className={`mt-3 truncate text-sm ${theme.muted}`}>
-              {file?.name || "PNG, JPG, JPEG up to your backend limit."}
+              {file?.name || "JPG, PNG, WEBP · Max 2 MB"}
             </p>
 
             {file && (
@@ -444,7 +456,7 @@ function FormImageInput({
               className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <FiX />
-              Remove
+              លុបចេញ
             </button>
           )}
         </div>

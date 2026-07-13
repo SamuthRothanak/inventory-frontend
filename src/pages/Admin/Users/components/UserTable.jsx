@@ -1,5 +1,6 @@
-import {
+﻿import {
   FiEdit2,
+  FiEye,
   FiTrash2,
   FiRefreshCw,
   FiUser,
@@ -10,16 +11,18 @@ import {
   FiXCircle,
   FiSearch,
 } from "react-icons/fi";
-import { capitalize } from "../utils/userUtils";
+import { getRoleLabel } from "../utils/userUtils";
+import PermissionGate from "../../../../components/PermissionGate";
 
 export default function UserTable({
   filteredUsers,
   isLoading,
   isError,
   error,
+  openViewModal,
   openEditModal,
-  handleInactive,
-  statusMutation,
+  onDelete,
+  isDeletingId,
   theme,
 }) {
   return (
@@ -29,11 +32,11 @@ export default function UserTable({
       <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-white/10">
         <div>
           <h2 className={`text-base font-semibold ${theme.pageTitle}`}>
-            User List
+            បញ្ជីអ្នកប្រើប្រាស់
           </h2>
 
           <p className={`mt-1 text-xs ${theme.muted}`}>
-            Showing {filteredUsers.length} users
+            បង្ហាញ {filteredUsers.length} អ្នកប្រើប្រាស់
           </p>
         </div>
       </div>
@@ -43,19 +46,19 @@ export default function UserTable({
           <thead className="bg-red-600 text-white">
             <tr>
               <th className="px-5 py-3 text-left text-sm font-semibold">
-                User
+                អ្នកប្រើប្រាស់
               </th>
               <th className="px-5 py-3 text-left text-sm font-semibold">
-                Contact
+                ទំនាក់ទំនង
               </th>
               <th className="px-5 py-3 text-center text-sm font-semibold">
-                Role
+                តួនាទី
               </th>
               <th className="px-5 py-3 text-center text-sm font-semibold">
-                Status
+                ស្ថានភាព
               </th>
               <th className="px-5 py-3 text-center text-sm font-semibold">
-                Actions
+                សកម្មភាព
               </th>
             </tr>
           </thead>
@@ -76,7 +79,7 @@ export default function UserTable({
                     <p
                       className={`mt-4 text-sm font-semibold ${theme.pageTitle}`}
                     >
-                      Loading users...
+                      រង់ចាំបន្តិច...
                     </p>
                   </div>
                 </td>
@@ -85,7 +88,7 @@ export default function UserTable({
               <tr className={`border-t ${theme.row}`}>
                 <td colSpan="5" className="px-4 py-14 text-center">
                   <p className="text-sm font-semibold text-red-500">
-                    {error?.response?.data?.message || "Failed to load users."}
+                    {error?.response?.data?.message || "មិនអាចផ្ទុកអ្នកប្រើប្រាស់បានទេ ។"}
                   </p>
                 </td>
               </tr>
@@ -107,11 +110,11 @@ export default function UserTable({
                           <span
                             className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${theme.badge}`}
                           >
-                            @{item.username || "username"}
+                            @{item.username || "ឈ្មោះអ្នកប្រើ"}
                           </span>
 
                           <span className={`text-xs ${theme.muted}`}>
-                            ID: {item.id}
+                            លេខសម្គាល់៖ {item.id}
                           </span>
                         </div>
                       </div>
@@ -139,7 +142,7 @@ export default function UserTable({
                       className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${theme.badge}`}
                     >
                       <FiShield />
-                      {capitalize(item.role)}
+                      {getRoleLabel(item.role)}
                     </span>
                   </td>
 
@@ -149,36 +152,31 @@ export default function UserTable({
 
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(item)}
-                        title="Edit user"
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
-                      >
-                        <FiEdit2 size={16} />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleInactive(item)}
-                        disabled={statusMutation.isPending}
-                        title={
-                          item.status === "Active"
-                            ? "Deactivate user"
-                            : "Activate user"
-                        }
-                        className={`flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                          item.status === "Active"
-                            ? "bg-red-500 hover:bg-red-600"
-                            : "bg-emerald-500 hover:bg-emerald-600"
-                        }`}
-                      >
-                        {item.status === "Active" ? (
-                          <FiTrash2 size={16} />
-                        ) : (
-                          <FiRefreshCw size={16} />
-                        )}
-                      </button>
+                      <Tooltip label="មើលអ្នកប្រើប្រាស់">
+                        <button
+                          type="button"
+                          onClick={() => openViewModal(item)}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-amber-400 to-orange-500 text-white shadow-md shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-amber-500 hover:to-orange-600 hover:shadow-lg hover:shadow-orange-500/25 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0"
+                        >
+                          <FiEye size={16} />
+                        </button>
+                      </Tooltip>
+                      <PermissionGate permission="users.update">
+                        <Tooltip label="កែអ្នកប្រើប្រាស់">
+                          <button type="button" onClick={() => openEditModal(item)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-blue-600 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0">
+                            <FiEdit2 size={16} />
+                          </button>
+                        </Tooltip>
+                      </PermissionGate>
+                      <PermissionGate permission="users.delete">
+                        <Tooltip label="លុបអ្នកប្រើប្រាស់">
+                          <button type="button" onClick={() => onDelete(item)} disabled={isDeletingId === item.id}
+                                className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60">
+                            {isDeletingId === item.id ? <FiRefreshCw size={16} className="animate-spin" /> : <FiTrash2 size={16} />}
+                          </button>
+                        </Tooltip>
+                      </PermissionGate>
                     </div>
                   </td>
                 </tr>
@@ -196,11 +194,11 @@ export default function UserTable({
                     <p
                       className={`mt-4 text-sm font-semibold ${theme.pageTitle}`}
                     >
-                      No users found
+                      រកមិនឃើញអ្នកប្រើប្រាស់
                     </p>
 
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      Try changing your search keyword.
+                      ព្យាយាមប្ដូរពាក្យស្វែងរក ។
                     </p>
                   </div>
                 </td>
@@ -209,6 +207,18 @@ export default function UserTable({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function Tooltip({ label, children }) {
+  return (
+    <div className="relative inline-flex group">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-zinc-700">
+        {label}
+        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-zinc-800 dark:border-t-zinc-700" />
+      </span>
     </div>
   );
 }
@@ -223,7 +233,7 @@ function StatusBadge({ status }) {
       }`}
     >
       {status === "Active" ? <FiCheckCircle /> : <FiXCircle />}
-      {status}
+      {status === "Active" ? "ដំណើរការ" : "មិនដំណើរការ"}
     </span>
   );
 }

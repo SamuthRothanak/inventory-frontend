@@ -1,10 +1,14 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import {
   FiCheckCircle,
   FiChevronDown,
+  FiDownload,
+  FiFileText,
   FiFilter,
+  FiHash,
   FiPlusCircle,
   FiSearch,
   FiUsers,
@@ -12,6 +16,7 @@ import {
 } from "react-icons/fi";
 
 import {
+  bulkDeleteCustomersApi,
   getCustomersApi,
   createCustomerApi,
   updateCustomerApi,
@@ -22,11 +27,20 @@ import SummaryCard from "./components/SummaryCard";
 import CustomerTable from "./components/CustomerTable";
 import CustomerFormModal from "./components/CustomerFormModal";
 import ViewCustomerModal from "./components/ViewCustomerModal";
+import CustomerDropdown from "./components/CustomerDropdown";
+import { useNotification } from "../../../components/AppNotification";
 
 import {
   extractCustomers,
+  filterCustomers,
   toCustomerPayload,
 } from "./utils/customerUtils";
+import {
+  exportCustomersCsv,
+  exportCustomersExcel,
+  exportCustomersPdf,
+} from "./utils/customerExport";
+import PermissionGate from "../../../components/PermissionGate";
 
 function useLockBodyScroll(isOpen) {
   useEffect(() => {
@@ -87,37 +101,35 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
-function getSummaryFromResponse(response, customers) {
-  const data = response?.data;
-  const summary = data?.summary || response?.summary || null;
+function getErrorMessage(error, fallback = "មានបញ្ហាមួយបានកើតឡើង។") {
+  const response = error?.response?.data;
 
-  if (summary) {
-    return {
-      total: Number(summary.total || 0),
-      active: Number(summary.active || 0),
-      inactive: Number(summary.inactive || 0),
-    };
+  if (response?.message && response?.errors) {
+    const firstError = Object.values(response.errors)?.[0]?.[0];
+    return firstError || response.message;
   }
 
-  return {
-    total: customers.length,
-    active: customers.filter((item) => item.status === "Active").length,
-    inactive: customers.filter((item) => item.status === "Inactive").length,
-  };
+  return response?.message || error?.message || fallback;
 }
 
 export default function Customer() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
   const queryClient = useQueryClient();
+  const notify = useNotification();
+  const confirm = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState([]);
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [serverMessage, setServerMessage] = useState("");
 
   useLockBodyScroll(Boolean(modalMode));
 
@@ -142,6 +154,14 @@ export default function Customer() {
     keepPreviousData: true,
   });
 
+  // Stats — fetch all (per_page=9999) គណនា total/active/inactive ត្រឹមត្រូវ
+  // (មិនមែនតែ page)។ Customer = អ្នកទិញដុំ (តិច) → fetch all OK។
+  const statsQuery = useQuery({
+    queryKey: ["customers", "all-for-stats"],
+    queryFn: () => getCustomersApi({ per_page: 9999 }),
+    keepPreviousData: true,
+  });
+
   const customers = useMemo(() => {
     return extractCustomers(customersQuery.data);
   }, [customersQuery.data]);
@@ -151,8 +171,35 @@ export default function Customer() {
   }, [customersQuery.data, customers.length]);
 
   const summary = useMemo(() => {
-    return getSummaryFromResponse(customersQuery.data, customers);
-  }, [customersQuery.data, customers]);
+    const allCustomers = extractCustomers(statsQuery.data);
+    const total = allCustomers.length;
+    const active = allCustomers.filter((c) => c.status === "Active").length;
+    return {
+      total,
+      active,
+      inactive: total - active,
+    };
+  }, [statsQuery.data]);
+
+  const allCustomers = useMemo(() => {
+    return extractCustomers(statsQuery.data);
+  }, [statsQuery.data]);
+
+  const exportCustomers = useMemo(
+    () => filterCustomers(allCustomers, searchTerm, statusFilter),
+    [allCustomers, searchTerm, statusFilter]
+  );
+
+  useEffect(() => {
+    const visibleIds = new Set(customers.map((item) => Number(item.id)));
+    setSelectedCustomerIds((previous) =>
+      previous.filter((id) => visibleIds.has(Number(id)))
+    );
+  }, [customers]);
+
+  const invalidateCustomers = () => {
+    queryClient.invalidateQueries({ queryKey: ["customers"] });
+  };
 
   const theme = {
     pageTitle: isDark ? "text-white" : "text-zinc-900",
@@ -207,60 +254,112 @@ export default function Customer() {
   const createMutation = useMutation({
     mutationFn: createCustomerApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomers();
+      notify.success("បង្កើតអតិថិជនរួចរាល់", "អតិថិជនត្រូវបានរក្សាទុករួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      alert(error?.response?.data?.message || "Failed to create customer.");
+      const message = getErrorMessage(error, "មិនអាចបង្កើតអតិថិជនបានទេ។");
+      setServerMessage(message);
+      notify.error("បង្កើតបរាជ័យ", message);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: updateCustomerApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomers();
+      notify.success("កែអតិថិជនរួចរាល់", "អតិថិជនត្រូវបានធ្វើបច្ចុប្បន្នភាពរួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      alert(error?.response?.data?.message || "Failed to update customer.");
+      const message = getErrorMessage(error, "មិនអាចកែអតិថិជនបានទេ។");
+      setServerMessage(message);
+      notify.error("កែបរាជ័យ", message);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteCustomerApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidateCustomers();
+      notify.success("លុបអតិថិជនរួចរាល់", "អតិថិជនត្រូវបានលុបចោលរួចហើយ។");
     },
     onError: (error) => {
-      alert(
-        error?.response?.data?.message ||
-          "Failed to delete customer. This customer may already be used in sales."
+      notify.error(
+        "លុបបរាជ័យ",
+        getErrorMessage(
+          error,
+          "មិនអាចលុបអតិថិជនបានទេ។ អតិថិជននេះប្រហែលជាត្រូវបានប្រើក្នុងការលក់រួចហើយ។"
+        )
+      );
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: bulkDeleteCustomersApi,
+    onSuccess: () => {
+      setSelectedCustomerIds([]);
+      setBulkSelectMode(false);
+      invalidateCustomers();
+      notify.success(
+        "លុបអតិថិជនរួចរាល់",
+        "អតិថិជនដែលបានជ្រើសរើសត្រូវបានលុបចោលរួចហើយ។"
+      );
+    },
+    onError: (error) => {
+      notify.error(
+        "លុបជាក្រុមបរាជ័យ",
+        getErrorMessage(error, "មិនអាចលុបអតិថិជនដែលបានជ្រើសរើសបានទេ។")
       );
     },
   });
 
   const openAddModal = () => {
+    setServerMessage("");
     setSelectedCustomer(null);
     setModalMode("add");
   };
 
   const openViewModal = (customer) => {
+    setServerMessage("");
     setSelectedCustomer(customer);
     setModalMode("view");
   };
 
   const openEditModal = (customer) => {
+    setServerMessage("");
     setSelectedCustomer(customer);
     setModalMode("edit");
   };
 
   const closeModal = () => {
+    setServerMessage("");
     setModalMode(null);
     setSelectedCustomer(null);
   };
 
   const handleSaveCustomer = (form) => {
+    setServerMessage("");
     const payload = toCustomerPayload(form);
+    const normalizedShopName = payload.shop_name.trim().toLowerCase();
+    const duplicateCustomer = allCustomers.find((customer) => {
+      const isSameCustomer =
+        modalMode === "edit" &&
+        Number(customer.id) === Number(selectedCustomer?.id);
+
+      return (
+        !isSameCustomer &&
+        customer.shopName.trim().toLowerCase() === normalizedShopName
+      );
+    });
+
+    if (duplicateCustomer) {
+      const message = "ឈ្មោះហាងអតិថិជននេះមានរួចហើយ។";
+      setServerMessage(message);
+      notify.error("អតិថិជនស្ទួន", message);
+      return;
+    }
 
     if (modalMode === "add") {
       createMutation.mutate(payload);
@@ -275,32 +374,92 @@ export default function Customer() {
     }
   };
 
-  const handleDeleteCustomer = (customer) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${customer.shopName}"?`
-    );
-
-    if (!confirmed) return;
-
+  const handleDeleteCustomer = async (customer) => {
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបអតិថិជន "${customer.shopName}" មែនទេ?`);
+    if (!ok) return;
     deleteMutation.mutate(customer.id);
   };
 
+  const handleToggleCustomer = (customerId) => {
+    if (!bulkSelectMode) return;
+
+    setSelectedCustomerIds((previous) => {
+      const id = Number(customerId);
+      if (previous.some((item) => Number(item) === id)) {
+        return previous.filter((item) => Number(item) !== id);
+      }
+
+      return [...previous, id];
+    });
+  };
+
+  const handleToggleAllCustomers = () => {
+    if (!bulkSelectMode) return;
+
+    const pageIds = customers.map((customer) => Number(customer.id));
+    const allSelected = pageIds.every((id) =>
+      selectedCustomerIds.some((selectedId) => Number(selectedId) === id)
+    );
+
+    setSelectedCustomerIds((previous) => {
+      if (allSelected) {
+        return previous.filter((id) => !pageIds.includes(Number(id)));
+      }
+
+      return [...new Set([...previous.map(Number), ...pageIds])];
+    });
+  };
+
+  const handleBulkDeleteCustomers = async () => {
+    if (selectedCustomerIds.length === 0) return;
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបអតិថិជនចំនួន ${selectedCustomerIds.length} ដែលបានជ្រើសរើសមែនទេ?`);
+    if (!ok) return;
+    bulkDeleteMutation.mutate(selectedCustomerIds);
+  };
+
+  const openBulkSelectMode = () => {
+    setBulkSelectMode(true);
+  };
+
+  const closeBulkSelectMode = () => {
+    setBulkSelectMode(false);
+    setSelectedCustomerIds([]);
+  };
+
+  const handleExport = (type) => {
+    setExportMenuOpen(false);
+    if (type === "pdf") {
+      const opened = exportCustomersPdf(exportCustomers);
+      if (!opened) window.alert("Browser បាន block popup។ សូមអនុញ្ញាត popup រួច Export ម្តងទៀត។");
+      return;
+    }
+    if (type === "excel") {
+      exportCustomersExcel(exportCustomers);
+      return;
+    }
+    exportCustomersCsv(exportCustomers);
+  };
+
   const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isDeleting = deleteMutation.isPending || bulkDeleteMutation.isPending;
 
   const actionError =
-    createMutation.error || updateMutation.error || deleteMutation.error;
+    createMutation.error ||
+    updateMutation.error ||
+    deleteMutation.error ||
+    bulkDeleteMutation.error;
 
   const actionErrorMessage =
     actionError?.response?.data?.message ||
     actionError?.message ||
-    "Something went wrong.";
+    "មានបញ្ហាមួយបានកើតឡើង។";
 
   return (
     <section className="space-y-6">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <SummaryCard
           theme={theme}
-          title="Total Customers"
+          title="អតិថិជនទាំងអស់"
           value={summary.total}
           icon={<FiUsers className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
@@ -308,7 +467,7 @@ export default function Customer() {
 
         <SummaryCard
           theme={theme}
-          title="Active Customers"
+          title="អតិថិជនដំណើរការ"
           value={summary.active}
           icon={<FiCheckCircle className="text-[44px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
@@ -316,15 +475,14 @@ export default function Customer() {
 
         <SummaryCard
           theme={theme}
-          title="Inactive Customers"
+          title="អតិថិជនមិនដំណើរការ"
           value={summary.inactive}
           icon={<FiXCircle className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
       </div>
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full grid-cols-1 gap-3 xl:max-w-4xl xl:grid-cols-[1fr_220px_160px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,1fr)_220px_160px_auto] xl:items-center">
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -332,64 +490,87 @@ export default function Customer() {
 
             <input
               type="text"
-              placeholder="Search customer, shop, phone, address..."
+              placeholder="ស្វែងរកអតិថិជន ហាង ទូរស័ព្ទ ឬអាសយដ្ឋាន..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
             />
           </div>
 
+          <CustomerDropdown
+            icon={<FiFilter />}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            theme={theme}
+            options={[
+              { value: "All", label: "ស្ថានភាពទាំងអស់" },
+              { value: "Active", label: "ដំណើរការ" },
+              { value: "Inactive", label: "មិនដំណើរការ" },
+            ]}
+          />
+
+          <CustomerDropdown
+            icon={<FiHash />}
+            value={perPage}
+            onChange={(value) => setPerPage(Number(value))}
+            theme={theme}
+            options={[10, 25, 50].map((value) => ({
+              value,
+              label: `${value} / ទំព័រ`,
+            }))}
+          />
+
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap xl:justify-end">
           <div className="relative">
-            <FiFilter
-              className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className={`h-12 w-full appearance-none rounded-2xl border pl-11 pr-11 text-sm outline-none transition focus:ring-4 ${theme.select}`}
+            <button
+              type="button"
+              onClick={() => exportCustomers.length > 0 && setExportMenuOpen((open) => !open)}
+              disabled={exportCustomers.length === 0}
+              className={`inline-flex h-12 min-w-[142px] items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${theme.badge} hover:border-red-400 hover:text-red-500`}
             >
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
+              <FiDownload className="text-lg" />
+              Export
+              <FiChevronDown className={`text-base transition ${exportMenuOpen ? "rotate-180" : ""}`} />
+            </button>
 
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
+            {exportMenuOpen && (
+              <div className={`absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border py-1 shadow-xl ${isDark ? "border-white/10 bg-zinc-900" : "border-zinc-200 bg-white"}`}>
+                {[
+                  ["pdf", "PDF", FiFileText],
+                  ["excel", "Excel", FiFileText],
+                  ["csv", "CSV", FiDownload],
+                ].map(([type, label, Icon]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => handleExport(type)}
+                    className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition ${isDark ? "text-zinc-100 hover:bg-white/10" : "text-zinc-700 hover:bg-zinc-100"}`}
+                  >
+                    <Icon className="text-base" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="relative">
-            <select
-              value={perPage}
-              onChange={(event) => setPerPage(Number(event.target.value))}
-              className={`h-12 w-full appearance-none rounded-2xl border px-4 pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
+          <PermissionGate permission="customers.create">
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="inline-flex h-12 min-w-[180px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
             >
-              <option value={10}>10 / page</option>
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
+              <FiPlusCircle className="text-lg" />
+              បន្ថែមអតិថិជន
+            </button>
+          </PermissionGate>
         </div>
-
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-        >
-          <FiPlusCircle className="text-lg" />
-          Add Customer
-        </button>
       </div>
 
       {customersQuery.isError && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
           {customersQuery.error?.response?.data?.message ||
-            "Failed to load customers."}
+            "មិនអាចផ្ទុកអតិថិជនបានទេ។"}
         </div>
       )}
 
@@ -409,10 +590,18 @@ export default function Customer() {
         isFetching={customersQuery.isFetching}
         isLoading={customersQuery.isLoading}
         isError={customersQuery.isError}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={isDeleting}
+        bulkDeleteIsPending={bulkDeleteMutation.isPending}
+        bulkSelectMode={bulkSelectMode}
+        selectedCustomerIds={selectedCustomerIds}
         onView={openViewModal}
         onEdit={openEditModal}
         onDelete={handleDeleteCustomer}
+        onOpenBulkSelect={openBulkSelectMode}
+        onCancelBulkSelect={closeBulkSelectMode}
+        onToggleSelect={handleToggleCustomer}
+        onToggleSelectAll={handleToggleAllCustomers}
+        onBulkDelete={handleBulkDeleteCustomers}
       />
 
       {modalMode === "view" && selectedCustomer && (
@@ -432,6 +621,7 @@ export default function Customer() {
           onClose={closeModal}
           onSubmit={handleSaveCustomer}
           isSaving={isSaving}
+          serverMessage={serverMessage}
         />
       )}
     </section>

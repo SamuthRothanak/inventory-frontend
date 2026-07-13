@@ -1,4 +1,4 @@
-import {
+﻿import {
   FiCheckCircle,
   FiEdit2,
   FiFileText,
@@ -28,7 +28,7 @@ export default function ViewSupplierModal({ supplier, theme, onClose, onEdit }) 
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Close
+            បិទ
           </button>
 
           <button
@@ -37,7 +37,7 @@ export default function ViewSupplierModal({ supplier, theme, onClose, onEdit }) 
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
           >
             <FiEdit2 />
-            Edit Supplier
+            កែអ្នកផ្គត់ផ្គង់
           </button>
         </>
       }
@@ -45,8 +45,8 @@ export default function ViewSupplierModal({ supplier, theme, onClose, onEdit }) 
       <div className="space-y-4">
         <SectionTitle
           icon={<FiInfo />}
-          title="Supplier Information"
-          subtitle="Main supplier profile and current status."
+          title="ព័ត៌មានអ្នកផ្គត់ផ្គង់"
+          subtitle="ព័ត៌មានសំខាន់ និងស្ថានភាពបច្ចុប្បន្ន។"
           theme={theme}
         />
 
@@ -54,43 +54,43 @@ export default function ViewSupplierModal({ supplier, theme, onClose, onEdit }) 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <InfoBox
               theme={theme}
-              label="Supplier Code"
+              label="លេខកូដះអនកផ្គត់ផ្គង់"
               value={supplier.supplierCode}
               icon={<FiHash />}
             />
 
             <InfoBox
               theme={theme}
-              label="Supplier Name"
+              label="ឈ្មោះអ្នកផ្គត់ផ្គង់"
               value={supplier.name}
               icon={<FiTruck />}
             />
 
             <InfoBox
               theme={theme}
-              label="Contact Person"
+              label="ឈ្មោះអ្នកទំនាក់ទំនង"
               value={supplier.contactPerson || "-"}
               icon={<FiUser />}
             />
 
             <InfoBox
               theme={theme}
-              label="Phone"
+              label="លេខទូរស័ព្ទ"
               value={supplier.phone || "-"}
               icon={<FiPhone />}
             />
 
             <InfoBox
               theme={theme}
-              label="Email"
+              label="អ៊ីម៉ែល"
               value={supplier.email || "-"}
               icon={<FiMail />}
             />
 
             <InfoBox
               theme={theme}
-              label="Status"
-              value={supplier.status}
+              label="ស្ថានភាព"
+              value={supplier.status === "Active" ? "ដំណើរការ" : "មិនដំណើរការ"}
               icon={
                 supplier.status === "Active" ? <FiCheckCircle /> : <FiXCircle />
               }
@@ -98,14 +98,14 @@ export default function ViewSupplierModal({ supplier, theme, onClose, onEdit }) 
 
             <InfoBox
               theme={theme}
-              label="Created At"
+              label="បង្កើតនៅ"
               value={supplier.createdAt}
               icon={<FiFileText />}
             />
 
             <InfoBox
               theme={theme}
-              label="Updated At"
+              label="បានកែនៅ"
               value={supplier.updatedAt}
               icon={<FiFileText />}
             />
@@ -114,15 +114,15 @@ export default function ViewSupplierModal({ supplier, theme, onClose, onEdit }) 
 
         <SectionTitle
           icon={<FiMapPin />}
-          title="Address & Note"
-          subtitle="Delivery location and supplier remarks."
+          title="អាសយដ្ឋាន និងចំណាំ"
+          subtitle="ទីតាំងដឹកជញ្ជូន និងកំណត់សម្គាល់របស់អ្នកផ្គត់ផ្គង់"
           theme={theme}
         />
 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
           <DetailBlock
             theme={theme}
-            label="Address"
+            label="អាសយដ្ឋាន"
             value={supplier.address || "-"}
             icon={<FiMapPin />}
           />
@@ -130,7 +130,7 @@ export default function ViewSupplierModal({ supplier, theme, onClose, onEdit }) 
           <div className="mt-5">
             <DetailBlock
               theme={theme}
-              label="Note"
+              label="ចំណាំ"
               value={supplier.note || "-"}
               icon={<FiFileText />}
             />

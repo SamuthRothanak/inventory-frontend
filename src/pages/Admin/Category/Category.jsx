@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FiCheckCircle,
-  FiChevronDown,
   FiFilter,
   FiGrid,
+  FiHash,
   FiPlusCircle,
   FiSearch,
   FiXCircle,
@@ -16,14 +17,18 @@ import {
   createCategoryApi,
   updateCategoryApi,
   deleteCategoryApi,
+  bulkDeleteCategoriesApi,
 } from "../../../services/category.service";
 
 import CategorySummaryCard from "./components/CategorySummaryCard";
 import CategoryTable from "./components/CategoryTable";
 import CategoryFormModal from "./components/CategoryFormModal";
 import CategoryViewModal from "./components/CategoryViewModal";
+import CategoryDropdown from "./components/CategoryDropdown";
+import { useNotification } from "../../../components/AppNotification";
 
 import { extractCategories, normalizeCategory } from "./utils/categoryUtils";
+import PermissionGate from "../../../components/PermissionGate";
 
 function useLockBodyScroll(isOpen) {
   useEffect(() => {
@@ -49,7 +54,6 @@ function useLockBodyScroll(isOpen) {
 
 function getPaginationMeta(response, fallbackLength = 0) {
   const data = response?.data;
-
   const meta = data?.meta || response?.meta || null;
 
   if (meta) {
@@ -63,23 +67,14 @@ function getPaginationMeta(response, fallbackLength = 0) {
     };
   }
 
-  // Laravel pagination response:
-  // { data: [...], total: 11, per_page: 10, current_page: 1 }
-  if (response && typeof response === "object" && !Array.isArray(response)) {
-    const currentPage = Number(response.current_page || response.currentPage || 1);
-    const perPage = Number(response.per_page || response.perPage || 10);
-    const total = Number(response.total || fallbackLength);
-    const lastPage = Number(
-      response.last_page || response.lastPage || Math.max(1, Math.ceil(total / perPage))
-    );
-
+  if (data && typeof data === "object" && !Array.isArray(data)) {
     return {
-      currentPage,
-      perPage,
-      total,
-      lastPage,
-      from: Number(response.from || (total > 0 ? (currentPage - 1) * perPage + 1 : 0)),
-      to: Number(response.to || Math.min(currentPage * perPage, total)),
+      currentPage: Number(data.current_page || 1),
+      perPage: Number(data.per_page || 10),
+      total: Number(data.total || fallbackLength),
+      lastPage: Number(data.last_page || 1),
+      from: Number(data.from || 0),
+      to: Number(data.to || 0),
     };
   }
 
@@ -93,22 +88,59 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
-function getSummaryFromResponse(response, categories) {
+function getMeta(response) {
   const data = response?.data;
-  const summary = data?.summary || response?.summary || null;
+  return data?.meta || response?.meta || null;
+}
 
-  if (summary) {
+function getErrorMessage(error, fallback = "Something went wrong.") {
+  const response = error?.response?.data;
+
+  if (response?.message && response?.errors) {
+    const firstError = Object.values(response.errors)?.[0]?.[0];
+    return firstError || response.message;
+  }
+
+  return response?.message || error?.message || fallback;
+}
+
+async function getAllCategoriesForStats() {
+  const firstResponse = await getCategoriesApi({
+    page: 1,
+    per_page: 9999,
+  });
+
+  const firstCategories = extractCategories(firstResponse);
+  const meta = getMeta(firstResponse);
+
+  const lastPage = Number(meta?.last_page || meta?.lastPage || 1);
+  const apiPerPage = Number(meta?.per_page || meta?.perPage || 10);
+
+  if (lastPage <= 1) {
     return {
-      total: Number(summary.total || 0),
-      active: Number(summary.active || 0),
-      inactive: Number(summary.inactive || 0),
+      data: firstCategories,
     };
   }
 
+  const pageRequests = [];
+
+  for (let nextPage = 2; nextPage <= lastPage; nextPage += 1) {
+    pageRequests.push(
+      getCategoriesApi({
+        page: nextPage,
+        per_page: apiPerPage,
+      })
+    );
+  }
+
+  const otherResponses = await Promise.all(pageRequests);
+
+  const otherCategories = otherResponses.flatMap((response) =>
+    extractCategories(response)
+  );
+
   return {
-    total: categories.length,
-    active: categories.filter((item) => item.status === "Active").length,
-    inactive: categories.filter((item) => item.status === "Inactive").length,
+    data: [...firstCategories, ...otherCategories],
   };
 }
 
@@ -117,11 +149,15 @@ export default function Category() {
   const isDark = outlet?.isDark ?? false;
 
   const queryClient = useQueryClient();
+  const notify = useNotification();
+  const confirm = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
 
   const [modalState, setModalState] = useState({
     open: false,
@@ -154,6 +190,12 @@ export default function Category() {
     keepPreviousData: true,
   });
 
+  const statsQuery = useQuery({
+    queryKey: ["categories", "all-for-stats"],
+    queryFn: getAllCategoriesForStats,
+    keepPreviousData: true,
+  });
+
   const rawCategories = useMemo(() => {
     return extractCategories(categoriesQuery.data);
   }, [categoriesQuery.data]);
@@ -166,9 +208,31 @@ export default function Category() {
     return getPaginationMeta(categoriesQuery.data, categories.length);
   }, [categoriesQuery.data, categories.length]);
 
+  const allCategories = useMemo(() => {
+    return extractCategories(statsQuery.data).map((item) =>
+      normalizeCategory(item)
+    );
+  }, [statsQuery.data]);
+
   const summary = useMemo(() => {
-    return getSummaryFromResponse(categoriesQuery.data, categories);
-  }, [categoriesQuery.data, categories]);
+    const total = allCategories.length;
+    const active = allCategories.filter(
+      (item) => item.status === "Active"
+    ).length;
+
+    return {
+      total,
+      active,
+      inactive: total - active,
+    };
+  }, [allCategories]);
+
+  useEffect(() => {
+    const visibleIds = new Set(categories.map((item) => Number(item.id)));
+    setSelectedCategoryIds((previous) =>
+      previous.filter((id) => visibleIds.has(Number(id)))
+    );
+  }, [categories]);
 
   const theme = {
     title: isDark ? "text-white" : "text-zinc-900",
@@ -227,12 +291,13 @@ export default function Category() {
     mutationFn: createCategoryApi,
     onSuccess: () => {
       invalidateCategories();
+      notify.success("ប្រភេទត្រូវបានបង្កើត", "ប្រភេទត្រូវបានរក្សាទុករួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      setServerMessage(
-        error?.response?.data?.message || "Create category failed."
-      );
+      const message = getErrorMessage(error, "មិនអាចបង្កើតប្រភេទ។");
+      setServerMessage(message);
+      notify.error("បង្កើតបរាជ័យ", message);
     },
   });
 
@@ -240,12 +305,13 @@ export default function Category() {
     mutationFn: updateCategoryApi,
     onSuccess: () => {
       invalidateCategories();
+      notify.success("ប្រភេទត្រូវបានធ្វើបច្ចុប្បន្នភាព", "ប្រភេទត្រូវបានធ្វើបច្ចុប្បន្នភាពរួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      setServerMessage(
-        error?.response?.data?.message || "Update category failed."
-      );
+      const message = getErrorMessage(error, "មិនអាចធ្វើបច្ចុប្បន្នភាពប្រភេទ។");
+      setServerMessage(message);
+      notify.error("ធ្វើបច្ចុប្បន្នភាពបរាជ័យ", message);
     },
   });
 
@@ -253,9 +319,32 @@ export default function Category() {
     mutationFn: deleteCategoryApi,
     onSuccess: () => {
       invalidateCategories();
+      notify.success("ប្រភេទត្រូវបានលុប", "ប្រភេទត្រូវបានលុបចោលរួចហើយ។");
     },
     onError: (error) => {
-      alert(error?.response?.data?.message || "Failed to delete category.");
+      notify.error(
+        "លុបបរាជ័យ",
+        getErrorMessage(error, "មិនអាចលុបប្រភេទ។")
+      );
+    },
+  });
+
+  const bulkDeleteCategoryMutation = useMutation({
+    mutationFn: bulkDeleteCategoriesApi,
+    onSuccess: () => {
+      setSelectedCategoryIds([]);
+      setBulkSelectMode(false);
+      invalidateCategories();
+      notify.success(
+        "ប្រភេទត្រូវបានលុប",
+        "ប្រភេទដែលបានជ្រើសរើសត្រូវបានលុបចោលរួចហើយ។"
+      );
+    },
+    onError: (error) => {
+      notify.error(
+        "លុបជាក្រុមបរាជ័យ",
+        getErrorMessage(error, "មិនអាចលុបប្រភេទដែលបានជ្រើសរើស។")
+      );
     },
   });
 
@@ -297,6 +386,21 @@ export default function Category() {
 
   const handleSaveCategory = (values) => {
     setServerMessage("");
+    const normalizedName = values.name.trim().toLowerCase();
+    const duplicateCategory = allCategories.find((category) => {
+      const isSameCategory =
+        modalState.mode === "edit" &&
+        Number(category.id) === Number(modalState.selectedCategory?.id);
+
+      return !isSameCategory && category.name.trim().toLowerCase() === normalizedName;
+    });
+
+    if (duplicateCategory) {
+      const message = "ឈ្មោះប្រភេទនេះមានរួចហើយ។";
+      setServerMessage(message);
+      notify.error("ប្រភេទស្ទួន", message);
+      return;
+    }
 
     if (modalState.mode === "edit" && modalState.selectedCategory) {
       updateCategoryMutation.mutate({
@@ -309,33 +413,77 @@ export default function Category() {
     createCategoryMutation.mutate(values);
   };
 
-  const handleDeleteCategory = (categoryId) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this category?"
+  const handleDeleteCategory = async (categoryId) => {
+    const ok = await confirm("តើអ្នកប្រាកដថាចង់លុបប្រភេទនេះ?");
+    if (!ok) return;
+    deleteCategoryMutation.mutate(categoryId);
+  };
+
+  const handleToggleCategory = (categoryId) => {
+    if (!bulkSelectMode) return;
+
+    setSelectedCategoryIds((previous) => {
+      const id = Number(categoryId);
+      if (previous.some((item) => Number(item) === id)) {
+        return previous.filter((item) => Number(item) !== id);
+      }
+
+      return [...previous, id];
+    });
+  };
+
+  const handleToggleAllCategories = () => {
+    if (!bulkSelectMode) return;
+
+    const pageIds = categories.map((category) => Number(category.id));
+    const allSelected = pageIds.every((id) =>
+      selectedCategoryIds.some((selectedId) => Number(selectedId) === id)
     );
 
-    if (!confirmed) return;
+    setSelectedCategoryIds((previous) => {
+      if (allSelected) {
+        return previous.filter((id) => !pageIds.includes(Number(id)));
+      }
 
-    deleteCategoryMutation.mutate(categoryId);
+      return [...new Set([...previous.map(Number), ...pageIds])];
+    });
+  };
+
+  const handleBulkDeleteCategories = async () => {
+    if (selectedCategoryIds.length === 0) return;
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបប្រភេទចំនួន ${selectedCategoryIds.length} ដែលបានជ្រើសរើស?`);
+    if (!ok) return;
+    bulkDeleteCategoryMutation.mutate(selectedCategoryIds);
+  };
+
+  const openBulkSelectMode = () => {
+    setBulkSelectMode(true);
+  };
+
+  const closeBulkSelectMode = () => {
+    setBulkSelectMode(false);
+    setSelectedCategoryIds([]);
   };
 
   const isSaving =
     createCategoryMutation.isPending || updateCategoryMutation.isPending;
+  const isDeleting =
+    deleteCategoryMutation.isPending || bulkDeleteCategoryMutation.isPending;
 
   return (
     <section className="space-y-6">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <CategorySummaryCard
-  theme={theme}
-  title="Total Categories"
-  value={pagination.total}
-  icon={<FiGrid className="text-[44px] text-red-500" />}
-  iconBg="bg-red-500/10"
-/>
+          theme={theme}
+          title="ប្រភេទទាំងអស់"
+          value={summary.total}
+          icon={<FiGrid className="text-[44px] text-red-500" />}
+          iconBg="bg-red-500/10"
+        />
 
         <CategorySummaryCard
           theme={theme}
-          title="Active Categories"
+          title="ប្រភេទដំណើរការ"
           value={summary.active}
           icon={<FiCheckCircle className="text-[44px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
@@ -343,12 +491,19 @@ export default function Category() {
 
         <CategorySummaryCard
           theme={theme}
-          title="Inactive Categories"
+          title="ប្រភេទមិនដំណើរការ"
           value={summary.inactive}
           icon={<FiXCircle className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
       </div>
+
+      {statsQuery.isError && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
+          {statsQuery.error?.response?.data?.message ||
+            "មិនអាចផ្ទុកសង្ខេបប្រភេទ។"}
+        </div>
+      )}
 
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="grid w-full grid-cols-1 gap-3 xl:max-w-4xl xl:grid-cols-[1fr_220px_160px]">
@@ -359,58 +514,47 @@ export default function Category() {
 
             <input
               type="text"
-              placeholder="Search categories..."
+              placeholder="ស្វែងរកប្រភេទ..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
             />
           </div>
 
-          <div className="relative">
-            <FiFilter
-              className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
+          <CategoryDropdown
+            icon={<FiFilter />}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            theme={theme}
+            options={[
+              { value: "All", label: "ស្ថានភាពទាំងអស់" },
+              { value: "Active", label: "ដំណើរការ" },
+              { value: "Inactive", label: "មិនដំណើរការ" },
+            ]}
+          />
 
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className={`h-12 w-full appearance-none rounded-2xl border pl-11 pr-11 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-            >
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
-
-          <div className="relative">
-            <select
-              value={perPage}
-              onChange={(event) => setPerPage(Number(event.target.value))}
-              className={`h-12 w-full appearance-none rounded-2xl border px-4 pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-            >
-              <option value={10}>10 / page</option>
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
+          <CategoryDropdown
+            icon={<FiHash />}
+            value={perPage}
+            onChange={(value) => setPerPage(Number(value))}
+            theme={theme}
+            options={[10, 25, 50].map((value) => ({
+              value,
+              label: `${value} / ទំព័រ`,
+            }))}
+          />
         </div>
 
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-        >
-          <FiPlusCircle className="text-lg" />
-          Add Category
-        </button>
+        <PermissionGate permission="categories.create">
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
+          >
+            <FiPlusCircle className="text-lg" />
+            បន្ថែមប្រភេទ
+          </button>
+        </PermissionGate>
       </div>
 
       <CategoryTable
@@ -424,11 +568,19 @@ export default function Category() {
         isLoading={categoriesQuery.isLoading}
         isError={categoriesQuery.isError}
         error={categoriesQuery.error}
-        deleteIsPending={deleteCategoryMutation.isPending}
+        deleteIsPending={isDeleting}
+        bulkDeleteIsPending={bulkDeleteCategoryMutation.isPending}
+        bulkSelectMode={bulkSelectMode}
+        selectedCategoryIds={selectedCategoryIds}
         theme={theme}
         onView={openViewModal}
         onEdit={openEditModal}
         onDelete={handleDeleteCategory}
+        onOpenBulkSelect={openBulkSelectMode}
+        onCancelBulkSelect={closeBulkSelectMode}
+        onToggleSelect={handleToggleCategory}
+        onToggleSelectAll={handleToggleAllCategories}
+        onBulkDelete={handleBulkDeleteCategories}
       />
 
       {modalState.open &&

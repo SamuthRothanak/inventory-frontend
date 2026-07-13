@@ -35,3 +35,8 @@ export const deleteCustomerApi = async (id) => {
   const response = await api.delete(`/customers/${id}`);
   return response.data;
 };
+
+export const bulkDeleteCustomersApi = async (ids = []) => {
+  const response = await api.post("/customers/bulk-delete", { ids });
+  return response.data;
+};

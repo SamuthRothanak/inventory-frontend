@@ -1,11 +1,12 @@
 import { z } from "zod";
 
 export const productVariantUnitSchema = z.object({
-  product_variant_id: z.string().min(1, "Variant is required."),
-  unit_id: z.string().min(1, "Unit is required."),
+  product_variant_id: z.string().min(1, "សូមបញ្ជាក់ មុខទំនិញ ។"),
+  unit_id: z.string().min(1, "សូមជ្រើសខ្នាតទំនិញ ។"),
   conversion_qty: z.coerce
     .number()
-    .min(1, "Conversion qty must be greater than 0."),
+    .min(1, "ចំនួនក្នុងមួយខ្នាត ត្រូវ ≥ 1 ។")
+    .max(10000, "ចំនួនក្នុងមួយខ្នាត ខ្ពស់ពេក ។"),
   is_base_unit: z.boolean(),
   is_default_sale_unit: z.boolean(),
   is_default_purchase_unit: z.boolean(),

@@ -1,4 +1,4 @@
-import {
+﻿import {
   FiCheckCircle,
   FiEdit2,
   FiFileText,
@@ -15,8 +15,8 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
 
   return (
     <ModalShell
-      title="Category Details"
-      subtitle="Preview category image, status, and product grouping information."
+      title="ព័ត៌មានលម្អិតប្រភេទ"
+      subtitle="មើលរូបភាព ស្ថានភាព និងព័ត៌មានបន្ថែម។"
       theme={theme}
       onClose={onClose}
       footer={
@@ -26,7 +26,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Close
+            បិទ
           </button>
 
           <button
@@ -35,7 +35,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
           >
             <FiEdit2 />
-            Edit Category
+            កែប្រភេទ
           </button>
         </>
       }
@@ -56,7 +56,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
               <div className="pointer-events-auto flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
-                    Category
+                    ប្រភេទ
                   </p>
 
                   <h3 className="mt-1 truncate text-2xl font-bold text-white">
@@ -72,41 +72,43 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
                   }`}
                 >
                   {isActive ? <FiCheckCircle /> : <FiXCircle />}
-                  {category.status}
+                  {isActive ? "ដំណើរការ" : "មិនដំណើរការ"}
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+          <div className={`grid grid-cols-1 gap-3 p-4 ${category.hasBeenUpdated ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
             <MiniInfoCard
               theme={theme}
-              label="Name"
+              label="ឈ្មោះ"
               value={category.name}
               icon={<FiTag />}
             />
 
             <MiniInfoCard
               theme={theme}
-              label="Created"
+              label="បានបង្កើត"
               value={category.createdAt}
               icon={<FiFileText />}
             />
 
-            <MiniInfoCard
-              theme={theme}
-              label="Updated"
-              value={category.updatedAt}
-              icon={<FiFileText />}
-            />
+            {category.hasBeenUpdated && (
+              <MiniInfoCard
+                theme={theme}
+                label="ធ្វើបច្ចុប្បន្នភាពចុងក្រោយ"
+                value={category.updatedAt}
+                icon={<FiFileText />}
+              />
+            )}
           </div>
         </div>
 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
           <SectionTitle
             icon={<FiFileText />}
-            title="Description"
-            subtitle="Extra information shown for product or POS grouping."
+            title="ការពិពណ៌នា"
+            subtitle="ព័ត៌មានបន្ថែមសម្រាប់ grouping ផលិតផល ឬ POS។"
             theme={theme}
           />
 
@@ -118,7 +120,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
                 category.description ? theme.title : theme.muted
               }`}
             >
-              {category.description || "No description provided."}
+              {category.description || "គ្មានការពិពណ៌នា។"}
             </p>
           </div>
         </div>
@@ -126,14 +128,14 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
           <SectionTitle
             icon={<FiLink />}
-            title="Image Source"
-            subtitle="Current image path used by this category."
+            title="ប្រភពរូបភាព"
+            subtitle="ទីតាំងរូបភាពបច្ចុប្បន្នដែលប្រើដោយប្រភេទនេះ។"
             theme={theme}
           />
 
           <div className={`mt-4 rounded-2xl border p-4 ${theme.softCard}`}>
             <p className={`break-all text-sm leading-6 ${theme.muted}`}>
-              {category.imagePath || "No image path available."}
+              {category.imagePath || "គ្មានរូបភាព។"}
             </p>
           </div>
         </div>

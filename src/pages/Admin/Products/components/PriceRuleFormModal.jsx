@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   FiArrowRight,
   FiDollarSign,
@@ -10,28 +11,32 @@ import {
 } from "react-icons/fi";
 
 import ModalShell from "./ModalShell";
+import SearchableDropdown from "./SearchableDropdown";
+import { standalonePriceRuleSchema } from "../schemas/priceRule.schema";
 
-const DEFAULT_EXCHANGE_RATE = 4000;
+const DEFAULT_EXCHANGE_RATE = 0;
 
-function onlyPositiveNumber(value, allowDecimal = true) {
-  let nextValue = String(value || "");
+function onlyPositiveNumber(value, allowDecimal = true, maxDecimals = 2) {
+  let nextValue = String(value || "")
+    .replace(/-/g, "")
+    .replace(/\+/g, "")
+    .replace(/e/gi, "");
 
-  nextValue = nextValue.replace(/-/g, "");
-  nextValue = nextValue.replace(/\+/g, "");
-  nextValue = nextValue.replace(/e/gi, "");
-
-  if (allowDecimal) {
-    nextValue = nextValue.replace(/[^0-9.]/g, "");
-
-    const parts = nextValue.split(".");
-    if (parts.length > 2) {
-      nextValue = `${parts[0]}.${parts.slice(1).join("")}`;
-    }
-
-    return nextValue;
+  if (!allowDecimal) {
+    return nextValue.replace(/[^0-9]/g, "");
   }
 
-  return nextValue.replace(/[^0-9]/g, "");
+  nextValue = nextValue.replace(/[^0-9.]/g, "");
+  const firstDotIndex = nextValue.indexOf(".");
+  if (firstDotIndex === -1) return nextValue;
+
+  const integerPart = nextValue.slice(0, firstDotIndex) || "0";
+  const decimalPart = nextValue
+    .slice(firstDotIndex + 1)
+    .replace(/\./g, "")
+    .slice(0, maxDecimals);
+
+  return `${integerPart}.${decimalPart}`;
 }
 
 function preventInvalidNumberKey(event, allowDecimal = true) {
@@ -39,6 +44,11 @@ function preventInvalidNumberKey(event, allowDecimal = true) {
 
   if (!allowDecimal) {
     invalidKeys.push(".");
+  }
+
+  if (allowDecimal && event.key === "." && event.currentTarget.value.includes(".")) {
+    event.preventDefault();
+    return;
   }
 
   if (invalidKeys.includes(event.key)) {
@@ -159,8 +169,15 @@ export default function PriceRuleFormModal({
     register,
     handleSubmit,
     watch,
+    reset,
     formState: { errors },
-  } = useForm({ defaultValues });
+  } = useForm({ resolver: zodResolver(standalonePriceRuleSchema), defaultValues });
+
+  const priceRuleId = priceRule?.id ?? null;
+  useEffect(() => {
+    reset(defaultValues);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceRuleId, reset]);
 
   const inputCurrency = watch("input_currency");
   const inputPrice = watch("input_price");
@@ -202,10 +219,10 @@ export default function PriceRuleFormModal({
 
   return (
     <ModalShell
-      title={mode === "edit" ? "Edit Price Rule" : "Add Price Rule"}
+      title={mode === "edit" ? "កែតម្លៃ" : "បន្ថែមតម្លៃ"}
       subtitle={`${
         variant?.variantName || variant?.variant_name || "-"
-      } · Unit: ${unitName}`}
+      } · ខ្នាតទំនិញ: ${unitName}`}
       theme={theme}
       onClose={onClose}
       width="max-w-3xl"
@@ -216,7 +233,7 @@ export default function PriceRuleFormModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Cancel
+            បោះបង់
           </button>
 
           <button
@@ -228,11 +245,11 @@ export default function PriceRuleFormModal({
             <FiSave />
             {isSaving
               ? mode === "edit"
-                ? "Updating..."
-                : "Saving..."
+                ? "កំពុងកែ..."
+                : "កំពុងរក្សាទុក..."
               : mode === "edit"
-              ? "Update Price"
-              : "Save Price"}
+              ? "កែតម្លៃ"
+              : "រក្សាទុកតម្លៃ"}
           </button>
         </>
       }
@@ -247,8 +264,7 @@ export default function PriceRuleFormModal({
         {/* warning បើគ្មាន active rate */}
         {!hasRate && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-600 dark:text-amber-400">
-            No active exchange rate found. Please set an active rate in Exchange
-            Rate page before adding a price.
+            គ្មានអត្រាប្ដូររូបិយប័ណ្ណ ។ សូមដំឡើងអត្រាប្ដូរ មុនពេលបន្ថែមតម្លៃ ។
           </div>
         )}
 
@@ -256,7 +272,7 @@ export default function PriceRuleFormModal({
         <div className="overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-blue-500/5 p-5 dark:border-emerald-500/20">
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-              <FiRepeat /> Live Preview
+              <FiRepeat /> មើលជាមុន
             </span>
 
             <span
@@ -270,7 +286,7 @@ export default function PriceRuleFormModal({
             {/* input side */}
             <div className="flex-1 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-center">
               <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                You enter ({inputCurrency || "USD"})
+                បញ្ចូល ({inputCurrency || "USD"})
               </p>
               <p className="mt-1 text-2xl font-extrabold text-blue-700 dark:text-blue-300">
                 {inputCurrency === "KHR"
@@ -284,7 +300,7 @@ export default function PriceRuleFormModal({
             {/* converted side */}
             <div className="flex-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center">
               <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                Auto calculated ({targetCurrency})
+                គណនាស្វ័យប្រវត្ដិ ({targetCurrency})
               </p>
               <p className="mt-1 text-2xl font-extrabold text-emerald-700 dark:text-emerald-300">
                 {targetCurrency === "KHR"
@@ -295,9 +311,9 @@ export default function PriceRuleFormModal({
           </div>
 
           <p className={`mt-3 text-center text-xs ${theme.muted}`}>
-            Final: <strong>${formatUsd(converted.unit_price_usd)}</strong> ·{" "}
+            សរុប: <strong>${formatUsd(converted.unit_price_usd)}</strong> ·{" "}
             <strong>{formatKhr(converted.unit_price_khr)}៛</strong>
-            {appliesTo ? ` · ${appliesTo} · min ${minQty || 1}` : ""}
+            {appliesTo ? ` · ${appliesTo} · អប្បបរមា ${minQty || 1}` : ""}
           </p>
         </div>
 
@@ -307,44 +323,40 @@ export default function PriceRuleFormModal({
         >
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormSelect
-              label="Applies To"
+              label="ប្រើសម្រាប់"
               required
               icon={<FiTag />}
               theme={theme}
               error={errors.applies_to?.message}
-              inputProps={register("applies_to", {
-                required: "Applies to is required.",
-              })}
+              value={watch("applies_to")}
+              inputProps={register("applies_to")}
               options={[
-                { value: "retail", label: "Retail" },
-                { value: "wholesale", label: "Wholesale" },
-                { value: "both", label: "Both" },
+                { value: "retail", label: "លក់រាយ" },
+                { value: "wholesale", label: "លក់ដុំ" },
+                { value: "both", label: "ទាំងពីរ" },
               ]}
             />
 
             <FormInput
-              label="Min Qty"
+              label="លក់ចាប់ពីចំនួន"
               required
               sanitize="number"
               allowDecimal={false}
               icon={<FiHash />}
               theme={theme}
+              hint="ឧ. តម្លៃនេះប្រើពេលលក់ចាប់ពីចំនួននេះឡើងទៅ"
               error={errors.min_qty?.message}
-              inputProps={register("min_qty", {
-                required: "Min qty is required.",
-                min: { value: 1, message: "Min qty must be at least 1." },
-              })}
+              inputProps={register("min_qty")}
             />
 
             <FormSelect
-              label="Input Currency"
+              label="រូបិយប័ណ្ណ"
               required
               icon={<FiDollarSign />}
               theme={theme}
               error={errors.input_currency?.message}
-              inputProps={register("input_currency", {
-                required: "Currency is required.",
-              })}
+              value={watch("input_currency")}
+              inputProps={register("input_currency")}
               options={[
                 { value: "USD", label: "USD ($)" },
                 { value: "KHR", label: "KHR (៛)" },
@@ -352,7 +364,7 @@ export default function PriceRuleFormModal({
             />
 
             <FormInput
-              label={`Price in ${inputCurrency || "USD"}`}
+              label={`តម្លៃ (${inputCurrency || "USD"})`}
               required
               sanitize="number"
               allowDecimal={true}
@@ -365,16 +377,12 @@ export default function PriceRuleFormModal({
               }
               theme={theme}
               error={errors.input_price?.message}
-              inputProps={register("input_price", {
-                required: "Input price is required.",
-                min: { value: 0, message: "Input price cannot be negative." },
-              })}
+              inputProps={register("input_price")}
             />
           </div>
 
           <p className={`mt-4 text-xs ${theme.muted}`}>
-            USD &amp; KHR prices are calculated automatically from the active
-            exchange rate. You only enter one currency.
+            តម្លៃ USD & KHR ត្រូវបានគណនាស្វ័យប្រវត្ដិ ពីអត្រាប្ដូររូបិយប័ណ្ណ ។ បញ្ចូលតែ ១ រូបិយប័ណ្ណ ។
           </p>
         </div>
       </form>
@@ -393,6 +401,7 @@ function FormInput({
   readOnly = false,
   sanitize = "none",
   allowDecimal = true,
+  hint,
 }) {
   const isNumberInput = sanitize === "number" || type === "number";
 
@@ -454,6 +463,7 @@ function FormInput({
         />
       </div>
 
+      {hint && <p className={`mt-1 text-xs ${theme.muted}`}>{hint}</p>}
       {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
     </label>
   );
@@ -465,42 +475,30 @@ function FormSelect({
   icon,
   theme,
   inputProps,
+  value,
   options,
   error = "",
 }) {
+  const handleChange = (nextValue) => {
+    inputProps?.onChange?.({
+      target: {
+        name: inputProps.name,
+        value: nextValue,
+      },
+    });
+  };
+
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-        {required && <span className="ml-1 text-red-400">*</span>}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <select
-          {...inputProps}
-          className={`h-12 w-full rounded-xl border ${
-            icon ? "pl-10" : "pl-3"
-          } pr-3 text-sm outline-none transition focus:ring-4 ${theme.select} ${
-            error ? "border-red-500 focus:border-red-500" : ""
-          }`}
-        >
-          {options.map((option) => (
-            <option key={String(option.value)} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
-    </label>
+    <SearchableDropdown
+      label={label}
+      required={required}
+      error={error}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={handleChange}
+      options={options}
+      searchable={options.length > 6}
+    />
   );
 }

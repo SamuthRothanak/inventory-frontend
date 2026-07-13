@@ -1,5 +1,13 @@
-export const capitalize = (value = "") =>
-  value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
+const ROLE_LABELS = {
+  admin: "អ្នកគ្រប់គ្រង",
+  cashier: "អ្នកគិតលុយ",
+  staff: "បុគ្គលិក",
+};
+
+export const getRoleLabel = (value = "") => {
+  const role = String(value || "").trim().toLowerCase();
+  return ROLE_LABELS[role] || value || "-";
+};
 
 export const getRoleName = (user) => {
   if (Array.isArray(user?.roles) && user.roles.length > 0) {

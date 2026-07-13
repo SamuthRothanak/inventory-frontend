@@ -1,4 +1,5 @@
 import { FiSearch, FiPlusCircle } from "react-icons/fi";
+import PermissionGate from "../../../../components/PermissionGate";
 
 export default function UserToolbar({
   search,
@@ -17,19 +18,21 @@ export default function UserToolbar({
           type="text"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search name, username, email, phone, role..."
+          placeholder="ស្វែងរកឈ្មោះ អ៊ីមែល លេខទូរស័ព្ទ ឬតួនាទី..."
           className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
         />
       </div>
 
-      <button
-        type="button"
-        onClick={openCreateModal}
-        className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-      >
-        <FiPlusCircle className="text-lg" />
-        Add User
-      </button>
+      <PermissionGate permission="users.create">
+        <button
+          type="button"
+          onClick={openCreateModal}
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+        >
+          <FiPlusCircle className="text-lg" />
+          បន្ថែមអ្នកប្រើប្រាស់
+        </button>
+      </PermissionGate>
     </div>
   );
 }

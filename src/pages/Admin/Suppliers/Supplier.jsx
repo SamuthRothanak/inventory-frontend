@@ -1,10 +1,14 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import {
   FiCheckCircle,
   FiChevronDown,
+  FiDownload,
+  FiFileText,
   FiFilter,
+  FiHash,
   FiPlusCircle,
   FiSearch,
   FiTruck,
@@ -12,6 +16,7 @@ import {
 } from "react-icons/fi";
 
 import {
+  bulkDeleteSuppliersApi,
   createSupplierApi,
   deleteSupplierApi,
   getSuppliersApi,
@@ -22,8 +27,16 @@ import SummaryCard from "./components/SummaryCard";
 import SupplierTable from "./components/SupplierTable";
 import SupplierFormModal from "./components/SupplierFormModal";
 import ViewSupplierModal from "./components/ViewSupplierModal";
+import SupplierDropdown from "./components/SupplierDropdown";
+import { useNotification } from "../../../components/AppNotification";
 
-import { extractSuppliers, toSupplierPayload } from "./utils/supplierUtils";
+import { extractSuppliers, filterSuppliers, toSupplierPayload } from "./utils/supplierUtils";
+import {
+  exportSuppliersCsv,
+  exportSuppliersExcel,
+  exportSuppliersPdf,
+} from "./utils/supplierExport";
+import PermissionGate from "../../../components/PermissionGate";
 
 function useLockBodyScroll(isOpen) {
   useEffect(() => {
@@ -84,37 +97,35 @@ function getPaginationMeta(response, fallbackLength = 0) {
   };
 }
 
-function getSummaryFromResponse(response, suppliers) {
-  const data = response?.data;
-  const summary = data?.summary || response?.summary || null;
+function getErrorMessage(error, fallback = "មានបញ្ហាមួយបានកើតឡើង។") {
+  const response = error?.response?.data;
 
-  if (summary) {
-    return {
-      total: Number(summary.total || 0),
-      active: Number(summary.active || 0),
-      inactive: Number(summary.inactive || 0),
-    };
+  if (response?.message && response?.errors) {
+    const firstError = Object.values(response.errors)?.[0]?.[0];
+    return firstError || response.message;
   }
 
-  return {
-    total: suppliers.length,
-    active: suppliers.filter((item) => item.status === "Active").length,
-    inactive: suppliers.filter((item) => item.status === "Inactive").length,
-  };
+  return response?.message || error?.message || fallback;
 }
 
 export default function Supplier() {
   const outlet = useOutletContext();
   const isDark = outlet?.isDark ?? false;
   const queryClient = useQueryClient();
+  const notify = useNotification();
+  const confirm = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState([]);
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [serverMessage, setServerMessage] = useState("");
 
   useLockBodyScroll(Boolean(modalMode));
 
@@ -139,6 +150,14 @@ export default function Supplier() {
     keepPreviousData: true,
   });
 
+  // Stats — fetch all (per_page=9999) គណនា total/active/inactive ត្រឹមត្រូវ
+  // (មិនមែនតែ page) — backend confirmed per_page=9999 return ទាំងអស់។
+  const statsQuery = useQuery({
+    queryKey: ["suppliers", "all-for-stats"],
+    queryFn: () => getSuppliersApi({ per_page: 9999 }),
+    keepPreviousData: true,
+  });
+
   const suppliers = useMemo(() => {
     return extractSuppliers(suppliersQuery.data);
   }, [suppliersQuery.data]);
@@ -148,40 +167,96 @@ export default function Supplier() {
   }, [suppliersQuery.data, suppliers.length]);
 
   const summary = useMemo(() => {
-    return getSummaryFromResponse(suppliersQuery.data, suppliers);
-  }, [suppliersQuery.data, suppliers]);
+    const allSuppliers = extractSuppliers(statsQuery.data);
+    const total = allSuppliers.length;
+    const active = allSuppliers.filter((s) => s.status === "Active").length;
+    return {
+      total,
+      active,
+      inactive: total - active,
+    };
+  }, [statsQuery.data]);
+
+  const allSuppliers = useMemo(() => {
+    return extractSuppliers(statsQuery.data);
+  }, [statsQuery.data]);
+
+  const exportSuppliers = useMemo(
+    () => filterSuppliers(allSuppliers, searchTerm, statusFilter),
+    [allSuppliers, searchTerm, statusFilter]
+  );
+
+  useEffect(() => {
+    const visibleIds = new Set(suppliers.map((item) => Number(item.id)));
+    setSelectedSupplierIds((previous) =>
+      previous.filter((id) => visibleIds.has(Number(id)))
+    );
+  }, [suppliers]);
+
+  const invalidateSuppliers = () => {
+    queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+  };
 
   const createMutation = useMutation({
     mutationFn: createSupplierApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      invalidateSuppliers();
+      notify.success("បង្កើតអ្នកផ្គត់ផ្គង់រួចរាល់", "អ្នកផ្គត់ផ្គង់ត្រូវបានរក្សាទុករួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      alert(error?.response?.data?.message || "Failed to create supplier.");
+      const message = getErrorMessage(error, "មិនអាចបង្កើតអ្នកផ្គត់ផ្គង់បានទេ។");
+      setServerMessage(message);
+      notify.error("បង្កើតបរាជ័យ", message);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: updateSupplierApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      invalidateSuppliers();
+      notify.success("កែអ្នកផ្គត់ផ្គង់រួចរាល់", "អ្នកផ្គត់ផ្គង់ត្រូវបានធ្វើបច្ចុប្បន្នភាពរួចហើយ។");
       closeModal();
     },
     onError: (error) => {
-      alert(error?.response?.data?.message || "Failed to update supplier.");
+      const message = getErrorMessage(error, "មិនអាចកែអ្នកផ្គត់ផ្គង់បានទេ។");
+      setServerMessage(message);
+      notify.error("កែបរាជ័យ", message);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteSupplierApi,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      invalidateSuppliers();
+      notify.success("លុបអ្នកផ្គត់ផ្គង់រួចរាល់", "អ្នកផ្គត់ផ្គង់ត្រូវបានលុបចោលរួចហើយ។");
     },
     onError: (error) => {
-      alert(
-        error?.response?.data?.message ||
-          "Failed to delete supplier. This supplier may already be used in purchases."
+      notify.error(
+        "លុបបរាជ័យ",
+        getErrorMessage(
+          error,
+          "មិនអាចលុបអ្នកផ្គត់ផ្គង់បានទេ។ អ្នកផ្គត់ផ្គង់នេះអាចត្រូវបានប្រើរួចហើយក្នុងការទិញ។"
+        )
+      );
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: bulkDeleteSuppliersApi,
+    onSuccess: () => {
+      setSelectedSupplierIds([]);
+      setBulkSelectMode(false);
+      invalidateSuppliers();
+      notify.success(
+        "លុបអ្នកផ្គត់ផ្គង់រួចរាល់",
+        "អ្នកផ្គត់ផ្គង់ដែលបានជ្រើសរើសត្រូវបានលុបចោលរួចហើយ។"
+      );
+    },
+    onError: (error) => {
+      notify.error(
+        "លុបជាក្រុមបរាជ័យ",
+        getErrorMessage(error, "មិនអាចលុបអ្នកផ្គត់ផ្គង់ដែលបានជ្រើសរើសបានទេ។")
       );
     },
   });
@@ -239,27 +314,47 @@ export default function Supplier() {
   };
 
   const openAddModal = () => {
+    setServerMessage("");
     setSelectedSupplier(null);
     setModalMode("add");
   };
 
   const openViewModal = (supplier) => {
+    setServerMessage("");
     setSelectedSupplier(supplier);
     setModalMode("view");
   };
 
   const openEditModal = (supplier) => {
+    setServerMessage("");
     setSelectedSupplier(supplier);
     setModalMode("edit");
   };
 
   const closeModal = () => {
+    setServerMessage("");
     setModalMode(null);
     setSelectedSupplier(null);
   };
 
   const handleSaveSupplier = (form) => {
+    setServerMessage("");
     const payload = toSupplierPayload(form);
+    const normalizedName = payload.name.trim().toLowerCase();
+    const duplicateSupplier = allSuppliers.find((supplier) => {
+      const isSameSupplier =
+        modalMode === "edit" &&
+        Number(supplier.id) === Number(selectedSupplier?.id);
+
+      return !isSameSupplier && supplier.name.trim().toLowerCase() === normalizedName;
+    });
+
+    if (duplicateSupplier) {
+      const message = "ឈ្មោះអ្នកផ្គត់ផ្គង់នេះមានរួចហើយ។";
+      setServerMessage(message);
+      notify.error("អ្នកផ្គត់ផ្គង់ស្ទួន", message);
+      return;
+    }
 
     if (modalMode === "add") {
       createMutation.mutate(payload);
@@ -274,17 +369,74 @@ export default function Supplier() {
     }
   };
 
-  const handleDeleteSupplier = (supplier) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${supplier.name}"?`
-    );
-
-    if (!confirmed) return;
-
+  const handleDeleteSupplier = async (supplier) => {
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុប "${supplier.name}" មែនទេ?`);
+    if (!ok) return;
     deleteMutation.mutate(supplier.id);
   };
 
+  const handleToggleSupplier = (supplierId) => {
+    if (!bulkSelectMode) return;
+
+    setSelectedSupplierIds((previous) => {
+      const id = Number(supplierId);
+      if (previous.some((item) => Number(item) === id)) {
+        return previous.filter((item) => Number(item) !== id);
+      }
+
+      return [...previous, id];
+    });
+  };
+
+  const handleToggleAllSuppliers = () => {
+    if (!bulkSelectMode) return;
+
+    const pageIds = suppliers.map((supplier) => Number(supplier.id));
+    const allSelected = pageIds.every((id) =>
+      selectedSupplierIds.some((selectedId) => Number(selectedId) === id)
+    );
+
+    setSelectedSupplierIds((previous) => {
+      if (allSelected) {
+        return previous.filter((id) => !pageIds.includes(Number(id)));
+      }
+
+      return [...new Set([...previous.map(Number), ...pageIds])];
+    });
+  };
+
+  const handleBulkDeleteSuppliers = async () => {
+    if (selectedSupplierIds.length === 0) return;
+    const ok = await confirm(`តើអ្នកប្រាកដថាចង់លុបអ្នកផ្គត់ផ្គង់ចំនួន ${selectedSupplierIds.length} ដែលបានជ្រើសរើសមែនទេ?`);
+    if (!ok) return;
+    bulkDeleteMutation.mutate(selectedSupplierIds);
+  };
+
+  const openBulkSelectMode = () => {
+    setBulkSelectMode(true);
+  };
+
+  const closeBulkSelectMode = () => {
+    setBulkSelectMode(false);
+    setSelectedSupplierIds([]);
+  };
+
+  const handleExport = (type) => {
+    setExportMenuOpen(false);
+    if (type === "pdf") {
+      const opened = exportSuppliersPdf(exportSuppliers);
+      if (!opened) window.alert("Browser បាន block popup។ សូមអនុញ្ញាត popup រួច Export ម្តងទៀត។");
+      return;
+    }
+    if (type === "excel") {
+      exportSuppliersExcel(exportSuppliers);
+      return;
+    }
+    exportSuppliersCsv(exportSuppliers);
+  };
+
   const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isDeleting = deleteMutation.isPending || bulkDeleteMutation.isPending;
 
   const actionError =
     createMutation.error || updateMutation.error || deleteMutation.error;
@@ -292,14 +444,14 @@ export default function Supplier() {
   const actionErrorMessage =
     actionError?.response?.data?.message ||
     actionError?.message ||
-    "Something went wrong.";
+          "មានបញ្ហាមួយបានកើតឡើង។";
 
   return (
     <section className="space-y-6">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <SummaryCard
           theme={theme}
-          title="Total Suppliers"
+          title="ចំនួនអ្នកផ្គត់ផ្គង់សរុប"
           value={summary.total}
           icon={<FiTruck className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
@@ -307,7 +459,7 @@ export default function Supplier() {
 
         <SummaryCard
           theme={theme}
-          title="Active Suppliers"
+          title="អ្នកផ្គត់ផ្គង់ដំណើរការ"
           value={summary.active}
           icon={<FiCheckCircle className="text-[44px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
@@ -315,15 +467,14 @@ export default function Supplier() {
 
         <SummaryCard
           theme={theme}
-          title="Inactive Suppliers"
+          title="អ្នកផ្គត់ផ្គង់មិនដំណើរការ"
           value={summary.inactive}
           icon={<FiXCircle className="text-[44px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
       </div>
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full grid-cols-1 gap-3 xl:max-w-4xl xl:grid-cols-[1fr_220px_160px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,1fr)_220px_160px_auto] xl:items-center">
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -331,64 +482,87 @@ export default function Supplier() {
 
             <input
               type="text"
-              placeholder="Search supplier, contact, phone, address..."
+              placeholder="ស្វែងរកអ្នកផ្គត់ផ្គង់ ទំនាក់ទំនង ទូរស័ព្ទ ឬអាសយដ្ឋាន..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
             />
           </div>
 
+          <SupplierDropdown
+            icon={<FiFilter />}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            theme={theme}
+            options={[
+              { value: "All", label: "ស្ថានភាពទាំងអស់" },
+              { value: "Active", label: "ដំណើរការ" },
+              { value: "Inactive", label: "មិនដំណើរការ" },
+            ]}
+          />
+
+          <SupplierDropdown
+            icon={<FiHash />}
+            value={perPage}
+            onChange={(value) => setPerPage(Number(value))}
+            theme={theme}
+            options={[10, 25, 50].map((value) => ({
+              value,
+              label: `${value} / ទំព័រ`,
+            }))}
+          />
+
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap xl:justify-end">
           <div className="relative">
-            <FiFilter
-              className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className={`h-12 w-full appearance-none rounded-2xl border pl-11 pr-11 text-sm outline-none transition focus:ring-4 ${theme.select}`}
+            <button
+              type="button"
+              onClick={() => exportSuppliers.length > 0 && setExportMenuOpen((open) => !open)}
+              disabled={exportSuppliers.length === 0}
+              className={`inline-flex h-12 min-w-[142px] items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${theme.badge} hover:border-red-400 hover:text-red-500`}
             >
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
+              <FiDownload className="text-lg" />
+              Export
+              <FiChevronDown className={`text-base transition ${exportMenuOpen ? "rotate-180" : ""}`} />
+            </button>
 
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
+            {exportMenuOpen && (
+              <div className={`absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border py-1 shadow-xl ${isDark ? "border-white/10 bg-zinc-900" : "border-zinc-200 bg-white"}`}>
+                {[
+                  ["pdf", "PDF", FiFileText],
+                  ["excel", "Excel", FiFileText],
+                  ["csv", "CSV", FiDownload],
+                ].map(([type, label, Icon]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => handleExport(type)}
+                    className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition ${isDark ? "text-zinc-100 hover:bg-white/10" : "text-zinc-700 hover:bg-zinc-100"}`}
+                  >
+                    <Icon className="text-base" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="relative">
-            <select
-              value={perPage}
-              onChange={(event) => setPerPage(Number(event.target.value))}
-              className={`h-12 w-full appearance-none rounded-2xl border px-4 pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
+          <PermissionGate permission="suppliers.create">
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="inline-flex h-12 min-w-[210px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
             >
-              <option value={10}>10 / page</option>
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
-            </select>
-
-            <FiChevronDown
-              className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-            />
-          </div>
+              <FiPlusCircle className="text-lg" />
+              បន្ថែមអ្នកផ្គត់ផ្គង់
+            </button>
+          </PermissionGate>
         </div>
-
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-        >
-          <FiPlusCircle className="text-lg" />
-          Add Supplier
-        </button>
       </div>
 
       {suppliersQuery.isError && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm font-semibold text-red-500">
           {suppliersQuery.error?.response?.data?.message ||
-            "Failed to load suppliers."}
+            "មិនអាចផ្ទុកអ្នកផ្គត់ផ្គង់បានទេ។"}
         </div>
       )}
 
@@ -408,10 +582,18 @@ export default function Supplier() {
         isFetching={suppliersQuery.isFetching}
         isLoading={suppliersQuery.isLoading}
         isError={suppliersQuery.isError}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={isDeleting}
+        bulkDeleteIsPending={bulkDeleteMutation.isPending}
+        bulkSelectMode={bulkSelectMode}
+        selectedSupplierIds={selectedSupplierIds}
         onView={openViewModal}
         onEdit={openEditModal}
         onDelete={handleDeleteSupplier}
+        onOpenBulkSelect={openBulkSelectMode}
+        onCancelBulkSelect={closeBulkSelectMode}
+        onToggleSelect={handleToggleSupplier}
+        onToggleSelectAll={handleToggleAllSuppliers}
+        onBulkDelete={handleBulkDeleteSuppliers}
       />
 
       {modalMode === "view" && selectedSupplier && (
@@ -431,6 +613,7 @@ export default function Supplier() {
           onClose={closeModal}
           onSubmit={handleSaveSupplier}
           isSaving={isSaving}
+          serverMessage={serverMessage}
         />
       )}
     </section>

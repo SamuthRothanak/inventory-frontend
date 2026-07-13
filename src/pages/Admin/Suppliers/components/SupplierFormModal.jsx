@@ -1,9 +1,8 @@
-import { useEffect } from "react";
+﻿import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   FiCheckCircle,
-  FiChevronDown,
   FiFileText,
   FiHash,
   FiMail,
@@ -20,6 +19,15 @@ import {
   defaultSupplierValues,
   supplierSchema,
 } from "../schemas/supplierSchema";
+import SupplierDropdown from "./SupplierDropdown";
+
+const sanitizeInputValue = (value, mode) => {
+  if (mode === "number") return String(value || "").replace(/[^0-9]/g, "");
+  if (mode === "phone") return String(value || "").replace(/[^0-9+\-\s(),/]/g, "");
+  if (mode === "shopName") return String(value || "").replace(/[^\p{L}\p{M}\p{N}\s&.,'()/-]/gu, "");
+  if (mode === "text") return String(value || "").replace(/[^\p{L}\p{M}\s]/gu, "");
+  return value;
+};
 
 export function ModalShell({ title, subtitle, theme, onClose, children, footer }) {
   return (
@@ -46,7 +54,7 @@ export function ModalShell({ title, subtitle, theme, onClose, children, footer }
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close modal"
+              aria-label="បិទផ្ទាំង"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <FiX className="text-lg" />
@@ -79,14 +87,16 @@ export default function SupplierFormModal({
   onClose,
   onSubmit,
   isSaving,
+  serverMessage = "",
 }) {
-  const title = mode === "add" ? "Add Supplier" : "Edit Supplier";
+  const title = mode === "add" ? "បន្ថែមអ្នកផ្គត់ផ្គង់" : "កែអ្នកផ្គត់ផ្គង់";
 
   const {
     register,
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(supplierSchema),
@@ -116,7 +126,7 @@ export default function SupplierFormModal({
   return (
     <ModalShell
       title={title}
-      subtitle="Save supplier or distributor information used in purchase invoices."
+      subtitle="រក្សាទុកអ្នកផ្គត់ផ្គង់ ឬអ្នកចែកចាយដែលប្រើក្នុងវិក្កយបត្រទិញ។"
       theme={theme}
       onClose={onClose}
       footer={
@@ -126,7 +136,7 @@ export default function SupplierFormModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Cancel
+            បោះបង់
           </button>
 
           <button
@@ -136,7 +146,7 @@ export default function SupplierFormModal({
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <FiSave />
-            {isSaving ? "Saving..." : "Save Supplier"}
+            {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកអ្នកផ្គត់ផ្គង់"}
           </button>
         </>
       }
@@ -148,17 +158,22 @@ export default function SupplierFormModal({
       >
         <SectionTitle
           icon={<FiTruck />}
-          title="Basic Information"
-          subtitle="Required supplier details for purchase management."
+          title="ព័ត៌មានមូលដ្ឋាន"
+          subtitle="ព័ត៌មានលម្អិតរបស់អ្នកផ្គត់ផ្គង់ដែលចាំបាច់សម្រាប់ការគ្រប់គ្រងការទិញ។"
           theme={theme}
         />
 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+          {serverMessage && (
+            <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-500">
+              {serverMessage}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {mode === "edit" && (
               <FormInput
-                label="Supplier Code"
-                required
+                label="លេខកូដអ្នកផ្គត់ផ្គង់"
                 error={errors.supplierCode?.message}
                 register={register("supplierCode")}
                 theme={theme}
@@ -168,35 +183,40 @@ export default function SupplierFormModal({
             )}
 
             <FormInput
-              label="Supplier Name"
+              label="ឈ្មោះអ្នកផ្គត់ផ្គង់"
               required
               error={errors.name?.message}
               register={register("name")}
               theme={theme}
-              placeholder="Thai Huot Trading"
+              placeholder="ដារ៉ា មីនីម៉ាត"
               icon={<FiTruck />}
+              sanitize="shopName"
             />
 
             <FormInput
-              label="Contact Person"
+              label="ឈ្មោះអ្នកទំនាក់ទំនង"
+              required
               error={errors.contactPerson?.message}
               register={register("contactPerson")}
               theme={theme}
-              placeholder="Sok Dara"
+              placeholder="ដារ៉ា"
               icon={<FiUser />}
+              sanitize="text"
             />
 
             <FormInput
-              label="Phone"
+              label="លេខទូរស័ព្ទ"
+              required
               error={errors.phone?.message}
               register={register("phone")}
               theme={theme}
-              placeholder="012345678"
+              placeholder="012345678 / 098765432"
               icon={<FiPhone />}
+              sanitize="phone"
             />
 
             <FormInput
-              label="Email"
+              label="អ៊ីម៉ែល"
               error={errors.email?.message}
               register={register("email")}
               theme={theme}
@@ -205,9 +225,14 @@ export default function SupplierFormModal({
             />
 
             <FormSelect
-              label="Status"
+              label="ស្ថានភាព"
+              value={status}
+              onChange={(value) => setValue("status", value, { shouldValidate: true })}
               register={register("status")}
-              options={["Active", "Inactive"]}
+              options={[
+                { value: "Active", label: "ដំណើរការ" },
+                { value: "Inactive", label: "មិនដំណើរការ" },
+              ]}
               theme={theme}
               icon={status === "Active" ? <FiCheckCircle /> : <FiXCircle />}
             />
@@ -216,26 +241,26 @@ export default function SupplierFormModal({
 
         <SectionTitle
           icon={<FiFileText />}
-          title="Additional Information"
-          subtitle="Optional address and note for this supplier."
+          title="ព័ត៌មានបន្ថែម"
+          subtitle="អាសយដ្ឋាន និងចំណាំបន្ថែមសម្រាប់អ្នកផ្គត់ផ្គង់។"
           theme={theme}
         />
 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
           <FormTextarea
-            label="Address"
+            label="អាសយដ្ឋាន"
             register={register("address")}
             theme={theme}
-            placeholder="Supplier address"
+            placeholder="អាសយដ្ឋានអ្នកផ្គត់ផ្គង់"
             icon={<FiMapPin />}
           />
 
           <div className="mt-4">
             <FormTextarea
-              label="Note"
+              label="ចំណាំ"
               register={register("note")}
               theme={theme}
-              placeholder="Any supplier note..."
+              placeholder="ចំណាំអំពីអ្នកផ្គត់ផ្គង់..."
               icon={<FiFileText />}
             />
           </div>
@@ -269,7 +294,16 @@ function FormInput({
   type = "text",
   placeholder = "",
   icon,
+  sanitize = "",
 }) {
+  const inputProps = {
+    ...register,
+    onChange: (event) => {
+      event.target.value = sanitizeInputValue(event.target.value, sanitize);
+      register?.onChange?.(event);
+    },
+  };
+
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
@@ -289,7 +323,8 @@ function FormInput({
         <input
           type={type}
           placeholder={placeholder}
-          {...register}
+          {...inputProps}
+          inputMode={sanitize === "number" ? "numeric" : sanitize === "phone" ? "tel" : undefined}
           className={`h-11 w-full rounded-xl border ${
             icon ? "pl-10" : "px-3"
           } pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${
@@ -334,39 +369,35 @@ function FormTextarea({ label, register, theme, placeholder = "", icon }) {
   );
 }
 
-function FormSelect({ label, register, options, theme, icon }) {
+function FormSelect({ label, register, options, theme, icon, value, onChange }) {
+  const mappedOptions = options.map((option) =>
+    typeof option === "string" ? { value: option, label: option } : option
+  );
+  const handleChange = (nextValue) => {
+    if (onChange) {
+      onChange(nextValue);
+      return;
+    }
+
+    register?.onChange?.({
+      target: {
+        name: register.name,
+        value: nextValue,
+      },
+    });
+  };
+
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <select
-          {...register}
-          className={`h-11 w-full appearance-none rounded-xl border ${
-            icon ? "pl-10" : "pl-3"
-          } pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-        >
-          {options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-
-        <FiChevronDown
-          className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-        />
-      </div>
-    </label>
+    <SupplierDropdown
+      label={label}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={handleChange}
+      options={mappedOptions}
+      searchable={mappedOptions.length > 6}
+      heightClass="h-11"
+      roundedClass="rounded-xl"
+    />
   );
 }

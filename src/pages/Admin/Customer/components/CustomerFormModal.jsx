@@ -1,9 +1,8 @@
-import { useEffect } from "react";
+﻿import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   FiCheckCircle,
-  FiChevronDown,
   FiFileText,
   FiHash,
   FiMapPin,
@@ -19,6 +18,15 @@ import {
   customerSchema,
   defaultCustomerValues,
 } from "../schemas/customerSchema";
+import CustomerDropdown from "./CustomerDropdown";
+
+const sanitizeInputValue = (value, mode) => {
+  if (mode === "number") return String(value || "").replace(/[^0-9]/g, "");
+  if (mode === "phone") return String(value || "").replace(/[^0-9+\-\s(),/]/g, "");
+  if (mode === "shopName") return String(value || "").replace(/[^\p{L}\p{M}\p{N}\s&.,'()/-]/gu, "");
+  if (mode === "text") return String(value || "").replace(/[^\p{L}\p{M}\s]/gu, "");
+  return value;
+};
 
 export function ModalShell({ title, subtitle, theme, onClose, children, footer }) {
   return (
@@ -45,7 +53,7 @@ export function ModalShell({ title, subtitle, theme, onClose, children, footer }
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close modal"
+              aria-label="បិទផ្ទាំង"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <FiX className="text-lg" />
@@ -78,14 +86,16 @@ export default function CustomerFormModal({
   onClose,
   onSubmit,
   isSaving,
+  serverMessage = "",
 }) {
-  const title = mode === "add" ? "Add Customer" : "Edit Customer";
+  const title = mode === "add" ? "បន្ថែមអតិថិជន" : "កែអតិថិជន";
 
   const {
     register,
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(customerSchema),
@@ -114,7 +124,7 @@ export default function CustomerFormModal({
   return (
     <ModalShell
       title={title}
-      subtitle="Only wholesale / reseller customers should be saved here. Walk-in customers are not stored."
+      subtitle="រក្សាទុកតែអតិថិជនដែលត្រូវការកត់ត្រាសម្រាប់ការលក់ វិក្កយបត្រ និងការដឹកជញ្ជូន។"
       theme={theme}
       onClose={onClose}
       footer={
@@ -124,7 +134,7 @@ export default function CustomerFormModal({
             onClick={onClose}
             className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            Cancel
+            បោះបង់
           </button>
 
           <button
@@ -134,7 +144,7 @@ export default function CustomerFormModal({
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <FiSave />
-            {isSaving ? "Saving..." : "Save Customer"}
+            {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកអតិថិជន"}
           </button>
         </>
       }
@@ -146,17 +156,22 @@ export default function CustomerFormModal({
       >
         <SectionTitle
           icon={<FiUser />}
-          title="Basic Information"
-          subtitle="Required customer details for customer management."
+          title="ព័ត៌មានមូលដ្ឋាន"
+          subtitle="ព័ត៌មានចាំបាច់សម្រាប់គ្រប់គ្រងអតិថិជន។"
           theme={theme}
         />
 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+          {serverMessage && (
+            <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-500">
+              {serverMessage}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {mode === "edit" && (
               <FormInput
-                label="Customer Code"
-                required
+                label="លេខកូដអតិថិជន"
                 error={errors.customerCode?.message}
                 register={register("customerCode")}
                 theme={theme}
@@ -166,37 +181,47 @@ export default function CustomerFormModal({
             )}
 
             <FormInput
-              label="Shop Name"
+                label="ឈ្មោះហាង"
               required
               error={errors.shopName?.message}
               register={register("shopName")}
               theme={theme}
-              placeholder="Dara Mini Mart"
+              placeholder="ដារ៉ា មីនីម៉ាត"
               icon={<FiShoppingBag />}
+              sanitize="shopName"
             />
 
             <FormInput
-              label="Contact Name"
+              label="ឈ្មោះអ្នកទំនាក់ទំនង"
+              required
               error={errors.contactName?.message}
               register={register("contactName")}
               theme={theme}
-              placeholder="Dara"
+              placeholder="ដារ៉ា"
               icon={<FiUser />}
+              sanitize="text"
             />
 
             <FormInput
-              label="Phone"
+              label="លេខទូរស័ព្ទ"
+              required
               error={errors.phone?.message}
               register={register("phone")}
               theme={theme}
-              placeholder="012345678"
+              placeholder="012345678 / 098765432"
               icon={<FiPhone />}
+              sanitize="phone"
             />
 
             <FormSelect
-              label="Status"
+              label="ស្ថានភាព"
+              value={status}
+              onChange={(value) => setValue("status", value, { shouldValidate: true })}
               register={register("status")}
-              options={["Active", "Inactive"]}
+              options={[
+                { value: "Active", label: "ដំណើរការ" },
+                { value: "Inactive", label: "មិនដំណើរការ" },
+              ]}
               theme={theme}
               icon={status === "Active" ? <FiCheckCircle /> : <FiXCircle />}
             />
@@ -205,26 +230,26 @@ export default function CustomerFormModal({
 
         <SectionTitle
           icon={<FiFileText />}
-          title="Additional Information"
-          subtitle="Optional address and note for this customer."
+          title="ព័ត៌មានបន្ថែម"
+          subtitle="អាសយដ្ឋាន និងចំណាំបន្ថែមសម្រាប់អតិថិជននេះ។"
           theme={theme}
         />
 
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
           <FormTextarea
-            label="Address"
+            label="អាសយដ្ឋាន"
             register={register("address")}
             theme={theme}
-            placeholder="Customer shop address"
+            placeholder="អាសយដ្ឋានហាងអតិថិជន"
             icon={<FiMapPin />}
           />
 
           <div className="mt-4">
             <FormTextarea
-              label="Note"
+              label="ចំណាំ"
               register={register("note")}
               theme={theme}
-              placeholder="Any customer note..."
+              placeholder="ចំណាំអំពីអតិថិជន..."
               icon={<FiFileText />}
             />
           </div>
@@ -258,7 +283,16 @@ function FormInput({
   type = "text",
   placeholder = "",
   icon,
+  sanitize = "",
 }) {
+  const inputProps = {
+    ...register,
+    onChange: (event) => {
+      event.target.value = sanitizeInputValue(event.target.value, sanitize);
+      register?.onChange?.(event);
+    },
+  };
+
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
@@ -278,7 +312,8 @@ function FormInput({
         <input
           type={type}
           placeholder={placeholder}
-          {...register}
+          {...inputProps}
+          inputMode={sanitize === "number" ? "numeric" : sanitize === "phone" ? "tel" : undefined}
           className={`h-11 w-full rounded-xl border ${
             icon ? "pl-10" : "px-3"
           } pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${
@@ -323,39 +358,36 @@ function FormTextarea({ label, register, theme, placeholder = "", icon }) {
   );
 }
 
-function FormSelect({ label, register, options, theme, icon }) {
+function FormSelect({ label, required = false, register, options, theme, icon, value, onChange }) {
+  const mappedOptions = options.map((option) =>
+    typeof option === "string" ? { value: option, label: option } : option
+  );
+  const handleChange = (nextValue) => {
+    if (onChange) {
+      onChange(nextValue);
+      return;
+    }
+
+    register?.onChange?.({
+      target: {
+        name: register.name,
+        value: nextValue,
+      },
+    });
+  };
+
   return (
-    <label className="block">
-      <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
-        {label}
-      </span>
-
-      <div className="relative">
-        {icon && (
-          <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-          >
-            {icon}
-          </span>
-        )}
-
-        <select
-          {...register}
-          className={`h-11 w-full appearance-none rounded-xl border ${
-            icon ? "pl-10" : "pl-3"
-          } pr-10 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-        >
-          {options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-
-        <FiChevronDown
-          className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-        />
-      </div>
-    </label>
+    <CustomerDropdown
+      label={label}
+      required={required}
+      theme={theme}
+      icon={icon}
+      value={value}
+      onChange={handleChange}
+      options={mappedOptions}
+      searchable={mappedOptions.length > 6}
+      heightClass="h-11"
+      roundedClass="rounded-xl"
+    />
   );
 }

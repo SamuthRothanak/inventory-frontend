@@ -1,4 +1,4 @@
-import { FiUser, FiCheckCircle, FiXCircle } from "react-icons/fi";
+﻿import { FiUser, FiCheckCircle, FiXCircle } from "react-icons/fi";
 
 export default function UserStats({
   totalUsers,
@@ -10,7 +10,7 @@ export default function UserStats({
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
       <SummaryCard
         theme={theme}
-        title="Total Users"
+        title="អ្នកប្រើប្រាស់សរុប"
         value={totalUsers}
         icon={<FiUser className="text-[44px] text-red-500" />}
         iconBg="bg-red-500/10"
@@ -18,7 +18,7 @@ export default function UserStats({
 
       <SummaryCard
         theme={theme}
-        title="Active Users"
+        title="អ្នកប្រើប្រាស់ដំណើរការ"
         value={activeUsers}
         icon={<FiCheckCircle className="text-[44px] text-emerald-500" />}
         iconBg="bg-emerald-500/10"
@@ -26,7 +26,7 @@ export default function UserStats({
 
       <SummaryCard
         theme={theme}
-        title="Inactive Users"
+        title="អ្នកប្រើប្រាស់មិនដំណើរការ"
         value={inactiveUsers}
         icon={<FiXCircle className="text-[44px] text-red-500" />}
         iconBg="bg-red-500/10"

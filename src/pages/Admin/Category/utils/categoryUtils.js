@@ -20,7 +20,27 @@ export function extractCategories(response) {
   return [];
 }
 
+function normalizeDateTimeValue(value) {
+  if (!value) return "";
+
+  return String(value).replace("T", " ").replace(/\.\d+Z?$/, "").slice(0, 16);
+}
+
+function normalizeComparableDateTime(value) {
+  return normalizeDateTimeValue(value).replace(/\D/g, "");
+}
+
 export function normalizeCategory(item) {
+  const createdAtRaw = item.created_at || item.createdAt || "";
+  const updatedAtRaw = item.updated_at || item.updatedAt || "";
+  const createdComparable = normalizeComparableDateTime(createdAtRaw);
+  const updatedComparable = normalizeComparableDateTime(updatedAtRaw);
+  const hasBeenUpdated = Boolean(
+    createdComparable &&
+      updatedComparable &&
+      updatedComparable !== createdComparable
+  );
+
   return {
     id: item.id,
     name: item.name || "",
@@ -28,12 +48,9 @@ export function normalizeCategory(item) {
     imagePath: item.image || item.imagePath || "",
     imageFile: null,
     status: normalizeCategoryStatus(item.status),
-    createdAt: item.created_at ? item.created_at.slice(0, 10) : "-",
-    updatedAt: item.updated_at
-      ? item.updated_at.slice(0, 10)
-      : item.created_at
-        ? item.created_at.slice(0, 10)
-        : "-",
+    createdAt: normalizeDateTimeValue(createdAtRaw) || "-",
+    updatedAt: normalizeDateTimeValue(updatedAtRaw) || "-",
+    hasBeenUpdated,
     raw: item,
   };
 }

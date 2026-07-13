@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  FiBell,
   FiMoon,
   FiSun,
   FiChevronDown,
@@ -18,6 +17,7 @@ import {
   FiShield,
   FiFileText,
   FiSettings,
+  FiSliders,
   FiDatabase,
   FiActivity,
   FiRefreshCcw,
@@ -27,29 +27,35 @@ import { useMutation } from "@tanstack/react-query";
 
 import { logoutApi } from "../services/auth.service";
 import { useAuthStore } from "../store/authStore";
+import NotificationBell from "./Admin/Notifications/components/NotificationBell";
+import {
+  getShopInitials,
+  getStoredShopInfo,
+  SHOP_INFO_UPDATED_EVENT,
+} from "../utils/shopInfo";
 
 const mainMenus = [
-  { label: "Dashboard", icon: FiGrid, path: "/home", end: true },
-  { label: "Categories", icon: FiTag, path: "/home/categories" },
-  { label: "Products", icon: FiBox, path: "/home/products" },
-  { label: "Suppliers", icon: FiTruck, path: "/home/suppliers" },
-  { label: "Purchases", icon: FiShoppingCart, path: "/home/purchases" },
-  { label: "Inventory", icon: FiArchive, path: "/home/inventory" },
-  { label: "Customer", icon: FiUsers, path: "/home/customer" },
-  { label: "Sales", icon: FiDollarSign, path: "/home/sales" },
-  { label: "Reports", icon: FiFileText, path: "/home/reports" },
+  { label: "ផ្ទាំងគ្រប់គ្រង",       icon: FiGrid,         path: "/home", end: true,     permission: "dashboard.view" },
+  { label: "ប្រភេទទំនិញ",           icon: FiTag,          path: "/home/categories",     permission: "categories.view" },
+  { label: "គ្រប់គ្រងផលិតផល",       icon: FiBox,          path: "/home/products",       permission: "products.view" },
+  { label: "គ្រប់គ្រងអ្នកផ្គត់ផ្គង់", icon: FiTruck,        path: "/home/suppliers",      permission: "suppliers.view" },
+  { label: "គ្រប់គ្រងការទិញ",       icon: FiShoppingCart, path: "/home/purchases",      permission: "purchases.view" },
+  { label: "គ្រប់គ្រងស្តុក",         icon: FiArchive,      path: "/home/inventory",      permission: "stock.view" },
+  { label: "គ្រប់គ្រងអតិថិជន",       icon: FiUsers,        path: "/home/customer",       permission: "customers.view" },
+  { label: "គ្រប់គ្រងការលក់",       icon: FiDollarSign,   path: "/home/sales",          permission: "sales.view" },
+  { label: "របាយការណ៍",             icon: FiFileText,     path: "/home/reports",        permission: "reports.sales" },
 ];
 
 const adminMenus = [
-  { label: "Users", icon: FiUser, path: "/home/users" },
-  { label: "Role & Permission", icon: FiShield, path: "/home/roles" },
+  { label: "អ្នកប្រើប្រាស់",  icon: FiUser,   path: "/home/users", permission: "users.view" },
+  { label: "តួនាទី & សិទ្ធិ", icon: FiShield, path: "/home/roles", permission: "roles.view" },
 ];
 
 const systemMenus = [
-  { label: "Settings", icon: FiSettings, path: "/home/settings" },
-  { label: "Exchange Rate", icon: FiRefreshCcw, path: "/home/exchange-rate" },
-  { label: "Backup Data", icon: FiDatabase, path: "/home/backup-data" },
-  { label: "Audit Log", icon: FiActivity, path: "/home/audit-log" },
+  { label: "ការកំណត់",          icon: FiSettings,   path: "/home/settings",       permission: "settings.view" },
+  { label: "អត្រាប្តូរប្រាក់",  icon: FiRefreshCcw, path: "/home/exchange-rate",  permission: "exchange-rate.view" },
+  { label: "បម្រុងទុកទិន្ន័យ", icon: FiDatabase,   path: "/home/backup-data",    permission: "backups.view" },
+  { label: "កំណត់ហេតុ",         icon: FiActivity,   path: "/home/audit-log",      permission: "audit-log.view" },
 ];
 
 function MenuLink({ item, collapsed, isDark }) {
@@ -69,8 +75,8 @@ function MenuLink({ item, collapsed, isDark }) {
           isActive
             ? "bg-red-500 text-white shadow-sm shadow-red-500/20"
             : isDark
-            ? "text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950",
+              ? "text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950",
         ].join(" ")
       }
     >
@@ -86,7 +92,7 @@ function MenuLink({ item, collapsed, isDark }) {
           </span>
 
           {!collapsed && (
-            <span className="min-w-0 flex-1 truncate leading-none">
+            <span className="min-w-0 flex-1 truncate leading-snug pb-1">
               {item.label}
             </span>
           )}
@@ -132,7 +138,7 @@ function MenuGroup({
           </span>
 
           {!collapsed && (
-            <span className="min-w-0 truncate leading-none">{title}</span>
+            <span className="min-w-0 truncate leading-snug pb-1">{title}</span>
           )}
         </div>
 
@@ -167,6 +173,11 @@ export default function Home() {
   const location = useLocation();
 
   const clearAuth = useAuthStore((state) => state.clearAuth);
+  const can       = useAuthStore((state) => state.can);
+
+  const visibleMain   = mainMenus.filter((m) => can(m.permission));
+  const visibleAdmin  = adminMenus.filter((m) => can(m.permission));
+  const visibleSystem = systemMenus.filter((m) => can(m.permission));
 
   const logoutMutation = useMutation({
     mutationFn: logoutApi,
@@ -177,17 +188,18 @@ export default function Home() {
   });
 
   const [collapsed, setCollapsed] = useState(false);
+  const [shopInfo, setShopInfo] = useState(() => getStoredShopInfo());
 
   const isAdminPath = adminMenus.some(
     (item) =>
       location.pathname === item.path ||
-      location.pathname.startsWith(item.path + "/")
+      location.pathname.startsWith(item.path + "/"),
   );
 
   const isSystemPath = systemMenus.some(
     (item) =>
       location.pathname === item.path ||
-      location.pathname.startsWith(item.path + "/")
+      location.pathname.startsWith(item.path + "/"),
   );
 
   const [openAdmin, setOpenAdmin] = useState(isAdminPath);
@@ -200,6 +212,20 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem("theme", isDark ? "dark" : "light");
   }, [isDark]);
+
+  useEffect(() => {
+    const syncShopInfo = (event) => {
+      setShopInfo(event.detail ?? getStoredShopInfo());
+    };
+
+    window.addEventListener(SHOP_INFO_UPDATED_EVENT, syncShopInfo);
+    window.addEventListener("storage", syncShopInfo);
+
+    return () => {
+      window.removeEventListener(SHOP_INFO_UPDATED_EVENT, syncShopInfo);
+      window.removeEventListener("storage", syncShopInfo);
+    };
+  }, []);
 
   useEffect(() => {
     if (isAdminPath) {
@@ -215,14 +241,14 @@ export default function Home() {
     const pathname = location.pathname;
 
     const allMenus = [...mainMenus, ...adminMenus, ...systemMenus].sort(
-      (a, b) => b.path.length - a.path.length
+      (a, b) => b.path.length - a.path.length,
     );
 
     const found = allMenus.find(
-      (item) => pathname === item.path || pathname.startsWith(item.path + "/")
+      (item) => pathname === item.path || pathname.startsWith(item.path + "/"),
     );
 
-    return found ? found.label : "Dashboard";
+    return found ? found.label : "ផ្ទាំងគ្រប់គ្រង";
   }, [location.pathname]);
 
   const theme = {
@@ -273,7 +299,7 @@ export default function Home() {
                 ].join(" ")}
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500 text-base font-bold text-white shadow-sm">
-                  L
+                  {getShopInitials(shopInfo.name)}
                 </div>
 
                 {!collapsed && (
@@ -284,7 +310,7 @@ export default function Home() {
                         theme.title,
                       ].join(" ")}
                     >
-                      Hak Ly Mart
+                      {shopInfo.name || "Hak Ley Mart"}
                     </h2>
                     <p
                       className={[
@@ -292,7 +318,7 @@ export default function Home() {
                         theme.subTitle,
                       ].join(" ")}
                     >
-                      Admin
+                      {shopInfo.khmerName || "ហាក់ ឡេ ម៉ាត"}
                     </p>
                   </div>
                 )}
@@ -301,7 +327,7 @@ export default function Home() {
 
             <div className="scrollbar-hide flex-1 overflow-y-auto px-3 py-4">
               <div className="space-y-1">
-                {mainMenus.map((item) => (
+                {visibleMain.map((item) => (
                   <MenuLink
                     key={item.path}
                     item={item}
@@ -311,25 +337,29 @@ export default function Home() {
                 ))}
               </div>
 
-              <MenuGroup
-                title="Administration"
-                icon={FiShield}
-                items={adminMenus}
-                open={openAdmin}
-                setOpen={setOpenAdmin}
-                collapsed={collapsed}
-                isDark={isDark}
-              />
+              {visibleAdmin.length > 0 && (
+                <MenuGroup
+                  title="គ្រប់គ្រងអ្នកប្រើ"
+                  icon={FiShield}
+                  items={visibleAdmin}
+                  open={openAdmin}
+                  setOpen={setOpenAdmin}
+                  collapsed={collapsed}
+                  isDark={isDark}
+                />
+              )}
 
-              <MenuGroup
-                title="System"
-                icon={FiSettings}
-                items={systemMenus}
-                open={openSystem}
-                setOpen={setOpenSystem}
-                collapsed={collapsed}
-                isDark={isDark}
-              />
+              {visibleSystem.length > 0 && (
+                <MenuGroup
+                  title="ប្រព័ន្ធ"
+                  icon={FiSliders}
+                  items={visibleSystem}
+                  open={openSystem}
+                  setOpen={setOpenSystem}
+                  collapsed={collapsed}
+                  isDark={isDark}
+                />
+              )}
             </div>
 
             <div className={`border-t p-3 ${theme.border}`}>
@@ -346,7 +376,7 @@ export default function Home() {
 
                 {!collapsed && (
                   <span>
-                    {logoutMutation.isPending ? "Logging out..." : "Logout"}
+                    {logoutMutation.isPending ? "កំពុងចេញ..." : "ចេញ"}
                   </span>
                 )}
               </button>
@@ -356,7 +386,7 @@ export default function Home() {
               type="button"
               onClick={() => setCollapsed(!collapsed)}
               className={[
-                "absolute -right-4 top-[92px] z-20 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition",
+                "absolute -right-4  top-[70px]  z-20 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition",
                 theme.toggle,
               ].join(" ")}
             >
@@ -373,27 +403,19 @@ export default function Home() {
         <div className="flex min-w-0 flex-1 flex-col">
           <header
             className={[
-              "sticky top-0 z-10 flex h-[74px] shrink-0 items-center justify-between border-b px-6 backdrop-blur",
+              "sticky top-0 z-40 flex h-[74px] shrink-0 items-center justify-between border-b px-6 backdrop-blur",
               theme.header,
             ].join(" ")}
           >
             <div className="min-w-0">
-              <h1 className={`truncate text-2xl font-extrabold ${theme.title}`}>
+              <h1 className={`truncate text-2xl font-extrabold leading-snug pb-1 ${theme.title}`}>
                 {pageTitle}
               </h1>
 
-              <p className={`mt-0.5 text-sm ${theme.subTitle}`}>
-                Management panel
-              </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
-              >
-                <FiBell className="text-[18px]" />
-              </button>
+              <NotificationBell isDark={isDark} />
 
               <button
                 type="button"
@@ -409,8 +431,8 @@ export default function Home() {
             </div>
           </header>
 
-          <main className={`flex-1 overflow-y-auto ${theme.contentWrap}`}>
-            <div className="p-6">
+          <main className={`flex-1 overflow-x-hidden overflow-y-auto ${theme.contentWrap}`}>
+  <div className="min-w-0 p-6">
               <div className="mx-auto w-full max-w-7xl">
                 <Outlet context={{ isDark }} />
               </div>
