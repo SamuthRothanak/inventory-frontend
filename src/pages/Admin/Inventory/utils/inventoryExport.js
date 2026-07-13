@@ -45,7 +45,19 @@ const nearestExpiry = (batches = []) => {
   return dated[0]?.expiredDate || "-";
 };
 
-const batchSummary = (item) => (item.batches || [])
+const batchSortValue = (batch) => {
+  if (!batch?.expiredDate || batch.expiredDate === "-") return Number.POSITIVE_INFINITY;
+  const time = new Date(batch.expiredDate).getTime();
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+};
+
+const batchSummary = (item) => {
+  const batches = [...(item.batches || [])].sort(
+    (a, b) => batchSortValue(a) - batchSortValue(b) || Number(a.id || 0) - Number(b.id || 0)
+  );
+  if (batches.length === 0) return "-";
+
+  const shown = batches.slice(0, 3)
   .map((batch) => {
     const batchName = batch.batchNo || batch.lotNo || "-";
     const qty = qtyText(batch.qtyRemainingBase, item.baseUnit);
@@ -53,6 +65,10 @@ const batchSummary = (item) => (item.batches || [])
     return `${batchName}: ${qty}, ${expiry}`;
   })
   .join(" | ");
+
+  const remaining = batches.length - 3;
+  return remaining > 0 ? `${shown} | + ${remaining} Batch ទៀត` : shown;
+};
 
 const headers = [
   "ទំនិញ",
@@ -64,7 +80,7 @@ const headers = [
   "តម្លៃដើមស្តុកសរុប",
   "ស្ថានភាព",
   "ថ្ងៃផុតកំណត់ជិតបំផុត",
-  "Batch / Lot",
+  "Batch សង្ខេប",
 ];
 
 const buildRows = (inventory) => inventory.map((item) => {
@@ -114,6 +130,8 @@ export const exportInventoryExcel = (inventory) => {
 
 export const exportInventoryPdf = (inventory) => {
   const rows = buildRows(inventory);
+  const pdfHeaders = headers.slice(0, -1);
+  const pdfRows = rows.map((row) => row.slice(0, -1));
   const totalValue = inventory.reduce(
     (sum, item) => sum + Number(item.stockBaseQty || 0) * Number(item.unitCostBase || 0),
     0
@@ -166,11 +184,11 @@ export const exportInventoryPdf = (inventory) => {
           <div class="card"><div class="label">អស់ស្តុក</div><div class="value">${outOfStock.toLocaleString("en-US")}</div></div>
         </div>
         <table>
-          <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+          <thead><tr>${pdfHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
           <tbody>
-            ${rows.length
-              ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")
-              : `<tr><td colspan="${headers.length}" class="empty">គ្មានទិន្នន័យ</td></tr>`}
+            ${pdfRows.length
+              ? pdfRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")
+              : `<tr><td colspan="${pdfHeaders.length}" class="empty">គ្មានទិន្នន័យ</td></tr>`}
           </tbody>
         </table>
         <script>window.onload = function () { window.focus(); window.print(); };</script>

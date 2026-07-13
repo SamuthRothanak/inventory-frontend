@@ -4,6 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConfirm } from "../../../components/ConfirmDialog";
 import {
   FiCheckCircle,
+  FiChevronDown,
+  FiDownload,
+  FiFileText,
   FiFilter,
   FiHash,
   FiPlusCircle,
@@ -27,7 +30,12 @@ import ViewSupplierModal from "./components/ViewSupplierModal";
 import SupplierDropdown from "./components/SupplierDropdown";
 import { useNotification } from "../../../components/AppNotification";
 
-import { extractSuppliers, toSupplierPayload } from "./utils/supplierUtils";
+import { extractSuppliers, filterSuppliers, toSupplierPayload } from "./utils/supplierUtils";
+import {
+  exportSuppliersCsv,
+  exportSuppliersExcel,
+  exportSuppliersPdf,
+} from "./utils/supplierExport";
 import PermissionGate from "../../../components/PermissionGate";
 
 function useLockBodyScroll(isOpen) {
@@ -113,6 +121,7 @@ export default function Supplier() {
   const [perPage, setPerPage] = useState(10);
   const [selectedSupplierIds, setSelectedSupplierIds] = useState([]);
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const [modalMode, setModalMode] = useState(null);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
@@ -171,6 +180,11 @@ export default function Supplier() {
   const allSuppliers = useMemo(() => {
     return extractSuppliers(statsQuery.data);
   }, [statsQuery.data]);
+
+  const exportSuppliers = useMemo(
+    () => filterSuppliers(allSuppliers, searchTerm, statusFilter),
+    [allSuppliers, searchTerm, statusFilter]
+  );
 
   useEffect(() => {
     const visibleIds = new Set(suppliers.map((item) => Number(item.id)));
@@ -407,6 +421,20 @@ export default function Supplier() {
     setSelectedSupplierIds([]);
   };
 
+  const handleExport = (type) => {
+    setExportMenuOpen(false);
+    if (type === "pdf") {
+      const opened = exportSuppliersPdf(exportSuppliers);
+      if (!opened) window.alert("Browser បាន block popup។ សូមអនុញ្ញាត popup រួច Export ម្តងទៀត។");
+      return;
+    }
+    if (type === "excel") {
+      exportSuppliersExcel(exportSuppliers);
+      return;
+    }
+    exportSuppliersCsv(exportSuppliers);
+  };
+
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const isDeleting = deleteMutation.isPending || bulkDeleteMutation.isPending;
 
@@ -446,8 +474,7 @@ export default function Supplier() {
         />
       </div>
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full grid-cols-1 gap-3 xl:max-w-4xl xl:grid-cols-[1fr_220px_160px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,1fr)_220px_160px_auto] xl:items-center">
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -484,18 +511,52 @@ export default function Supplier() {
               label: `${value} / ទំព័រ`,
             }))}
           />
-        </div>
 
-        <PermissionGate permission="suppliers.create">
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="inline-flex h-12 items-center justify-center gap-4 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-          >
-            <FiPlusCircle className="text-lg" />
-            បន្ថែមអ្នកផ្គត់ផ្គង់
-          </button>
-        </PermissionGate>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap xl:justify-end">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => exportSuppliers.length > 0 && setExportMenuOpen((open) => !open)}
+              disabled={exportSuppliers.length === 0}
+              className={`inline-flex h-12 min-w-[142px] items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${theme.badge} hover:border-red-400 hover:text-red-500`}
+            >
+              <FiDownload className="text-lg" />
+              Export
+              <FiChevronDown className={`text-base transition ${exportMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {exportMenuOpen && (
+              <div className={`absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border py-1 shadow-xl ${isDark ? "border-white/10 bg-zinc-900" : "border-zinc-200 bg-white"}`}>
+                {[
+                  ["pdf", "PDF", FiFileText],
+                  ["excel", "Excel", FiFileText],
+                  ["csv", "CSV", FiDownload],
+                ].map(([type, label, Icon]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => handleExport(type)}
+                    className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition ${isDark ? "text-zinc-100 hover:bg-white/10" : "text-zinc-700 hover:bg-zinc-100"}`}
+                  >
+                    <Icon className="text-base" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <PermissionGate permission="suppliers.create">
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="inline-flex h-12 min-w-[210px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+            >
+              <FiPlusCircle className="text-lg" />
+              បន្ថែមអ្នកផ្គត់ផ្គង់
+            </button>
+          </PermissionGate>
+        </div>
       </div>
 
       {suppliersQuery.isError && (

@@ -38,16 +38,27 @@ const PACKAGE_TYPES = [
   "ថាស", "ឡូ", "គីឡូក្រាម", "ក្រាម", "លីត្រ", "មីលីលីត្រ",
 ];
 
-function onlyPositiveNumber(value, allowDecimal = true) {
-  let nextValue = String(value || "");
-  nextValue = nextValue.replace(/-/g, "");
-  if (allowDecimal) {
-    nextValue = nextValue.replace(/[^0-9.]/g, "");
-    const parts = nextValue.split(".");
-    if (parts.length > 2) nextValue = `${parts[0]}.${parts.slice(1).join("")}`;
-    return nextValue;
+function onlyPositiveNumber(value, allowDecimal = true, maxDecimals = 2) {
+  let nextValue = String(value || "")
+    .replace(/-/g, "")
+    .replace(/\+/g, "")
+    .replace(/e/gi, "");
+
+  if (!allowDecimal) {
+    return nextValue.replace(/[^0-9]/g, "");
   }
-  return nextValue.replace(/[^0-9]/g, "");
+
+  nextValue = nextValue.replace(/[^0-9.]/g, "");
+  const firstDotIndex = nextValue.indexOf(".");
+  if (firstDotIndex === -1) return nextValue;
+
+  const integerPart = nextValue.slice(0, firstDotIndex) || "0";
+  const decimalPart = nextValue
+    .slice(firstDotIndex + 1)
+    .replace(/\./g, "")
+    .slice(0, maxDecimals);
+
+  return `${integerPart}.${decimalPart}`;
 }
 
 function onlyText(value) {
@@ -55,7 +66,9 @@ function onlyText(value) {
 }
 
 function cleanNamePart(value) {
-  return String(value || "").replace(/[\s\u00A0\u1680\u180E\u2000-\u200D\u202F\u205F\u3000]+/g, " ");
+  return String(value || "")
+    .replace(/\.{2,}/g, ".")
+    .replace(/[\s\u00A0\u1680\u180E\u2000-\u200D\u202F\u205F\u3000]+/g, " ");
 }
 
 function detectUnitType(unitName) {
@@ -89,6 +102,10 @@ function unitTypeDisplay(type) {
 function preventInvalidNumberKey(event, allowDecimal = true) {
   const invalidKeys = ["-", "+", "e", "E"];
   if (!allowDecimal) invalidKeys.push(".");
+  if (allowDecimal && event.key === "." && event.currentTarget.value.includes(".")) {
+    event.preventDefault();
+    return;
+  }
   if (invalidKeys.includes(event.key)) event.preventDefault();
 }
 
@@ -624,11 +641,17 @@ function VariantSetupCard({
   };
 
   const unitLabel = (unitItem, index) => {
+    const display = unitDisplay(unitItem, index);
+    return `${display.name} (×${display.qty})`;
+  };
+
+  const unitDisplay = (unitItem, index) => {
     const unit = units.find((u) => String(u.id) === String(unitItem?.unit_id));
     const name = unit?.unit_name || unit?.unitName || unit?.unit_code;
-    return name
-      ? `${name} (×${unitItem?.conversion_qty || 1})`
-      : `ខ្នាតទំនិញ #${index + 1}`;
+    return {
+      name: name || `ខ្នាតទំនិញ #${index + 1}`,
+      qty: Number(unitItem?.conversion_qty || 1),
+    };
   };
 
   const handleAddUnit = () => {
@@ -836,7 +859,21 @@ function VariantSetupCard({
             <div className="flex h-11 overflow-visible rounded-xl border border-zinc-200 bg-white transition focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-500/20 dark:border-white/10 dark:bg-white/[0.03]">
               <div className="relative min-w-0 flex-1">
                 <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
-                <input {...register(`variants.${variantIndex}.size_value`)} placeholder="330"
+                <input
+                  {...register(`variants.${variantIndex}.size_value`)}
+                  placeholder="330"
+                  inputMode="decimal"
+                  onKeyDown={(e) => preventInvalidNumberKey(e, true)}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const cleaned = onlyPositiveNumber(e.clipboardData.getData("text"), true);
+                    setValue(`variants.${variantIndex}.size_value`, cleaned, { shouldValidate: true });
+                  }}
+                  onChange={(e) => {
+                    const cleaned = onlyPositiveNumber(e.target.value, true);
+                    e.target.value = cleaned;
+                    setValue(`variants.${variantIndex}.size_value`, cleaned, { shouldValidate: true });
+                  }}
                   className="h-full w-full bg-transparent pl-10 pr-3 text-sm outline-none" />
               </div>
               <SizeUnitSelect value={sizeUnitVal} onChange={(v) => setValue(`variants.${variantIndex}.size_unit`, v)} theme={theme} embedded />
@@ -925,6 +962,7 @@ function VariantSetupCard({
             const unitErrors = variantErrors?.units?.[unitIndex];
             const unitItem = variantUnits[unitIndex] || {};
             const unitLocalKey = unitItem.local_key || unitField.local_key;
+            const display = unitDisplay(unitItem, unitIndex);
 
             // price rules ជាប់នឹង unit នេះ (filter តាម local_unit_key)
             const rulesForUnit = priceRuleFields
@@ -932,14 +970,29 @@ function VariantSetupCard({
               .filter(({ idx }) => allPriceRules[idx]?.local_unit_key === unitLocalKey);
 
             return (
-              <div key={unitField.id} className={`rounded-2xl border p-4 ${theme.softCard}`}>
+              <div
+                key={unitField.id}
+                className={`rounded-2xl border p-4 shadow-sm ${
+                  unitIndex % 2 === 0
+                    ? "border-emerald-200 bg-emerald-50/35 dark:border-emerald-500/20 dark:bg-emerald-500/[0.06]"
+                    : "border-sky-200 bg-sky-50/35 dark:border-sky-500/20 dark:bg-sky-500/[0.06]"
+                }`}
+              >
                 <input type="hidden" {...register(`variants.${variantIndex}.units.${unitIndex}.local_key`)} />
 
                 {/* UNIT HEADER */}
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-bold">
-                    {unitLabel(unitItem, unitIndex)}
-                  </p>
+                <div className="mb-3 flex items-center justify-between rounded-xl border border-white/70 bg-white/80 px-3 py-2 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+                  <div>
+                    <p className="flex items-center gap-2 text-sm font-bold">
+                      <span>{display.name}</span>
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-extrabold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20">
+                        x{display.qty}
+                      </span>
+                    </p>
+                    <p className={`mt-1 text-xs ${theme.muted}`}>
+                      1 {display.name} មាន {display.qty} ចំនួន
+                    </p>
+                  </div>
                   {unitFields.length > 1 && (
                     <button type="button" onClick={() => handleRemoveUnit(unitIndex, unitLocalKey)}
                       className="inline-flex h-8 items-center gap-1 rounded-lg bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
@@ -969,8 +1022,8 @@ function VariantSetupCard({
                     ]} />
                   <input type="hidden" {...register(`variants.${variantIndex}.units.${unitIndex}.unit_id`)} />
                   <div>
-                    <FormInput label="ចំនួនបម្លែង" required type="number" sanitize="number" allowDecimal={true} error={unitErrors?.conversion_qty?.message} theme={theme} icon={<FiHash />}
-                      hint="ឧ. 1 Can = 1 · 1 Case = 24 Cans"
+                    <FormInput label="ចំនួនក្នុងមួយខ្នាត" required type="number" sanitize="number" allowDecimal={true} error={unitErrors?.conversion_qty?.message} theme={theme} icon={<FiHash />}
+                      hint="ឧ. កេសមួយមាន 24 កំប៉ុង/ដប"
                       inputProps={{
                         ...register(`variants.${variantIndex}.units.${unitIndex}.conversion_qty`),
                         onChange: (e) => {
@@ -1051,8 +1104,8 @@ function VariantSetupCard({
                                 { value: "wholesale", label: "លក់ដុំ" },
                                 { value: "both",      label: "ទាំងពីរ" },
                               ]} />
-                            <FormInput label="ចំនួនយ៉ាងតិច" required type="number" sanitize="number" allowDecimal={false} error={ruleErrors?.min_qty?.message} theme={theme} icon={<FiHash />}
-                              hint="ឧ. កំណត់ចំនួនដែលត្រូវលក់"
+                            <FormInput label="លក់ចាប់ពីចំនួន" required type="number" sanitize="number" allowDecimal={false} error={ruleErrors?.min_qty?.message} theme={theme} icon={<FiHash />}
+                              hint="ឧ. តម្លៃនេះប្រើពេលលក់ចាប់ពីចំនួននេះឡើងទៅ"
                               inputProps={register(`variants.${variantIndex}.priceRules.${idx}.min_qty`)} />
                             <FormSelect label="រូបិយប័ណ្ណ" required theme={theme} icon={<FiDollarSign />}
                               value={inputCurrency || "USD"}

@@ -269,7 +269,7 @@ export default function ProductDetailModal({
                               {({ retail: "លក់រាយ", wholesale: "លក់ដុំ", all: "ទាំងអស់" }[String(rule.appliesTo).toLowerCase()] ?? rule.appliesTo)}
                             </p>
                             <p className={`mt-1 text-xs ${theme.muted}`}>
-                              ខ្នាតទំនិញ: {rule.unitName || "-"} · ចំនួនយ៉ាងតិច:{" "}
+                              ខ្នាតទំនិញ: {rule.unitName || "-"} · លក់ចាប់ពីចំនួន:{" "}
                               {rule.minQty}
                             </p>
                           </div>

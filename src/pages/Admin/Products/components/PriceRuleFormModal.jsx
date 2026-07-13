@@ -16,25 +16,27 @@ import { standalonePriceRuleSchema } from "../schemas/priceRule.schema";
 
 const DEFAULT_EXCHANGE_RATE = 0;
 
-function onlyPositiveNumber(value, allowDecimal = true) {
-  let nextValue = String(value || "");
+function onlyPositiveNumber(value, allowDecimal = true, maxDecimals = 2) {
+  let nextValue = String(value || "")
+    .replace(/-/g, "")
+    .replace(/\+/g, "")
+    .replace(/e/gi, "");
 
-  nextValue = nextValue.replace(/-/g, "");
-  nextValue = nextValue.replace(/\+/g, "");
-  nextValue = nextValue.replace(/e/gi, "");
-
-  if (allowDecimal) {
-    nextValue = nextValue.replace(/[^0-9.]/g, "");
-
-    const parts = nextValue.split(".");
-    if (parts.length > 2) {
-      nextValue = `${parts[0]}.${parts.slice(1).join("")}`;
-    }
-
-    return nextValue;
+  if (!allowDecimal) {
+    return nextValue.replace(/[^0-9]/g, "");
   }
 
-  return nextValue.replace(/[^0-9]/g, "");
+  nextValue = nextValue.replace(/[^0-9.]/g, "");
+  const firstDotIndex = nextValue.indexOf(".");
+  if (firstDotIndex === -1) return nextValue;
+
+  const integerPart = nextValue.slice(0, firstDotIndex) || "0";
+  const decimalPart = nextValue
+    .slice(firstDotIndex + 1)
+    .replace(/\./g, "")
+    .slice(0, maxDecimals);
+
+  return `${integerPart}.${decimalPart}`;
 }
 
 function preventInvalidNumberKey(event, allowDecimal = true) {
@@ -42,6 +44,11 @@ function preventInvalidNumberKey(event, allowDecimal = true) {
 
   if (!allowDecimal) {
     invalidKeys.push(".");
+  }
+
+  if (allowDecimal && event.key === "." && event.currentTarget.value.includes(".")) {
+    event.preventDefault();
+    return;
   }
 
   if (invalidKeys.includes(event.key)) {
@@ -331,13 +338,13 @@ export default function PriceRuleFormModal({
             />
 
             <FormInput
-              label="ចំនួនយ៉ាងតិច"
+              label="លក់ចាប់ពីចំនួន"
               required
               sanitize="number"
               allowDecimal={false}
               icon={<FiHash />}
               theme={theme}
-              hint="ឧ. កំណត់ចំនួនដែលត្រូវលក់"
+              hint="ឧ. តម្លៃនេះប្រើពេលលក់ចាប់ពីចំនួននេះឡើងទៅ"
               error={errors.min_qty?.message}
               inputProps={register("min_qty")}
             />

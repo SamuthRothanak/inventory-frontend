@@ -481,7 +481,7 @@ export default function ProductManageModal({
                         <tr>
                           <th className="px-3 py-3 text-left">ប្រភេទតម្លៃ</th>
                           <th className="px-3 py-3 text-left">ខ្នាតទំនិញ</th>
-                          <th className="px-3 py-3 text-left">ចំនួនយ៉ាងតិច</th>
+                          <th className="px-3 py-3 text-left">លក់ចាប់ពីចំនួន</th>
                           <th className="px-3 py-3 text-left">USD</th>
                           <th className="px-3 py-3 text-left">KHR</th>
                           <th className="px-3 py-3 text-center">សកម្មភាព</th>

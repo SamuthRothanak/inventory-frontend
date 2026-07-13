@@ -27,16 +27,27 @@ const PACKAGE_TYPES = [
   "ថាស", "ឡូ", "គីឡូក្រាម", "ក្រាម", "លីត្រ", "មីលីលីត្រ",
 ];
 
-function onlyPositiveNumber(value, allowDecimal = true) {
-  let nextValue = String(value || "");
-  nextValue = nextValue.replace(/-/g, "").replace(/\+/g, "").replace(/e/gi, "");
-  if (allowDecimal) {
-    nextValue = nextValue.replace(/[^0-9.]/g, "");
-    const parts = nextValue.split(".");
-    if (parts.length > 2) nextValue = `${parts[0]}.${parts.slice(1).join("")}`;
-    return nextValue;
+function onlyPositiveNumber(value, allowDecimal = true, maxDecimals = 2) {
+  let nextValue = String(value || "")
+    .replace(/-/g, "")
+    .replace(/\+/g, "")
+    .replace(/e/gi, "");
+
+  if (!allowDecimal) {
+    return nextValue.replace(/[^0-9]/g, "");
   }
-  return nextValue.replace(/[^0-9]/g, "");
+
+  nextValue = nextValue.replace(/[^0-9.]/g, "");
+  const firstDotIndex = nextValue.indexOf(".");
+  if (firstDotIndex === -1) return nextValue;
+
+  const integerPart = nextValue.slice(0, firstDotIndex) || "0";
+  const decimalPart = nextValue
+    .slice(firstDotIndex + 1)
+    .replace(/\./g, "")
+    .slice(0, maxDecimals);
+
+  return `${integerPart}.${decimalPart}`;
 }
 
 function onlyText(value) {
@@ -44,12 +55,18 @@ function onlyText(value) {
 }
 
 function cleanNamePart(value) {
-  return String(value || "").replace(/[\s\u00A0\u1680\u180E\u2000-\u200D\u202F\u205F\u3000]+/g, " ");
+  return String(value || "")
+    .replace(/\.{2,}/g, ".")
+    .replace(/[\s\u00A0\u1680\u180E\u2000-\u200D\u202F\u205F\u3000]+/g, " ");
 }
 
 function preventInvalidNumberKey(event, allowDecimal = true) {
   const invalidKeys = ["-", "+", "e", "E"];
   if (!allowDecimal) invalidKeys.push(".");
+  if (allowDecimal && event.key === "." && event.currentTarget.value.includes(".")) {
+    event.preventDefault();
+    return;
+  }
   if (invalidKeys.includes(event.key)) event.preventDefault();
 }
 
@@ -316,9 +333,17 @@ export default function VariantSetupFormModal({
   };
 
   const unitLabel = (unit, index) => {
+    const display = unitDisplay(unit, index);
+    return `${display.name} (×${display.qty})`;
+  };
+
+  const unitDisplay = (unit, index) => {
     const u = units.find((item) => String(item.id) === String(unit?.unit_id));
     const name = u?.unit_name || u?.unitName || u?.unit_code;
-    return name ? `${name} (×${unit?.conversion_qty || 1})` : `ខ្នាតទំនិញ #${index + 1}`;
+    return {
+      name: name || `ខ្នាតទំនិញ #${index + 1}`,
+      qty: Number(unit?.conversion_qty || 1),
+    };
   };
 
   const validateForm = () => {
@@ -329,12 +354,12 @@ export default function VariantSetupFormModal({
     for (const unit of unitRows) {
       if (!unit.unit_id) return "សូមជ្រើសរើសខ្នាតទំនិញ ។";
       if (Number(unit.conversion_qty) <= 0)
-        return "ចំនួនបម្លែង ត្រូវ > 0 ។";
+        return "ចំនួនក្នុងមួយខ្នាត ត្រូវ > 0 ។";
     }
     if (priceRules.length === 0) return "ត្រូវការតម្លៃ យ៉ាងតិច ១ ។";
     for (const rule of priceRules) {
       if (!rule.applies_to) return "សូមជ្រើស ប្រើសម្រាប់ ។";
-      if (Number(rule.min_qty) <= 0) return "ចំនួនយ៉ាងតិច ត្រូវ > 0 ។";
+      if (Number(rule.min_qty) <= 0) return "លក់ចាប់ពីចំនួន ត្រូវ > 0 ។";
       if (Number(rule.input_price) <= 0)
         return "សូមបំពេញតម្លៃ ។";
     }
@@ -499,8 +524,15 @@ export default function VariantSetupFormModal({
               <div className="flex h-11 overflow-visible rounded-xl border border-zinc-200 bg-white transition focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-500/20 dark:border-white/10 dark:bg-white/[0.03]">
                 <div className="relative min-w-0 flex-1">
                   <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
-                  <input value={variantForm.size_value}
-                    onChange={(e) => updateVariant("size_value", e.target.value)}
+                  <input
+                    value={variantForm.size_value}
+                    inputMode="decimal"
+                    onKeyDown={(e) => preventInvalidNumberKey(e, true)}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      updateVariant("size_value", onlyPositiveNumber(e.clipboardData.getData("text"), true));
+                    }}
+                    onChange={(e) => updateVariant("size_value", onlyPositiveNumber(e.target.value, true))}
                     placeholder="330"
                     className="h-full w-full bg-transparent pl-10 pr-3 text-sm outline-none" />
                 </div>
@@ -535,11 +567,29 @@ export default function VariantSetupFormModal({
               const rulesForUnit = priceRules
                 .map((r, idx) => ({ r, idx }))
                 .filter(({ r }) => r.local_unit_key === unit.local_key);
+              const display = unitDisplay(unit, unitIndex);
 
               return (
-                <div key={unit.local_key} className={`rounded-2xl border p-4 ${theme.softCard}`}>
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-bold">{unitLabel(unit, unitIndex)}</p>
+                <div
+                  key={unit.local_key}
+                  className={`rounded-2xl border p-4 shadow-sm ${
+                    unitIndex % 2 === 0
+                      ? "border-emerald-200 bg-emerald-50/35 dark:border-emerald-500/20 dark:bg-emerald-500/[0.06]"
+                      : "border-sky-200 bg-sky-50/35 dark:border-sky-500/20 dark:bg-sky-500/[0.06]"
+                  }`}
+                >
+                  <div className="mb-3 flex items-center justify-between rounded-xl border border-white/70 bg-white/80 px-3 py-2 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+                    <div>
+                      <p className="flex items-center gap-2 text-sm font-bold">
+                        <span>{display.name}</span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-extrabold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20">
+                          x{display.qty}
+                        </span>
+                      </p>
+                      <p className={`mt-1 text-xs ${theme.muted}`}>
+                        1 {display.name} មាន {display.qty} ចំនួន
+                      </p>
+                    </div>
                     {unitRows.length > 1 && (
                       <button type="button" onClick={() => removeUnit(unitIndex)}
                         className="inline-flex h-8 items-center gap-1 rounded-lg bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
@@ -560,11 +610,11 @@ export default function VariantSetupFormModal({
                           label: u.unit_name || u.unitName || u.unit_code || `ខ្នាតទំនិញ #${u.id}`,
                         })),
                       ]} />
-                    <FormInput label="ចំនួនបម្លែង" required sanitize="number" allowDecimal={true} theme={theme} icon={<FiHash />}
+                    <FormInput label="ចំនួនក្នុងមួយខ្នាត" required sanitize="number" allowDecimal={true} theme={theme} icon={<FiHash />}
                       value={unit.conversion_qty}
                       onChange={(v) => updateUnit(unitIndex, "conversion_qty", v)}
                       placeholder="1"
-                      hint="ឧ. 1 Can = 1, 1 Case = 24 Cans" />
+                      hint="ឧ. កេសមួយមាន 24 កំប៉ុង/ដប" />
                   </div>
 
                   <p className={`mb-2 mt-3 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
@@ -614,10 +664,10 @@ export default function VariantSetupFormModal({
                                 { value: "wholesale", label: "លក់ដុំ" },
                                 { value: "both", label: "ទាំងពីរ" },
                               ]} />
-                            <FormInput label="ចំនួនយ៉ាងតិច" required sanitize="number" allowDecimal={false} theme={theme} icon={<FiHash />}
+                            <FormInput label="លក់ចាប់ពីចំនួន" required sanitize="number" allowDecimal={false} theme={theme} icon={<FiHash />}
                               value={rule.min_qty}
                               onChange={(v) => updatePriceRule(idx, "min_qty", v)}
-                              hint="ឧ. កំណត់ចំនួនដែលត្រូវលក់" />
+                              hint="ឧ. តម្លៃនេះប្រើពេលលក់ចាប់ពីចំនួននេះឡើងទៅ" />
                             <FormSelect label="រូបិយប័ណ្ណ" required theme={theme} icon={<FiDollarSign />}
                               value={rule.input_currency}
                               onChange={(v) => updatePriceRule(idx, "input_currency", v)}

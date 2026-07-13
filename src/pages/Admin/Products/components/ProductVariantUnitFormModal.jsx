@@ -10,21 +10,36 @@ import {
   productVariantUnitSchema,
 } from "../schemas/productVariantUnit.schema";
 
-function onlyPositiveNumber(value, allowDecimal = true) {
-  let nextValue = String(value || "");
-  nextValue = nextValue.replace(/-/g, "").replace(/\+/g, "").replace(/e/gi, "");
-  if (allowDecimal) {
-    nextValue = nextValue.replace(/[^0-9.]/g, "");
-    const parts = nextValue.split(".");
-    if (parts.length > 2) nextValue = `${parts[0]}.${parts.slice(1).join("")}`;
-    return nextValue;
+function onlyPositiveNumber(value, allowDecimal = true, maxDecimals = 2) {
+  let nextValue = String(value || "")
+    .replace(/-/g, "")
+    .replace(/\+/g, "")
+    .replace(/e/gi, "");
+
+  if (!allowDecimal) {
+    return nextValue.replace(/[^0-9]/g, "");
   }
-  return nextValue.replace(/[^0-9]/g, "");
+
+  nextValue = nextValue.replace(/[^0-9.]/g, "");
+  const firstDotIndex = nextValue.indexOf(".");
+  if (firstDotIndex === -1) return nextValue;
+
+  const integerPart = nextValue.slice(0, firstDotIndex) || "0";
+  const decimalPart = nextValue
+    .slice(firstDotIndex + 1)
+    .replace(/\./g, "")
+    .slice(0, maxDecimals);
+
+  return `${integerPart}.${decimalPart}`;
 }
 
 function preventInvalidNumberKey(event, allowDecimal = true) {
   const invalidKeys = ["-", "+", "e", "E"];
   if (!allowDecimal) invalidKeys.push(".");
+  if (allowDecimal && event.key === "." && event.currentTarget.value.includes(".")) {
+    event.preventDefault();
+    return;
+  }
   if (invalidKeys.includes(event.key)) event.preventDefault();
 }
 
@@ -172,9 +187,9 @@ export default function ProductVariantUnitFormModal({
               { value: "", label: "ជ្រើសខ្នាតទំនិញ" },
               ...unitOptions,
             ]} />
-          <FormInput label="ចំនួនបម្លែង" required sanitize="number" allowDecimal={true}
+          <FormInput label="ចំនួនក្នុងមួយខ្នាត" required sanitize="number" allowDecimal={true}
             error={errors.conversion_qty?.message} theme={theme} icon={<FiHash />}
-            hint="ឧ. 1 Can = 1 · 1 Case = 24 Cans"
+            hint="ឧ. កេសមួយមាន 24 កំប៉ុង/ដប"
             inputProps={register("conversion_qty")} />
         </div>
 

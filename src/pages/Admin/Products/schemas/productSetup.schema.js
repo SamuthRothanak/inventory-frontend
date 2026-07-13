@@ -5,7 +5,7 @@ const priceRuleSchema = z.object({
   applies_to: z.enum(["retail", "wholesale", "both"], {
     message: "សូមជ្រើស ប្រើសម្រាប់ ។",
   }),
-  min_qty: z.coerce.number().min(1, "ចំនួនយ៉ាងតិច ត្រូវ ≥ 1 ។"),
+  min_qty: z.coerce.number().min(1, "លក់ចាប់ពីចំនួន ត្រូវ ≥ 1 ។"),
   unit_price_usd: z.coerce.number().min(0, "តម្លៃ USD មិនអាចអវិជ្ជមាន ។"),
   unit_price_khr: z.coerce.number().min(0, "តម្លៃ KHR មិនអាចអវិជ្ជមាន ។"),
   input_currency: z.enum(["USD", "KHR"], { message: "សូមជ្រើសរូបិយប័ណ្ណ ។" }),
@@ -18,8 +18,8 @@ const variantUnitSchema = z.object({
   unit_id: z.string().min(1, "សូមជ្រើសខ្នាតទំនិញ ។"),
   conversion_qty: z.coerce
     .number()
-    .min(1, "ចំនួនបម្លែង ត្រូវ ≥ 1 ។")
-    .max(10000, "ចំនួនបម្លែង ខ្ពស់ពេក ។"),
+    .min(1, "ចំនួនក្នុងមួយខ្នាត ត្រូវ ≥ 1 ។")
+    .max(10000, "ចំនួនក្នុងមួយខ្នាត ខ្ពស់ពេក ។"),
   is_base_unit: z.boolean(),
   is_default_sale_unit: z.boolean(),
   is_default_purchase_unit: z.boolean(),
