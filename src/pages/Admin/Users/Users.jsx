@@ -85,6 +85,7 @@ export default function Users() {
     handleSubmit,
     reset,
     watch,
+    setValue,
     setError,
     formState: { errors },
   } = useForm({
@@ -386,6 +387,8 @@ export default function Users() {
         <UserFormModal
           isEdit={isEdit}
           register={register}
+          watch={watch}
+          setValue={setValue}
           handleSubmit={handleSubmit}
           onSubmit={onSubmit}
           errors={errors}

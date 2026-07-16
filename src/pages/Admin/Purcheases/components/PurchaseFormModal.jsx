@@ -144,7 +144,7 @@ export function PurchaseFormModal({
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
-              <Controller control={control} name="purchaseNo" render={({ field }) => <FormInput label="លេខការទិញ" required value={field.value} error={fieldError("purchaseNo")} onChange={bindField("purchaseNo", field.onChange)} theme={theme} placeholder="PUR-001" icon={<FiHash />} />} />
+              <Controller control={control} name="purchaseNo" render={({ field }) => <FormInput label="លេខការទិញ" required value={field.value} error={fieldError("purchaseNo")} onChange={bindField("purchaseNo", field.onChange)} theme={theme} placeholder="PUR-001" icon={<FiHash />} readOnly />} />
 
               <Controller control={control} name="supplierId" render={({ field }) => <FormSelect label="អ្នកផ្គត់ផ្គង់" required value={field.value} error={fieldError("supplierId")} onChange={bindField("supplierId", field.onChange)} theme={theme} icon={<FiUser />} options={[{ value: "", label: "ជ្រើស អ្នកផ្គត់ផ្គង់" }, ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))]} searchable />} />
 

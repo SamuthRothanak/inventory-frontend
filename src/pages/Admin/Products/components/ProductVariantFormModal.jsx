@@ -465,14 +465,15 @@ export default function VariantSetupFormModal({
                 <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
                 <input
                   value={variantForm.variant_code}
-                  onChange={(e) => updateVariant("variant_code", e.target.value)}
+                  readOnly
+                  aria-readonly="true"
                   placeholder="PV-BEER-330ML-CAN"
-                  className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+                  className={`h-11 w-full cursor-default rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} opacity-70`}
                 />
               </div>
               <div className="min-h-[1.375rem]">
                 <p className={`mt-1.5 text-xs ${theme.muted}`}>
-                  លេខកូដបង្កើតស្វ័យប្រវត្តិ និងអាចកែបានបើចាំបាច់។
+                  លេខកូដបង្កើតស្វ័យប្រវត្តិ។
                 </p>
               </div>
             </div>

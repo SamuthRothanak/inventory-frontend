@@ -386,7 +386,7 @@ export default function Home() {
               type="button"
               onClick={() => setCollapsed(!collapsed)}
               className={[
-                "absolute -right-4  top-[70px]  z-20 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition",
+                "absolute -right-4 top-[74px] z-50 flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition",
                 theme.toggle,
               ].join(" ")}
             >
@@ -432,7 +432,7 @@ export default function Home() {
           </header>
 
           <main className={`flex-1 overflow-x-hidden overflow-y-auto ${theme.contentWrap}`}>
-  <div className="min-w-0 p-6">
+            <div className="min-w-0 p-6">
               <div className="mx-auto w-full max-w-7xl">
                 <Outlet context={{ isDark }} />
               </div>

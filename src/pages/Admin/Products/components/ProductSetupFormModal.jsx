@@ -761,14 +761,16 @@ function VariantSetupCard({
           <div className="relative">
             <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
             <input {...register(`variants.${variantIndex}.variant_code`)}
-              className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} opacity-70`} />
+              readOnly
+              aria-readonly="true"
+              className={`h-11 w-full cursor-default rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} opacity-70`} />
           </div>
           <div className="min-h-[1.375rem]">
             {variantErrors?.variant_code?.message ? (
               <p className="mt-1.5 text-xs text-red-400">{variantErrors.variant_code.message}</p>
             ) : (
               <p className={`mt-1.5 text-xs ${theme.muted}`}>
-                លេខកូដបង្កើតស្វ័យប្រវត្តិ និងអាចកែបានបើចាំបាច់។
+                លេខកូដបង្កើតស្វ័យប្រវត្តិ។
               </p>
             )}
           </div>

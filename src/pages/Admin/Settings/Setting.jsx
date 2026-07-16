@@ -118,7 +118,7 @@ export default function Setting() {
 
   return (
     <section className="space-y-4">
-      <div className={`min-w-0 overflow-hidden rounded-xl border shadow-sm lg:grid lg:grid-cols-[260px_minmax(0,1fr)] ${theme.card}`}>
+      <div className={`min-w-0 overflow-hidden rounded-2xl border shadow-sm lg:grid lg:grid-cols-[300px_minmax(0,1fr)] ${theme.card}`}>
         <SettingsSidebar
           theme={theme}
           sections={settingSections}
@@ -126,8 +126,8 @@ export default function Setting() {
           onSectionChange={setActiveSection}
         />
 
-        <div className="min-w-0 bg-zinc-50/60 p-4 lg:p-5 dark:bg-[#0f0f11]">
-          <div className="mx-auto max-w-6xl">
+        <div className={`min-w-0 p-5 lg:p-6 ${theme.content}`}>
+          <div className="mx-auto max-w-7xl">
             {savedMessage && (
               <div className="mb-5 flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                 <FiCheckCircle className="shrink-0" />
@@ -145,6 +145,7 @@ export default function Setting() {
               <ProfileSettings
                 theme={theme}
                 profile={profile}
+                user={user}
                 onChange={(field, value) =>
                   setProfile((prev) => ({ ...prev, [field]: value }))
                 }
@@ -176,9 +177,9 @@ export default function Setting() {
             {activeSection === "rules" && (
               <div className="space-y-8">
                 <SalesRulesSettings theme={theme} />
-                <div className="border-t border-zinc-200 dark:border-white/10" />
+                <div className={`border-t ${theme.divider}`} />
                 <InventoryRulesSettings theme={theme} />
-                <div className="border-t border-zinc-200 dark:border-white/10" />
+                <div className={`border-t ${theme.divider}`} />
                 <PurchaseRulesSettings theme={theme} />
               </div>
             )}

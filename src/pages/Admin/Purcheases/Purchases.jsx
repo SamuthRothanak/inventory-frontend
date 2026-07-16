@@ -941,7 +941,7 @@ export default function Purchases() {
     setPurchaseErrors({});
     setPurchaseForm({
       ...emptyPurchaseForm,
-      purchaseNo: `PUR-${dateKey}-${String((pagination.total || purchases.length) + 1).padStart(4, "0")}`,
+      purchaseNo: `PUR-${dateKey}-${String((pagination.total || purchases.length) + 1).padStart(5, "0")}`,
       exchangeRateUsed: activeExchangeRate,
       khrRounding: activeKhrRounding,
       exchangeRateSource: activeExchangeRate ? "system" : "manual",
@@ -1500,7 +1500,7 @@ export default function Purchases() {
     const exchangeRateForApi = Number(purchaseForm.exchangeRateUsed || activeExchangeRate || 0);
 
     return {
-      purchase_no: localPayload.purchaseNo,
+      purchase_no: modalMode === "add" ? null : localPayload.purchaseNo,
       supplier_id: localPayload.supplierId,
       purchase_date: localPayload.purchaseDate,
       input_currency: currencyToApi(purchaseForm.inputCurrency || "USD"),
@@ -2329,7 +2329,7 @@ export default function Purchases() {
       const isReplacement = resolutionType === "replacement";
 
       createPurchaseReturnMutation.mutate({
-        purchase_return_no: payload.purchaseReturnNo,
+        purchase_return_no: null,
         purchase_id: payload.purchaseId,
         supplier_id: payload.supplierId,
         return_date: payload.returnDate,

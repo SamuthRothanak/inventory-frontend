@@ -246,7 +246,7 @@ export function StatusBadge({ status, getStatusClass, getStatusIcon }) {
 
 
 
-export function FormInput({ label, required = false, value, onChange, theme, error = "", type = "text", placeholder = "", icon, disabled = false, helper = "", allowDecimal = true, decimalPlaces = null }) {
+export function FormInput({ label, required = false, value, onChange, theme, error = "", type = "text", placeholder = "", icon, disabled = false, readOnly = false, helper = "", allowDecimal = true, decimalPlaces = null }) {
 
   return (
 
@@ -258,7 +258,7 @@ export function FormInput({ label, required = false, value, onChange, theme, err
 
         {icon && <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>{icon}</span>}
 
-        <input type={type === "number" ? "text" : type} value={value} disabled={disabled} placeholder={placeholder} inputMode={type === "number" ? "decimal" : undefined} onChange={(event) => onChange(type === "number" ? sanitizeNumber(event.target.value, allowDecimal, decimalPlaces) : event.target.value)} onBlur={(event) => type === "number" && onChange(sanitizeNumber(event.target.value, allowDecimal, decimalPlaces))} className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 text-sm outline-none transition focus:ring-4 disabled:cursor-not-allowed disabled:opacity-70 ${theme.input} ${error ? "border-red-500 focus:border-red-500" : ""}`} />
+        <input type={type === "number" ? "text" : type} value={value} disabled={disabled} readOnly={readOnly} aria-readonly={readOnly || undefined} placeholder={placeholder} inputMode={type === "number" ? "decimal" : undefined} onChange={(event) => onChange(type === "number" ? sanitizeNumber(event.target.value, allowDecimal, decimalPlaces) : event.target.value)} onBlur={(event) => type === "number" && onChange(sanitizeNumber(event.target.value, allowDecimal, decimalPlaces))} className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 text-sm outline-none transition focus:ring-4 disabled:cursor-not-allowed disabled:opacity-70 read-only:cursor-default ${theme.input} ${error ? "border-red-500 focus:border-red-500" : ""}`} />
 
       </div>
 
