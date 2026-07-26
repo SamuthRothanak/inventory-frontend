@@ -105,7 +105,7 @@ export default function ConfirmStockInModal({
                       </h3>
 
                       <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        {purchase.status}
+                        {purchase.stockInMode === "replacement_return" ? "ទំនិញជំនួស · រង់ចាំស្តុកចូល" : "រង់ចាំស្តុកចូល"}
                       </span>
                     </div>
 

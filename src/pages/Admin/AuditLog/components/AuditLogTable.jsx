@@ -3,6 +3,7 @@ import { FiEye } from "react-icons/fi";
 import {
   actionLabel,
   actionTone,
+  extractRefLabel,
   formatDateTime,
   formatJsonPreview,
   moduleLabel,
@@ -117,7 +118,7 @@ export default function AuditLogTable({
                             {row.ref_table}
                           </p>
                           <p className={`mt-1 text-xs ${muted}`}>
-                            #{row.ref_id}
+                            {extractRefLabel(row.description) || `#${row.ref_id}`}
                           </p>
                         </>
                       ) : (

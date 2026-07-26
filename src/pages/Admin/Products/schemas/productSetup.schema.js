@@ -44,7 +44,8 @@ const variantSchema = z.object({
     .min(1, "ត្រូវការខ្នាតទំនិញ យ៉ាងតិច ១ ។"),
   priceRules: z
     .array(priceRuleSchema)
-    .min(1, "ត្រូវការតម្លៃ យ៉ាងតិច ១ ។"),
+    .optional()
+    .default([]),
 });
 
 export const productSetupSchema = z.object({

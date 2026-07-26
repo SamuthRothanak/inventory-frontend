@@ -117,6 +117,34 @@
     return true;
   };
 
+  const shouldIncludePurchaseDeliveryInStockCost = (purchase = {}) =>
+    ["buyer", "shop", "business", "company"].includes(String(purchase.deliveryPaidBy || "").toLowerCase());
+
+  const getLandedUnitCostBase = (purchase = {}, item = {}) => {
+    const conversionQty = Number(item.conversionQty || 1);
+    const acceptedQty = Number(item.acceptedQty || 0);
+    const unitCostUsd = Number(item.unitCostUsd || item.unitCost || 0);
+    const stockableLineUsd = acceptedQty * unitCostUsd;
+    const fallback =
+      Number(item.unitCostBase || 0) ||
+      (conversionQty > 0 ? unitCostUsd / conversionQty : unitCostUsd);
+
+    if (conversionQty <= 0 || acceptedQty <= 0 || stockableLineUsd <= 0) return fallback;
+
+    const eligibleSubtotalUsd = (purchase.items || [])
+      .filter((purchaseItem) => Number(purchaseItem.acceptedQty || 0) > 0 && Number(purchaseItem.unitCostUsd || purchaseItem.unitCost || 0) > 0)
+      .reduce((sum, purchaseItem) => sum + (Number(purchaseItem.acceptedQty || 0) * Number(purchaseItem.unitCostUsd || purchaseItem.unitCost || 0)), 0);
+
+    if (eligibleSubtotalUsd <= 0) return fallback;
+
+    const deliveryUsd = shouldIncludePurchaseDeliveryInStockCost(purchase) ? Number(purchase.deliveryFeeUsd || 0) : 0;
+    const discountUsd = Number(purchase.discountTotalUsd || 0);
+    const adjustmentShareUsd = (stockableLineUsd / eligibleSubtotalUsd) * (deliveryUsd - discountUsd);
+    const landedLineUsd = Math.max(0, stockableLineUsd + adjustmentShareUsd);
+
+    return landedLineUsd / acceptedQty / conversionQty;
+  };
+
   export default function Inventory() {
     const outlet = useOutletContext();
     const isDark = outlet?.isDark ?? false;
@@ -237,12 +265,17 @@
           })
         );
 
+        // No resolution_type gate here: replacement_received_qty/replacement_stocked_in_qty on the
+        // return are already scoped to replacement-type items only by the backend rollup
+        // (recomputeReturnRollup), so they're both 0 for a return with no replacement items
+        // regardless of its rollup type. Checking item.resolution_type === "replacement" here used
+        // to read "mixed" for a claim that also has a refund/credit_note item, silently dropping
+        // its still-pending replacement stock-in from this list entirely.
         const replacementReturns = extractApiData(responses[2])
           .filter((item) => {
-            const resolutionType = String(item.resolution_type || item.resolutionType || "").toLowerCase();
             const receivedQty = Number(item.replacement_received_qty ?? item.replacementReceivedQty ?? 0);
             const stockedQty = Number(item.replacement_stocked_in_qty ?? item.replacementStockedInQty ?? 0);
-            return resolutionType === "replacement" && receivedQty > stockedQty;
+            return receivedQty > stockedQty;
           });
 
         return [...detailed, ...replacementReturns.map(normalizePendingReplacementReturnForStockIn)];
@@ -572,6 +605,7 @@
         stockBaseQty,
         lowStockThreshold,
         unitCostBase: Number(item.unit_cost_base ?? item.unitCostBase ?? item.average_cost_usd ?? item.averageCostUsd ?? item.unit_cost_usd ?? 0),
+        stockValueUsd: Number(item.stock_value_usd ?? item.stockValueUsd ?? 0),
         status: getStockStatus(stockBaseQty, lowStockThreshold),
         units,
         batches: batches.filter(
@@ -600,9 +634,7 @@
         .map((item) => {
           const qty = Number(item.acceptedQty || 0) - Number(item.stockedInQty || 0);
           const conversionQty = Number(item.conversionQty || 1);
-          const unitCostBase =
-            Number(item.unitCostBase || 0) ||
-            (conversionQty > 0 ? Number(item.unitCostUsd || item.unitCost || 0) / conversionQty : Number(item.unitCostUsd || item.unitCost || 0));
+          const unitCostBase = getLandedUnitCostBase(purchase, item);
 
           return {
             purchaseItemId: item.id,
@@ -626,11 +658,21 @@
 
     const normalizePendingReplacementReturnForStockIn = (purchaseReturn = {}) => {
       const sourcePurchase = purchaseReturn.purchase || purchaseReturn.source_purchase || {};
-      const returnItems = Array.isArray(purchaseReturn.items)
-        ? purchaseReturn.items
-        : Array.isArray(purchaseReturn.purchase_return_items)
-          ? purchaseReturn.purchase_return_items
-          : [];
+      // Only this return's REPLACEMENT-type items — a claim can now mix resolution types, so a
+      // refund/credit_note line in the same return must never be built into a stock-in line here
+      // (its replacement_received_qty is legitimately 0, and the `qtyAvailable || remainingQty`
+      // fallback below would otherwise treat that real zero as "no data" and wrongly assign it
+      // the return's whole remaining replacement qty).
+      const returnItems = (
+        Array.isArray(purchaseReturn.items)
+          ? purchaseReturn.items
+          : Array.isArray(purchaseReturn.purchase_return_items)
+            ? purchaseReturn.purchase_return_items
+            : []
+      ).filter((item) => {
+        const type = String(item.resolution_type || item.resolutionType || "").toLowerCase();
+        return type === "replacement" || type === "";
+      });
       const sourceItems = Array.isArray(sourcePurchase.items)
         ? sourcePurchase.items
         : Array.isArray(sourcePurchase.purchase_items)
@@ -650,7 +692,13 @@
                 Number(item.claim_qty ?? item.claimQty ?? 0) *
                 (Number(item.conversion_qty ?? item.conversionQty ?? item.product_variant_unit?.conversion_qty ?? item.productVariantUnit?.conversionQty ?? 1) || 1),
             }));
-      const receivedQty = Number(purchaseReturn.replacement_received_qty ?? purchaseReturn.replacementReceivedQty ?? 0);
+      const returnStatus = String(
+        purchaseReturn.status ?? purchaseReturn.resolution_status ?? purchaseReturn.resolutionStatus ?? ""
+      ).trim().toLowerCase();
+      const replacementQty = Number(purchaseReturn.replacement_qty ?? purchaseReturn.replacementQty ?? 0);
+      const receivedQty =
+        Number(purchaseReturn.replacement_received_qty ?? purchaseReturn.replacementReceivedQty ?? 0) ||
+        (["resolved", "completed"].includes(returnStatus) ? replacementQty : 0);
       const stockedQty = Number(purchaseReturn.replacement_stocked_in_qty ?? purchaseReturn.replacementStockedInQty ?? 0);
       let remainingQty = Math.max(0, receivedQty - stockedQty);
 
@@ -674,12 +722,21 @@
             purchaseItem.productVariant ||
             {};
           const unit = variantUnit.unit || {};
-          const qtyAvailable = Math.max(
-            0,
-            Number(returnItem.replacement_received_qty ?? returnItem.replacementReceivedQty ?? returnItem.qty_returned ?? returnItem.qtyReturned ?? returnItem.qty ?? 0) -
-              Number(returnItem.replacement_stocked_in_qty ?? returnItem.replacementStockedInQty ?? 0)
-          );
-          const qty = Math.min(remainingQty, qtyAvailable || remainingQty);
+          // Distinguish "this item's own receipt data is legitimately 0 remaining" (another
+          // replacement item in the same mixed/multi-item claim already fully stocked in) from
+          // "this item has no per-item receipt data at all" (legacy pre-migration data) — the old
+          // `qtyAvailable || remainingQty` fallback treated a real 0 as "no data" and would wrongly
+          // hand it the whole pool's remaining qty, double-counting against whatever another item
+          // in the same return still legitimately needs.
+          const hasOwnReceiptData = returnItem.replacement_received_qty != null || returnItem.replacementReceivedQty != null;
+          const qtyAvailable = hasOwnReceiptData
+            ? Math.max(
+                0,
+                Number(returnItem.replacement_received_qty ?? returnItem.replacementReceivedQty ?? 0) -
+                  Number(returnItem.replacement_stocked_in_qty ?? returnItem.replacementStockedInQty ?? 0)
+              )
+            : remainingQty;
+          const qty = Math.min(remainingQty, qtyAvailable);
           remainingQty = Math.max(0, remainingQty - qty);
           const conversionQty =
             Number(
@@ -708,7 +765,9 @@
             qty,
             unitName: returnItem.unit_name || returnItem.unitName || unit.unit_name || purchaseItem.unit_name || "unit",
             conversionQty,
-            baseUnit: returnItem.base_unit || returnItem.baseUnit || purchaseItem.base_unit || unit.unit_code || unit.unit_name || "base units",
+            // Prefer unit_name over unit_code — unit_code is an internal identifier that can be
+            // a meaningless auto-generated placeholder (e.g. "UNIT12345") for Khmer unit names.
+            baseUnit: returnItem.base_unit || returnItem.baseUnit || purchaseItem.base_unit || unit.unit_name || unit.unit_code || "base units",
             baseQty: qty * conversionQty,
             unitCostBase,
             expiredDate: formatDateOnly(returnItem.expired_date || returnItem.expiry_date || purchaseItem.expired_date || purchaseItem.expiryDate),
@@ -1076,7 +1135,9 @@
 
     const stockValue = inventory.reduce(
       (total, item) =>
-        total + Number(item.stockBaseQty || 0) * Number(item.unitCostBase || 0),
+        total +
+        (Number(item.stockValueUsd || 0) ||
+          Number(item.stockBaseQty || 0) * Number(item.unitCostBase || 0)),
       0
     );
 
@@ -1274,7 +1335,10 @@
       onSuccess: () => {
         invalidateInventoryQueries();
         notify.success("ស្តុកចូលបានបញ្ជាក់", "ចំនួនការទិញដែលទទួលបានត្រូវបានបន្ថែមទៅស្តុករួចហើយ");
-        closeModal();
+        // Don't closeModal() here — this list can hold several pending purchases at once, and
+        // closing the whole modal after confirming just one forces the user to reopen it to
+        // handle the rest. Keep modalMode as "confirm_stock_in"; the pending-purchases query
+        // invalidation above will refetch and drop this purchase from the list on its own.
         if (stockInPurchaseId) {
           setSearchParams({}, { replace: true });
         }

@@ -227,18 +227,7 @@ export default function ProductSetupFormModal({
           status: true,
         },
       ],
-      priceRules: [
-        {
-          local_unit_key: baseUnitKey,
-          applies_to: "retail",
-          min_qty: 1,
-          unit_price_usd: 0,
-          unit_price_khr: 0,
-          input_currency: "USD",
-          input_price: "",
-          status: "active",
-        },
-      ],
+      priceRules: [],
     });
     setActiveVariantIndex(variantIndex);
     setPendingNewVariantIndex(variantIndex);
@@ -1085,7 +1074,7 @@ function VariantSetupCard({
 
                   {rulesForUnit.length === 0 && (
                     <p className={`rounded-lg border border-dashed px-3 py-3 text-center text-xs ${theme.muted}`}>
-                      មិនទាន់មានតម្លៃ ។ ចុច «បន្ថែមតម្លៃ» ។
+                      មិនទាន់មានតម្លៃ ។ អាចបន្ថែមក្រោយបាន មុនយកទៅលក់។
                     </p>
                   )}
 

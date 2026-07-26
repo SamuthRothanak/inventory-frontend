@@ -173,6 +173,7 @@ export default function ProductTable({
                 const units = getUnitsArray(product);
                 const priceRange = getProductPriceRange(product);
                 const priceRulesCount = getProductPriceRuleCount(product);
+                const hasPrice = priceRulesCount > 0;
 
                 return (
                   <tr
@@ -221,15 +222,19 @@ export default function ProductTable({
 
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
-                        <FiTag className="text-red-500" />
+                        <FiTag className={hasPrice ? "text-red-500" : "text-amber-500"} />
 
                         <div>
-                          <p className="text-sm font-semibold">
-                            {priceRange}
-                          </p>
+                          {hasPrice ? (
+                            <p className="text-sm font-semibold">{priceRange}</p>
+                          ) : (
+                            <span className="inline-flex rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                              អត់តម្លៃ
+                            </span>
+                          )}
 
                           <p className={`mt-1 text-xs ${theme.subText}`}>
-                            {priceRulesCount} តម្លៃ
+                            {hasPrice ? `${priceRulesCount} តម្លៃ` : "មិនទាន់អាចលក់"}
                           </p>
                         </div>
                       </div>

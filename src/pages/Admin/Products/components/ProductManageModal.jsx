@@ -135,6 +135,15 @@ function getRuleVariantUnitId(rule) {
   );
 }
 
+function getUnitPriceRuleCount(variant = {}, unit = {}) {
+  const unitId = getVariantUnitId(unit);
+  if (!unitId) return 0;
+
+  return (variant.priceRules || []).filter((rule) =>
+    Number(getRuleVariantUnitId(rule)) === Number(unitId)
+  ).length;
+}
+
 function formatInputPrice(rule) {
   const currency = rule.inputCurrency || rule.input_currency || "USD";
   const price = Number(rule.inputPrice ?? rule.input_price ?? 0);
@@ -421,13 +430,14 @@ export default function ProductManageModal({
                     <div className={`rounded-xl border p-4 text-sm ${theme.softCard}`}>
                       <p className="font-semibold">គ្មានខ្នាតទំនិញ</p>
                       <p className={`mt-1 text-xs ${theme.muted}`}>
-                        បន្ថែមខ្នាតទំនិញ យ៉ាងតិច ១ មុនពេលបន្ថែមតម្លៃ ។
+                        បន្ថែមខ្នាតទំនិញ យ៉ាងតិច ១ មុនពេលកំណត់តម្លៃ ។
                       </p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                       {variant.units.map((unit) => {
                         const unitId = getVariantUnitId(unit);
+                        const unitPriceRuleCount = getUnitPriceRuleCount(variant, unit);
                         return (
                           <div key={unitId || unit.id}
                             className={`rounded-xl border p-3 text-sm ${theme.softCard}`}>
@@ -456,7 +466,7 @@ export default function ProductManageModal({
                             <div className="mt-3">
                               <SmallActionButton variant="green" disabled={!unitId}
                                 onClick={() => unitId && onAddPriceRule?.(variant, { ...unit, id: unitId })}>
-                                <FiPlus /> បន្ថែមតម្លៃ
+                                <FiPlus /> {unitPriceRuleCount > 0 ? "បន្ថែមតម្លៃ" : "កំណត់តម្លៃ"}
                               </SmallActionButton>
                             </div>
                           </div>
@@ -472,7 +482,7 @@ export default function ProductManageModal({
                 <div className="mt-4">
                   {variant.units.length === 0 && (
                     <p className="mb-2 text-xs text-amber-500">
-                      បន្ថែមខ្នាតទំនិញ មុនពេលបន្ថែមតម្លៃ ។
+                      បន្ថែមខ្នាតទំនិញ មុនពេលកំណត់តម្លៃ ។
                     </p>
                   )}
                   <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">

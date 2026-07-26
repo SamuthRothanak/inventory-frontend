@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConfirm } from "../../../components/ConfirmDialog";
 import {
   FiAlertTriangle,
+  FiArrowRightCircle,
   FiCalendar,
   FiCheckCircle,
   FiChevronDown,
@@ -33,6 +34,7 @@ import {
 } from "react-icons/fi";
 
 import {
+  applyPurchaseCreditApi,
   createPurchaseApi,
   createPurchaseReturnApi,
   getPurchaseByIdApi,
@@ -44,7 +46,7 @@ import {
   updatePurchaseApi,
   updatePurchaseReturnApi,
 } from "../../../services/purchase.service";
-import { getActiveSuppliersApi } from "../../../services/supplier.service";
+import { getActiveSuppliersApi, getSupplierCreditBalanceApi } from "../../../services/supplier.service";
 import { getActiveExchangeRateApi } from "../../../services/exchangeRate.service";
 import { getProductVariantUnitsApi } from "../../../services/productVariantUnit.service";
 import { useNotification } from "../../../components/AppNotification";
@@ -92,7 +94,6 @@ import {
   formatCondition,
   formatSnake,
   getErrorMessage,
-  getPaginationMeta,
   normalizePurchase,
   normalizeDeliveryOption,
   normalizeDeliveryPaidBy,
@@ -110,11 +111,14 @@ import {
 const PURCHASE_ACTION_ICON_CLASS =
   "inline-flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-md ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-4 active:translate-y-0";
 
+const CLIENT_TAB_PAGE_SIZE = 10;
+
 const PURCHASE_ACTION_TONE = {
   view: "bg-gradient-to-b from-amber-400 to-orange-500 shadow-orange-500/20 hover:from-amber-500 hover:to-orange-600 hover:shadow-orange-500/25 focus:ring-orange-500/20",
   receive: "bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-indigo-600/20 hover:from-indigo-600 hover:to-indigo-800 hover:shadow-indigo-600/25 focus:ring-indigo-500/20",
   confirm: "bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-emerald-600/20 hover:from-emerald-500 hover:to-emerald-700 hover:shadow-emerald-600/25 focus:ring-emerald-500/20",
   claim: "bg-gradient-to-b from-red-500 to-red-700 shadow-red-600/20 hover:from-red-600 hover:to-red-800 hover:shadow-red-600/25 focus:ring-red-500/20",
+  payment: "bg-gradient-to-b from-cyan-500 to-blue-600 shadow-blue-600/20 hover:from-cyan-600 hover:to-blue-700 hover:shadow-blue-600/25 focus:ring-blue-500/20",
 };
 
 export default function Purchases() {
@@ -146,6 +150,7 @@ export default function Purchases() {
   const [purchaseForm, setPurchaseForm] = useState(emptyPurchaseForm);
   const [purchaseItems, setPurchaseItems] = useState([]);
   const [purchaseErrors, setPurchaseErrors] = useState({});
+  const [paidCurrencyTouched, setPaidCurrencyTouched] = useState(false);
 
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [itemEditIndex, setItemEditIndex] = useState(null);
@@ -181,6 +186,18 @@ export default function Purchases() {
   const [returnSearchTerm, setReturnSearchTerm] = useState("");
   const [paymentSearchTerm, setPaymentSearchTerm] = useState("");
 
+  // ទទួលទំនិញ/ការទាមទារ/ការទូទាត់ tabs fetch their full list client-side (see allPurchasesQuery/
+  // purchaseReturnsQuery's per_page: 500) rather than paginating server-side like the "បញ្ជាទិញ"
+  // tab — this just slices whichever filtered list is already in memory, so a tab with 100+ rows
+  // doesn't render one endless page.
+  const [receivePage, setReceivePage] = useState(1);
+  const [returnsPage, setReturnsPage] = useState(1);
+  const [paymentsPage, setPaymentsPage] = useState(1);
+
+  useEffect(() => setReceivePage(1), [receiveSearchTerm]);
+  useEffect(() => setReturnsPage(1), [returnStatusFilter, returnSearchTerm]);
+  useEffect(() => setPaymentsPage(1), [paymentViewFilter, paymentSearchTerm]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearchTerm(searchTerm.trim());
@@ -189,16 +206,19 @@ export default function Purchases() {
     return () => window.clearTimeout(timer);
   }, [searchTerm]);
 
+  // searchTerm (not debouncedSearchTerm) — filtering is client-side now (see exportPurchases),
+  // so there's no server round-trip to debounce against; dateFilter added since it's now also
+  // one of the client filter criteria the page needs to reset for.
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearchTerm, statusFilter, paymentStatusFilter, perPage]);
+  }, [searchTerm, statusFilter, paymentStatusFilter, dateFilter, perPage]);
 
   useEffect(() => {
     setNewReturnPanelOpen(false);
     setNewReturnSearchTerm("");
-    setReceiveSearchTerm("");
-    setReturnSearchTerm("");
-    setPaymentSearchTerm("");
+    if (activeTab !== "receive") setReceiveSearchTerm("");
+    if (activeTab !== "returns") setReturnSearchTerm("");
+    if (activeTab !== "payments") setPaymentSearchTerm("");
   }, [activeTab]);
 
   const purchasesQuery = useQuery({
@@ -247,6 +267,53 @@ export default function Purchases() {
     queryFn: () => getActiveSuppliersApi({ per_page: 500 }),
     staleTime: 1000 * 60 * 5,
   });
+
+  // Only meaningful when creating a brand-new purchase — an existing purchase already has its
+  // own credit_applied_usd/khr persisted from whenever it was applied, and editing/receiving
+  // flows don't re-offer this control (see purchaseForm.creditApplied usage below).
+  const supplierCreditQuery = useQuery({
+    queryKey: ["supplier-credit-balance", purchaseForm.supplierId],
+    queryFn: () => getSupplierCreditBalanceApi(purchaseForm.supplierId),
+    enabled: modalMode === "add" && Boolean(purchaseForm.supplierId),
+  });
+  const supplierCreditBalance = supplierCreditQuery.data?.data || null;
+
+  // Sums the EXACT remaining_usd/khr of whichever specific supplier_credits rows the user has
+  // checked — not a typed/converted amount, so it's exact regardless of today's exchange rate.
+  const getSelectedCreditsTotal = (selectedCreditIds = []) => {
+    const availableCredits = Array.isArray(supplierCreditBalance?.credits) ? supplierCreditBalance.credits : [];
+    const selectedSet = new Set((selectedCreditIds || []).map(Number));
+    return availableCredits
+      .filter((credit) => selectedSet.has(Number(credit.id)))
+      .reduce(
+        (acc, credit) => ({
+          usd: acc.usd + Number(credit.remaining_usd || 0),
+          khr: acc.khr + Number(credit.remaining_khr || 0),
+        }),
+        { usd: 0, khr: 0 }
+      );
+  };
+
+  // Caps how much supplier credit can be applied at both the supplier's own available balance
+  // AND this purchase's own remaining balance (after its own payment) — mirrors
+  // PurchaseService::applyCredit's two caps on the backend. Computed against balance BEFORE
+  // credit (creditApplied: 0) since calculateCurrencyPreview's own totals already have the
+  // CURRENT credit subtracted out — reusing those directly here would double-count it.
+  const getCreditAppliedMaxUsd = () => {
+    const availableUsd = Number(supplierCreditBalance?.available_usd) || 0;
+    const totalsBeforeCredit = calculateCurrencyPreview({
+      items: purchaseItems,
+      form: { ...purchaseForm, creditApplied: 0, selectedCreditIds: [] },
+    });
+    // For "paid" status, paidAmountUsd there isn't an independent constraint — it's whatever's
+    // left after credit (see calculateCurrencyPreview) — so it must NOT be subtracted here, or
+    // credit could never apply at all (paidAmount would always "use up" the whole total first).
+    const independentPaidUsd = purchaseForm.paymentStatus === "paid" ? 0 : totalsBeforeCredit.paidAmountUsd;
+    return Math.min(
+      availableUsd,
+      Math.max(0, totalsBeforeCredit.grandTotalUsd - totalsBeforeCredit.claimDeductionUsd - independentPaidUsd)
+    );
+  };
 
   const activeRateQuery = useQuery({
     queryKey: ["exchange-rates", "active"],
@@ -352,14 +419,6 @@ export default function Purchases() {
     [allPurchasesQuery.data]
   );
 
-  const pagination = useMemo(() => {
-    return getPaginationMeta(purchasesQuery.data, purchases.length);
-  }, [purchasesQuery.data, purchases.length]);
-  const pageNumbers = useMemo(
-    () => getPageNumbers(pagination.currentPage, pagination.lastPage),
-    [pagination.currentPage, pagination.lastPage]
-  );
-
   const calculateSubtotal = (items) => items.reduce((total, item) => total + Number(item.lineTotal || 0), 0);
 
   const calculateGrandTotal = (items, form) => {
@@ -375,20 +434,33 @@ export default function Purchases() {
     paidAmount,
     invoicedQty,
     acceptedQty,
+    receivedQty,
+    damagedQty,
     paidQty,
     exchangeRate,
   }) => {
     const rate = Number(exchangeRate || 0);
     const unitCost = Number(inputUnitCost || 0);
-    const payableQty = paymentMode === "pay_after_check" ? Number(acceptedQty || 0) : Number(paidQty || 0);
+    // Mirrors PurchaseService::resolvePayableQty() on the backend exactly — before anything on
+    // this line has actually been checked (received/accepted/damaged all still 0, i.e. a purchase
+    // that hasn't been through receive-goods yet), the payable qty for pay_after_check must fall
+    // back to the FULL invoiced qty, not 0. Previously this used acceptedQty unconditionally, so
+    // every freshly-created pay_after_check purchase showed a $0 grand total (a real invoice value
+    // silently discarded) until goods were received — the backend's own calculation is correct
+    // here, but only gets applied once hasCheckedQty flips true; before that it trusts whatever the
+    // client sends, which was this $0.
+    const hasCheckedQty = Number(receivedQty || 0) > 0 || Number(acceptedQty || 0) > 0 || Number(damagedQty || 0) > 0;
+    const payableQty = paymentMode === "pay_after_check"
+      ? (hasCheckedQty ? Number(acceptedQty || 0) : Number(invoicedQty || 0))
+      : Number(invoicedQty || 0);
     const fullQty = Number(invoicedQty || 0);
     const exactInvoiceTotal = Number(invoiceTotal || 0);
     const exactPaidAmount = Number(paidAmount || 0);
     const currency = String(inputCurrency || "USD").toUpperCase();
 
     let inputLineTotal = payableQty * unitCost;
-    if (paymentMode !== "pay_after_check" && exactPaidAmount > 0) {
-      inputLineTotal = exactPaidAmount;
+    if (paymentMode === "pay_after_check" && exactInvoiceTotal > 0 && fullQty > 0) {
+      inputLineTotal = (exactInvoiceTotal / fullQty) * payableQty;
     } else if (exactInvoiceTotal > 0 && fullQty > 0 && Math.abs(payableQty - fullQty) < 0.0001) {
       inputLineTotal = exactInvoiceTotal;
     }
@@ -410,68 +482,11 @@ export default function Purchases() {
 
   const calculateBalanceAmount = (grandTotal, paidAmount) => Math.max(0, Number(grandTotal || 0) - Number(paidAmount || 0));
 
-  const getClaimRequiredCount = (purchase) => purchase.items.reduce((total, item) => total + Number(item.claimQty || 0), 0);
+  const getClaimRequiredCount = (purchase = {}) => {
+    const lines = Array.isArray(purchase.items) && purchase.items.length > 0 ? purchase.items : (purchase.summaryItems || []);
+    return lines.reduce((total, item) => total + Number(item.claimQty ?? item.claim_qty ?? 0), 0);
+  };
   const getDamagedCount = (purchase) => purchase.items.reduce((total, item) => total + Number(item.damagedQty || 0), 0);
-
-  const filterPurchaseList = (list) => {
-    const search = searchTerm.toLowerCase();
-    const fmtLocal = (d) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-    const today = new Date();
-    const todayStr = fmtLocal(today);
-
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
-    const weekStartStr = fmtLocal(weekStart);
-
-    const monthStartStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
-
-    return list.filter((purchase) => {
-      const lines = purchase.items?.length ? purchase.items : purchase.summaryItems || [];
-      const matchesSearch =
-        purchase.purchaseNo.toLowerCase().includes(search) ||
-        purchase.supplierName.toLowerCase().includes(search) ||
-        purchase.note.toLowerCase().includes(search) ||
-        lines.some(
-          (item) => item.variantName.toLowerCase().includes(search) || item.variantCode.toLowerCase().includes(search)
-        );
-
-      const matchesStatus = statusFilter === "All" || purchase.status === statusFilter;
-      const matchesPaymentStatus = paymentStatusFilter === "All" || purchase.paymentStatus === paymentStatusFilter;
-
-      const d = purchase.purchaseDate ? String(purchase.purchaseDate).slice(0, 10) : "";
-      const matchesDate =
-        dateFilter === "all" ||
-        (dateFilter === "today" && d === todayStr) ||
-        (dateFilter === "week" && d >= weekStartStr && d <= todayStr) ||
-        (dateFilter === "month" && d >= monthStartStr && d <= todayStr);
-
-      return matchesSearch && matchesStatus && matchesPaymentStatus && matchesDate;
-    });
-  };
-
-  const filteredPurchases = useMemo(() => {
-    return filterPurchaseList(purchases);
-  }, [purchases, searchTerm, statusFilter, paymentStatusFilter, dateFilter]);
-
-  const exportPurchases = useMemo(() => {
-    return filterPurchaseList(allPurchases.length > 0 ? allPurchases : purchases);
-  }, [allPurchases, purchases, searchTerm, statusFilter, paymentStatusFilter, dateFilter]);
-
-  const handleExport = (type) => {
-    setExportMenuOpen(false);
-    if (type === "pdf") {
-      const opened = exportPurchasesPdf(exportPurchases);
-      if (!opened) window.alert("PDF export was blocked. Please allow pop-ups and try again.");
-      return;
-    }
-    if (type === "excel") {
-      exportPurchasesExcel(exportPurchases);
-      return;
-    }
-    exportPurchasesCsv(exportPurchases);
-  };
 
   const totalPurchaseReturnAmount = purchaseReturns.reduce((total, item) => total + Number(item.subtotal || 0), 0);
 
@@ -537,25 +552,246 @@ export default function Purchases() {
   };
 
   const getOpenSupplierClaim = (purchase) => {
-    return getRelatedPurchaseReturns(purchase).find((item) =>
+    return getRelatedPurchaseReturns(purchase).find((item) => {
+      const status = normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status);
+      // "Resolved" (agreed) is not the same as "fully received/stocked in" for a replacement —
+      // keep treating it as open until the physical goods are actually accounted for.
+      return ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(status) || isReplacementClaimIncomplete(item);
+    });
+  };
+
+  // Narrower than getOpenSupplierClaim above: only cares whether the claim *decision* is still
+  // pending (status not completed/cancelled) — not whether replacement goods have been fully
+  // received/stocked in. Once the supplier has agreed to a resolution, a *different* item's claim
+  // shouldn't have to wait for the first item's physical stock-in to finish; those are unrelated.
+  // Use this (not getOpenSupplierClaim) to gate "can a new claim be created" — matches how
+  // ViewPurchaseModal.jsx's activeReturn / PurchaseTable.jsx's activeClaim already do it.
+  const hasUnresolvedClaimDecision = (purchase) =>
+    getRelatedPurchaseReturns(purchase).some((item) =>
       ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(
         normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status)
       )
     );
-  };
 
   const hasResolvedSupplierClaim = (purchase) => {
     return getRelatedPurchaseReturns(purchase).some((item) =>
-      normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status) === RETURN_STATUS.COMPLETED
+      normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status) === RETURN_STATUS.COMPLETED &&
+      !isReplacementClaimIncomplete(item)
     );
   };
 
+  const getPurchaseClaimLines = (purchase = {}) => {
+    const items = Array.isArray(purchase.items) ? purchase.items : [];
+    return items.length > 0 ? items : (Array.isArray(purchase.summaryItems) ? purchase.summaryItems : []);
+  };
+
+  const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
+
+  const getItemUnitCostAmounts = (item = {}) => ({
+    usd: Number(item.unitCostUsd ?? item.unit_cost_usd ?? item.unitCost ?? item.unit_cost ?? 0),
+    khr: Number(item.unitCostKhr ?? item.unit_cost_khr ?? 0),
+  });
+
+  const getItemOnlyAmount = (item = {}, qty) => {
+    const useQty = Number(qty ?? item.qtyReturned ?? item.qty_returned ?? item.claimQty ?? item.claim_qty ?? item.damagedQty ?? item.damaged_qty ?? item.invoicedQty ?? item.invoiced_qty ?? item.quantity ?? 0);
+    const unitCost = getItemUnitCostAmounts(item);
+
+    if (useQty > 0 && (unitCost.usd > 0 || unitCost.khr > 0)) {
+      return {
+        usd: roundMoney(useQty * unitCost.usd),
+        khr: Math.round(useQty * unitCost.khr),
+      };
+    }
+
+    return {
+      usd: Number(item.itemTotalUsd ?? item.item_total_usd ?? item.lineSubtotalUsd ?? item.line_subtotal_usd ?? item.lineTotalUsd ?? item.line_total_usd ?? item.lineTotal ?? 0),
+      khr: Number(item.itemTotalKhr ?? item.item_total_khr ?? item.lineSubtotalKhr ?? item.line_subtotal_khr ?? item.lineTotalKhr ?? item.line_total_khr ?? 0),
+    };
+  };
+
+  const getPartialPrepaidClaimDeduction = (purchase = {}) => {
+    if ((purchase.paymentMode || "").toLowerCase() !== "partial_prepaid") return { usd: 0, khr: 0 };
+
+    return getPurchaseClaimLines(purchase).reduce(
+      (total, item) => {
+        const claimQty = Number(item.claimQty ?? item.claim_qty ?? 0);
+        if (claimQty <= 0) return total;
+        const claimAmount = getItemOnlyAmount(item, claimQty);
+
+        return {
+          usd: total.usd + claimAmount.usd,
+          khr: total.khr + claimAmount.khr,
+        };
+      },
+      { usd: 0, khr: 0 }
+    );
+  };
+
+  const getPurchaseItemTotals = (purchase = {}) => {
+    const lines = getPurchaseClaimLines(purchase);
+    if (lines.length === 0) {
+      return {
+        usd: Number(purchase.itemsTotalUsd ?? purchase.subtotalUsd ?? purchase.subTotalUsd ?? 0),
+        khr: Number(purchase.itemsTotalKhr ?? purchase.subtotalKhr ?? purchase.subTotalKhr ?? 0),
+      };
+    }
+
+    return lines.reduce(
+      (total, item) => ({
+        usd: total.usd + getItemOnlyAmount(item, item.invoicedQty ?? item.invoiced_qty ?? item.quantity).usd,
+        khr: total.khr + getItemOnlyAmount(item, item.invoicedQty ?? item.invoiced_qty ?? item.quantity).khr,
+      }),
+      { usd: 0, khr: 0 }
+    );
+  };
+
+  const getUnpaidItemAmountBeforeClaim = (purchase = {}) => {
+    const itemTotals = getPurchaseItemTotals(purchase);
+    const paidUsd = Number(purchase.paidAmountUsd ?? purchase.paidAmount ?? 0);
+    const paidKhr = Number(purchase.paidAmountKhr ?? 0);
+
+    return {
+      usd: Math.max(0, itemTotals.usd - Math.min(itemTotals.usd, paidUsd)),
+      khr: Math.max(0, itemTotals.khr - Math.min(itemTotals.khr, paidKhr)),
+    };
+  };
+
+  const isSupplierClaimNeeded = (purchase = {}) => {
+    const claimQty = getClaimRequiredCount(purchase);
+    if (claimQty <= 0) return false;
+    if ((purchase.paymentMode || "").toLowerCase() !== "partial_prepaid") return true;
+
+    const claimDeduction = getPartialPrepaidClaimDeduction(purchase);
+    const unpaidBeforeClaim = getUnpaidItemAmountBeforeClaim(purchase);
+
+    return claimDeduction.usd > unpaidBeforeClaim.usd + 0.01 || claimDeduction.khr > unpaidBeforeClaim.khr + 1;
+  };
+
+  // Once a claim's resolution decision is made (status completed) and, for a replacement, the
+  // goods have actually been received, there's nothing left requiring the supplier — only an
+  // internal stock-in action remains. getOpenSupplierClaim (used below) deliberately stays
+  // "open" until stock-in too, which is right for gating claim-related buttons, but wrong for
+  // deciding whether the purchase should still read "waiting for claim" vs "waiting to stock in".
+  const hasOutstandingSupplierAction = (purchase) => {
+    const returns = getRelatedPurchaseReturns(purchase);
+    // No claim/return record created yet at all — trust isSupplierClaimNeeded (claimQty is a
+    // fresh, accurate signal here). Once a return exists, don't also consult isSupplierClaimNeeded:
+    // claim_qty never resets for replacement claims even after they're fully resolved/received/
+    // stocked in, so it would wrongly read "still needed" forever — the per-return status below
+    // is the reliable source once a return actually exists.
+    if (returns.length === 0) return isSupplierClaimNeeded(purchase);
+    return returns.some((item) => {
+      const status = normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status);
+      if (status === RETURN_STATUS.CANCELLED) return false;
+      if (status !== RETURN_STATUS.COMPLETED) return true;
+      return isReplacementNotFullyReceived(item);
+    });
+  };
+
   const getEffectivePurchaseStatus = (purchase) => {
-    if (purchase.status === STATUS.PENDING_CLAIM && hasResolvedSupplierClaim(purchase) && !getOpenSupplierClaim(purchase)) {
+    if (purchase.status === STATUS.PENDING_CLAIM && !hasOutstandingSupplierAction(purchase)) {
+      return STATUS.PENDING_STOCK_IN;
+    }
+    if (purchase.status === STATUS.PENDING_CLAIM && !getOpenSupplierClaim(purchase) && !isSupplierClaimNeeded(purchase)) {
       return STATUS.PENDING_STOCK_IN;
     }
     return purchase.status;
   };
+
+  // Moved below getEffectivePurchaseStatus (was defined earlier in the file, before that
+  // function existed) — filterPurchaseList's status match now calls it, and a const defined
+  // later can't be referenced by code that runs earlier in the same render pass.
+  const filterPurchaseList = (list) => {
+    const search = searchTerm.toLowerCase();
+    const fmtLocal = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    const today = new Date();
+    const todayStr = fmtLocal(today);
+
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
+    const weekStartStr = fmtLocal(weekStart);
+
+    const monthStartStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+
+    return list.filter((purchase) => {
+      const lines = purchase.items?.length ? purchase.items : purchase.summaryItems || [];
+      const matchesSearch =
+        purchase.purchaseNo.toLowerCase().includes(search) ||
+        purchase.supplierName.toLowerCase().includes(search) ||
+        purchase.note.toLowerCase().includes(search) ||
+        lines.some(
+          (item) => item.variantName.toLowerCase().includes(search) || item.variantCode.toLowerCase().includes(search)
+        );
+
+      // Matches the EFFECTIVE status (what the table's own badge actually shows — e.g. a
+      // resolved claim already reads "ស្តុកចូលរួចរាល់អស់" even while the raw persisted
+      // purchase.status still lags behind at "រង់ចាំការទាមទារ") — filtering on the raw field
+      // used to silently exclude/include rows that visibly contradicted the selected filter.
+      const matchesStatus = statusFilter === "All" || getEffectivePurchaseStatus(purchase) === statusFilter;
+      const matchesPaymentStatus = paymentStatusFilter === "All" || purchase.paymentStatus === paymentStatusFilter;
+
+      const d = purchase.purchaseDate ? String(purchase.purchaseDate).slice(0, 10) : "";
+      const matchesDate =
+        dateFilter === "all" ||
+        (dateFilter === "today" && d === todayStr) ||
+        (dateFilter === "week" && d >= weekStartStr && d <= todayStr) ||
+        (dateFilter === "month" && d >= monthStartStr && d <= todayStr);
+
+      return matchesSearch && matchesStatus && matchesPaymentStatus && matchesDate;
+    });
+  };
+
+  // Full, unpaginated, effective-status-aware filtered list — the "orders" tab used to trust
+  // server-side pagination/filtering (purchasesQuery), but that only ever filtered on the raw
+  // purchase.status, never the effective one the table itself displays. Filtering client-side
+  // over allPurchases (already fetched in full for the receive/returns/payments tabs) instead
+  // keeps the filter and the badge it's supposed to match in sync.
+  const exportPurchases = useMemo(() => {
+    return filterPurchaseList(allPurchases.length > 0 ? allPurchases : purchases);
+  }, [allPurchases, purchases, searchTerm, statusFilter, paymentStatusFilter, dateFilter]);
+
+  // Client-side page slice of the same fully-filtered list Export uses.
+  const filteredPurchases = useMemo(() => {
+    return exportPurchases.slice((page - 1) * perPage, page * perPage);
+  }, [exportPurchases, page, perPage]);
+
+  const handleExport = (type) => {
+    setExportMenuOpen(false);
+    if (type === "pdf") {
+      const opened = exportPurchasesPdf(exportPurchases);
+      if (!opened) window.alert("PDF export was blocked. Please allow pop-ups and try again.");
+      return;
+    }
+    if (type === "excel") {
+      exportPurchasesExcel(exportPurchases);
+      return;
+    }
+    exportPurchasesCsv(exportPurchases);
+  };
+
+  // Client-computed pagination meta over exportPurchases (the full filtered list) — replaces the
+  // old server-meta-based version (getPaginationMeta(purchasesQuery.data, ...)), since the
+  // "orders" tab no longer trusts server-side pagination for its displayed page (see
+  // filterPurchaseList's status-matching comment above for why).
+  const pagination = useMemo(() => {
+    const total = exportPurchases.length;
+    const lastPage = Math.max(1, Math.ceil(total / perPage));
+    const currentPage = Math.min(Math.max(1, page), lastPage);
+    return {
+      currentPage,
+      perPage,
+      total,
+      lastPage,
+      from: total === 0 ? 0 : (currentPage - 1) * perPage + 1,
+      to: Math.min(currentPage * perPage, total),
+    };
+  }, [exportPurchases.length, perPage, page]);
+  const pageNumbers = useMemo(
+    () => getPageNumbers(pagination.currentPage, pagination.lastPage),
+    [pagination.currentPage, pagination.lastPage]
+  );
 
   const getPurchaseLines = (purchase = {}) => {
     const items = Array.isArray(purchase.items) ? purchase.items : [];
@@ -564,8 +800,12 @@ export default function Purchases() {
   };
 
   const getRemainingStockInQty = (item = {}) => {
-    const directRemaining = Number(item.remainingStockInQty ?? item.remaining_stock_in_qty ?? 0);
-    if (directRemaining > 0) return directRemaining;
+    // A server-provided remaining qty of exactly 0 (fully stocked in) is valid and must not
+    // fall through to the base-qty fallback below — stocked_in_base_qty is never sent by the
+    // API, so that fallback always reads as "nothing stocked in yet" once triggered.
+    if (item.remainingStockInQty != null || item.remaining_stock_in_qty != null) {
+      return Number(item.remainingStockInQty ?? item.remaining_stock_in_qty ?? 0);
+    }
 
     const conversionQty = Number(item.conversionQty ?? item.conversion_qty ?? 1) || 1;
     const acceptedBaseQty = Number(item.acceptedBaseQty ?? item.accepted_base_qty ?? 0);
@@ -585,10 +825,17 @@ export default function Purchases() {
 
   const hasPendingReplacementStockIn = (purchase) =>
     getRelatedPurchaseReturns(purchase).some((item) => {
-      const resolutionType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type || "");
+      // A "resolved" claim only means the supplier agreed to replace — it does not mean the
+      // goods have physically arrived, so a genuinely-zero received_qty must not be treated
+      // as "fully received" just because the claim status looks complete.
+      // No resolutionType gate here: replacementReceivedQty/replacementStockedInQty are already
+      // scoped to replacement-type items only by the backend rollup (recomputeReturnRollup), so
+      // they're both 0 for a return with no replacement items regardless of its rollup type
+      // (which reads "mixed" once a claim also has a refund/credit_note item — gating on
+      // resolutionType === "replacement" here used to hide a mixed claim's pending stock-in).
       const receivedQty = Number(item.replacementReceivedQty ?? item.replacement_received_qty ?? 0);
       const stockedQty = Number(item.replacementStockedInQty ?? item.replacement_stocked_in_qty ?? 0);
-      return resolutionType === "replacement" && receivedQty > stockedQty;
+      return receivedQty > stockedQty;
     });
 
   const pendingReceive = allPurchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_RECEIVE).length;
@@ -608,20 +855,115 @@ export default function Purchases() {
   const fmtUsd = (n) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtKhr = (n) => `៛${Math.round(n).toLocaleString("en-US")}`;
 
-  const filteredTotalUsd = filteredPurchases.reduce((sum, p) => sum + Number(p.grandTotalUsd || 0), 0);
-  const filteredCount = filteredPurchases.length;
+  const filteredSummaryPurchases = exportPurchases;
+  const filteredTotalUsd = filteredSummaryPurchases.reduce((sum, p) => sum + Number(p.grandTotalUsd || 0), 0);
+  const filteredTotalKhr = filteredSummaryPurchases.reduce((sum, p) => sum + Number(p.grandTotalKhr || 0), 0);
+  const filteredCount = filteredSummaryPurchases.length;
   const isDateFiltered = dateFilter !== "all";
+  const invoiceTotalTitle = isDateFiltered
+    ? `តម្លៃវិក្កយបត្រ${dateFilter === "today" ? "ថ្ងៃនេះ" : dateFilter === "week" ? "អាទិត្យនេះ" : "ខែនេះ"}`
+    : "តម្លៃវិក្កយបត្រសរុប";
+  const summaryPurchases = isDateFiltered ? filteredSummaryPurchases : allPurchases;
+  const summaryPurchaseIds = new Set(summaryPurchases.map((purchase) => String(purchase.id)));
+  const summaryInvoiceUsd = isDateFiltered ? filteredTotalUsd : totalGrandUsd;
+  const summaryInvoiceKhr = isDateFiltered ? filteredTotalKhr : totalGrandKhr;
+  const summaryPaidUsd = summaryPurchases.reduce((sum, p) => sum + Number(p.paidAmountUsd || 0), 0);
+  const summaryPaidKhr = summaryPurchases.reduce((sum, p) => sum + Number(p.paidAmountKhr || 0), 0);
+  const normalizeClaimResolutionType = (value = "") => {
+    const type = String(value || "").trim().toLowerCase();
+    if (type === "credit" || type === "credit note") return "credit_note";
+    return type;
+  };
+  const getClampedClaimAmount = (item = {}, type = "refund") => {
+    const usdKey = type === "credit_note" ? "creditAmountUsd" : "refundAmountUsd";
+    const usdApiKey = type === "credit_note" ? "credit_amount_usd" : "refund_amount_usd";
+    const khrKey = type === "credit_note" ? "creditAmountKhr" : "refundAmountKhr";
+    const khrApiKey = type === "credit_note" ? "credit_amount_khr" : "refund_amount_khr";
+    const rawUsd = Number(item[usdKey] ?? item[usdApiKey] ?? 0);
+    const rawKhr = Number(item[khrKey] ?? item[khrApiKey] ?? 0);
+    const claimUsd = Number(item.subtotalUsd ?? item.totalAmountUsd ?? item.total_amount_usd ?? item.subtotal_usd ?? item.subtotal ?? 0);
+    const claimKhr = Number(item.subtotalKhr ?? item.totalAmountKhr ?? item.total_amount_khr ?? item.subtotal_khr ?? 0);
+    // rawUsd/Khr (refund_amount_usd/khr) can legitimately be 0 when the claim is fully
+    // absorbed into what's still owed instead of paid back in cash — do not fall back to
+    // the full claim value in that case, or "actual cost" wrongly drops by the gross claim
+    // even though no cash was ever actually refunded.
+    return {
+      usd: claimUsd > 0 ? Math.min(rawUsd, claimUsd) : rawUsd,
+      khr: claimKhr > 0 ? Math.min(rawKhr, claimKhr) : rawKhr,
+    };
+  };
+  const summaryClaimDeduction = purchaseReturns.reduce(
+    (total, item) => {
+      if (summaryPurchaseIds.size > 0 && !summaryPurchaseIds.has(String(item.purchaseId))) return total;
+      if (normalizeReturnStatusLabel(item.status || item.resolutionStatus) !== RETURN_STATUS.COMPLETED) return total;
+
+      const resolutionType = normalizeClaimResolutionType(item.resolutionType || item.resolution_type || "");
+      // credit_note deliberately excluded: this dashboard card is a CASH metric ("ចំណាយពិត ដក
+      // តែតម្លៃសងដែលដោះស្រាយរួច" — actual cost = cash paid minus cash refunded), but a resolved
+      // credit_note never produces cash at all — it creates a portable credit for a DIFFERENT,
+      // later purchase instead (credit_amount_usd/khr is now always the full claim value, not a
+      // cash figure — see PurchaseReturnService::applyItemSettlement). Including it here would
+      // wrongly subtract money that was never actually paid back.
+      if (resolutionType === "refund") {
+        const amount = getClampedClaimAmount(item, "refund");
+        return {
+          usd: total.usd + amount.usd,
+          khr: total.khr + amount.khr,
+        };
+      }
+      return total;
+    },
+    { usd: 0, khr: 0 }
+  );
+  const summaryClaimDeductionKhr =
+    summaryClaimDeduction.khr || (activeExchangeRate ? summaryClaimDeduction.usd * activeExchangeRate : 0);
+  const summaryNetUsd = Math.max(0, summaryPaidUsd - summaryClaimDeduction.usd);
+  const summaryNetKhr = Math.max(
+    0,
+    (summaryPaidKhr || (activeExchangeRate ? summaryPaidUsd * activeExchangeRate : 0)) - summaryClaimDeductionKhr
+  );
+
+  // A replacement claim marked "resolved" (agreed) can still have goods that haven't been
+  // physically received/stocked in yet — "resolved" only means the supplier agreed to replace.
+  // Treat those as still needing action so they don't disappear from the "open" bucket.
+  //
+  // Checked per ITEM (not the return's own aggregate fields) — a claim can now mix resolution
+  // types across its items, so a return-level check would either wrongly skip a mixed claim's
+  // replacement items (return-level resolutionType reads "mixed", never literally "replacement")
+  // or wrongly treat a resolved refund item as if it were an incomplete replacement.
+  function isReplacementClaimIncomplete(r) {
+    const items = Array.isArray(r.items) ? r.items : [];
+    return items.some((item) => {
+      if (normalizeReturnResolutionType(item.resolutionType || item.resolution_type) !== "replacement") return false;
+      const claimedQty = Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? item.replacement_qty ?? item.replacementQty ?? 0);
+      const stockedQty = Number(item.replacementStockedInQty ?? item.replacement_stocked_in_qty ?? 0);
+      return stockedQty < claimedQty;
+    });
+  }
+
+  // Narrower than isReplacementClaimIncomplete above: only true while there's still unreceived
+  // qty (vs. fully received but not yet stocked in, which needs "confirm stock in", not another
+  // "ទទួលជំនួស" receive pass). Same per-item scoping as isReplacementClaimIncomplete.
+  function isReplacementNotFullyReceived(r) {
+    const items = Array.isArray(r.items) ? r.items : [];
+    return items.some((item) => {
+      if (normalizeReturnResolutionType(item.resolutionType || item.resolution_type) !== "replacement") return false;
+      const claimedQty = Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? item.replacement_qty ?? item.replacementQty ?? 0);
+      const receivedQty = Number(item.replacementReceivedQty ?? item.replacement_received_qty ?? 0);
+      return receivedQty < claimedQty;
+    });
+  }
 
   const openReturnsCount = purchaseReturns.filter((r) =>
     ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(
       normalizeReturnStatusLabel(r.status || r.resolutionStatus)
-    )
+    ) || isReplacementClaimIncomplete(r)
   ).length;
 
   const resolvedReturnsCount = purchaseReturns.filter((r) =>
     [RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(
       normalizeReturnStatusLabel(r.status || r.resolutionStatus)
-    )
+    ) && !isReplacementClaimIncomplete(r)
   ).length;
 
   const isPaymentReady = (p) => {
@@ -633,42 +975,160 @@ export default function Purchases() {
     return true;
   };
 
+  const getPurchasePaymentBalance = (p = {}) => {
+    // Trust the server-computed balance_amount_usd/khr — it already nets out any
+    // resolved refund/credit_note claim deduction (see PurchaseService::recalculateTotals).
+    // Do not re-derive the deduction here from claim_qty: it is reset to 0 once a claim
+    // is resolved, which previously made this recompute silently undo the deduction.
+    //
+    // A server balance of exactly 0 (fully paid, or fully offset by a resolved claim)
+    // is valid and must not fall back to grandTotal-paid — that fallback ignores any
+    // resolved claim deduction and resurrects an already-settled balance as unpaid.
+    const hasServerBalanceUsd = p.balanceAmountUsd != null || p.balanceAmount != null;
+    const hasServerBalanceKhr = p.balanceAmountKhr != null;
+    const rawUsd = Number(p.balanceAmountUsd ?? p.balanceAmount ?? 0);
+    const rawKhr = Number(p.balanceAmountKhr ?? 0);
+    const fallbackUsd = Math.max(
+      0,
+      Number(p.grandTotalUsd ?? p.grandTotal ?? 0) - Number(p.paidAmountUsd ?? p.paidAmount ?? 0)
+    );
+    const fallbackKhr = Math.max(0, Number(p.grandTotalKhr ?? 0) - Number(p.paidAmountKhr ?? 0));
+
+    return {
+      usd: hasServerBalanceUsd ? rawUsd : fallbackUsd,
+      khr: hasServerBalanceKhr ? rawKhr : fallbackKhr,
+    };
+  };
+
+  const hasPurchasePaymentBalance = (p = {}) => {
+    const balance = getPurchasePaymentBalance(p);
+    return balance.usd > 0.01 || balance.khr > 1;
+  };
+
+  // Both functions below check EACH RETURN ITEM's own resolutionType/status, not the return's own
+  // rollup fields — a mixed claim's rollup resolutionType reads "mixed" and would never match
+  // "refund"/"credit_note", silently hiding a still-outstanding money item on a mixed claim from
+  // partial_prepaid balance/payment-flow logic. Falls back to the return's own aggregate fields
+  // when `items` is empty (old data with no per-item resolution recorded).
+  const hasPartialPrepaidMoneyClaimReceivable = (purchase = {}) => {
+    if (String(purchase.paymentMode || "").toLowerCase() !== "partial_prepaid") return false;
+
+    return getRelatedPurchaseReturns(purchase).some((ret) => {
+      const items = Array.isArray(ret.items) ? ret.items : [];
+      const checkOne = (source) => {
+        const status = normalizeReturnStatusLabel(source.status || source.resolutionStatus || source.resolution_status);
+        if ([RETURN_STATUS.CANCELLED, RETURN_STATUS.REJECTED].includes(status)) return false;
+
+        const resolutionType = normalizeClaimResolutionType(source.resolutionType || source.resolution_type || "");
+        if (!["refund", "credit_note"].includes(resolutionType)) return false;
+
+        const usdKey = resolutionType === "credit_note" ? "creditAmountUsd" : "refundAmountUsd";
+        const usdApiKey = resolutionType === "credit_note" ? "credit_amount_usd" : "refund_amount_usd";
+        const khrKey = resolutionType === "credit_note" ? "creditAmountKhr" : "refundAmountKhr";
+        const khrApiKey = resolutionType === "credit_note" ? "credit_amount_khr" : "refund_amount_khr";
+
+        return Number(source[usdKey] ?? source[usdApiKey] ?? 0) > 0.01 ||
+          Number(source[khrKey] ?? source[khrApiKey] ?? 0) > 1;
+      };
+      return items.length > 0 ? items.some((item) => checkOne(item)) : checkOne(ret);
+    });
+  };
+
+  const hasActivePartialPrepaidMoneyClaim = (purchase = {}) => {
+    if (String(purchase.paymentMode || "").toLowerCase() !== "partial_prepaid") return false;
+
+    return getRelatedPurchaseReturns(purchase).some((ret) => {
+      const items = Array.isArray(ret.items) ? ret.items : [];
+      const checkOne = (source) => {
+        const status = normalizeReturnStatusLabel(source.status || source.resolutionStatus || source.resolution_status);
+        if ([RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED, RETURN_STATUS.REJECTED, "resolved", "completed", "cancelled", "canceled", "rejected"].includes(status)) return false;
+
+        const resolutionType = normalizeClaimResolutionType(source.resolutionType || source.resolution_type || "");
+        return ["refund", "credit_note"].includes(resolutionType);
+      };
+      return items.length > 0 ? items.some((item) => checkOne(item)) : checkOne(ret);
+    });
+  };
+
+  const shouldShowInPaymentFlow = (purchase = {}) =>
+    hasPurchasePaymentBalance(purchase) &&
+    !hasActivePartialPrepaidMoneyClaim(purchase) &&
+    !hasPartialPrepaidMoneyClaimReceivable(purchase);
+
+  const goToPaymentTab = (purchase) => {
+    setPaymentViewFilter("outstanding");
+    setPaymentSearchTerm(purchase?.purchaseNo || purchase?.supplierName || "");
+    setActiveTab("payments");
+  };
+
   const unpaidCount = allPurchases.filter(
     (p) =>
-      p.paymentStatus !== "paid" &&
       p.status !== STATUS.CANCELLED &&
-      Number(p.balanceAmountUsd || 0) > 0 &&
-      isPaymentReady(p)
+      hasPurchasePaymentBalance(p) &&
+      isPaymentReady(p) &&
+      shouldShowInPaymentFlow(p)
   ).length;
 
   const totalOutstandingUsd = allPurchases
-    .filter((p) => p.paymentStatus !== "paid" && p.status !== STATUS.CANCELLED && isPaymentReady(p))
-    .reduce((sum, p) => sum + Number(p.balanceAmountUsd || 0), 0);
+    .filter((p) => p.status !== STATUS.CANCELLED && hasPurchasePaymentBalance(p) && isPaymentReady(p) && shouldShowInPaymentFlow(p))
+    .reduce((sum, p) => sum + getPurchasePaymentBalance(p).usd, 0);
 
   const receiveFilteredList = (() => {
     const base = allPurchases.filter((p) => {
       const eff = getEffectivePurchaseStatus(p);
-      if ([STATUS.PENDING_RECEIVE, STATUS.PENDING_STOCK_IN].includes(eff)) return true;
-      return p.status === STATUS.PENDING_CLAIM && (hasRemainingStockInQty(p) || hasPendingReplacementStockIn(p));
+      if (eff === STATUS.PENDING_RECEIVE) return true;
+      // A purchase can now read effective-PENDING_STOCK_IN purely because a replacement claim's
+      // supplier-side action is done (received in full) — with the accepted portion already
+      // fully stocked in, that's not a genuine Receive-tab action, only hasPendingReplacementStockIn
+      // below covers that (and only when accepted stock-in is also still outstanding).
+      if (eff === STATUS.PENDING_STOCK_IN && hasRemainingStockInQty(p)) return true;
+      if (p.status === STATUS.PENDING_CLAIM && hasRemainingStockInQty(p)) return true;
+      // Replacement goods can be marked "received" without being stocked in yet
+      // (stockInReplacementIfNeeded is a separate trigger) — overall purchase status
+      // can already be RECEIVED by then, so this must not be gated on p.status.
+      // Only surface it here too when the *accepted* portion still has its own stock-in
+      // action pending — if accepted qty is already fully stocked in, the replacement
+      // stock-in action already lives in the Returns tab and repeating it here would just
+      // be a duplicate entry with nothing distinct left to do from this tab.
+      if (hasPendingReplacementStockIn(p) && hasRemainingStockInQty(p)) return true;
+      // Status can jump straight to RECEIVED once accepted units are stocked in, even
+      // when damaged/missing units still have an unclaimed claim_qty — keep the purchase
+      // visible here as a reminder until a claim is actually created for it.
+      return getClaimRequiredCount(p) > 0 && !getOpenSupplierClaim(p) && !hasResolvedSupplierClaim(p);
     });
     const q = receiveSearchTerm.trim().toLowerCase();
     if (!q) return base;
+    // Also matches product/variant name, not just purchase no/supplier — this tab's own table
+    // prominently shows product names in its "ទំនិញ / ខូច" column, so searching by product was a
+    // reasonable expectation this didn't satisfy before.
     return base.filter(
       (p) =>
         (p.purchaseNo || "").toLowerCase().includes(q) ||
-        (p.supplierName || "").toLowerCase().includes(q)
+        (p.supplierName || "").toLowerCase().includes(q) ||
+        (Array.isArray(p.items) ? p.items : []).some(
+          (item) =>
+            (item.productName || "").toLowerCase().includes(q) ||
+            (item.variantName || "").toLowerCase().includes(q)
+        )
     );
   })();
+  const receiveLastPage = Math.max(1, Math.ceil(receiveFilteredList.length / CLIENT_TAB_PAGE_SIZE));
+  const receivePageItems = receiveFilteredList.slice(
+    (receivePage - 1) * CLIENT_TAB_PAGE_SIZE,
+    receivePage * CLIENT_TAB_PAGE_SIZE
+  );
 
   const returnFilteredList = (() => {
     let list = purchaseReturns;
     if (returnStatusFilter === "open")
       list = list.filter((r) =>
-        ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(normalizeReturnStatusLabel(r.status || r.resolutionStatus))
+        ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(normalizeReturnStatusLabel(r.status || r.resolutionStatus)) ||
+        isReplacementClaimIncomplete(r)
       );
     else if (returnStatusFilter === "resolved")
       list = list.filter((r) =>
-        [RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(normalizeReturnStatusLabel(r.status || r.resolutionStatus))
+        [RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(normalizeReturnStatusLabel(r.status || r.resolutionStatus)) &&
+        !isReplacementClaimIncomplete(r)
       );
     const q = returnSearchTerm.trim().toLowerCase();
     if (!q) return list;
@@ -679,6 +1139,11 @@ export default function Purchases() {
         (r.supplierName || "").toLowerCase().includes(q)
     );
   })();
+  const returnsLastPage = Math.max(1, Math.ceil(returnFilteredList.length / CLIENT_TAB_PAGE_SIZE));
+  const returnPageItems = returnFilteredList.slice(
+    (returnsPage - 1) * CLIENT_TAB_PAGE_SIZE,
+    returnsPage * CLIENT_TAB_PAGE_SIZE
+  );
 
   const eligibleForReturn = allPurchases.filter((p) =>
     [STATUS.RECEIVED, STATUS.PENDING_STOCK_IN, STATUS.PENDING_CLAIM].includes(getEffectivePurchaseStatus(p))
@@ -699,10 +1164,10 @@ export default function Purchases() {
     if (paymentViewFilter === "outstanding")
       list = allPurchases.filter(
         (p) =>
-          p.paymentStatus !== "paid" &&
           p.status !== STATUS.CANCELLED &&
-          Number(p.balanceAmountUsd || 0) > 0 &&
-          isPaymentReady(p)
+          hasPurchasePaymentBalance(p) &&
+          isPaymentReady(p) &&
+          shouldShowInPaymentFlow(p)
       );
     else if (paymentViewFilter === "paid")
       list = allPurchases.filter((p) => p.paymentStatus === "paid" && p.status !== STATUS.CANCELLED);
@@ -716,54 +1181,241 @@ export default function Purchases() {
         (p.supplierName || "").toLowerCase().includes(q)
     );
   })();
+  const paymentsLastPage = Math.max(1, Math.ceil(paymentFilteredList.length / CLIENT_TAB_PAGE_SIZE));
+  const paymentPageItems = paymentFilteredList.slice(
+    (paymentsPage - 1) * CLIENT_TAB_PAGE_SIZE,
+    paymentsPage * CLIENT_TAB_PAGE_SIZE
+  );
 
-  const getOpenReplacementClaim = (purchase) => {
-    return getRelatedPurchaseReturns(purchase).find((item) => {
-      const status = normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status);
+  // Checked per ITEM within the return, not the return's own aggregate resolutionType — a claim
+  // can now mix resolution types across its items, so the return-level field reads "mixed" and
+  // would never match either "replacement" or ["refund","credit_note"] on its own. Still returns
+  // the whole return object (existing callers — ReceiveReplacementModal via buildReplacementItems,
+  // ResolveMoneyClaimModal — already filter to the relevant items themselves).
+  // Extracted so the Returns-tab list row (which renders each `ret` directly, not via a purchase
+  // scan) can gate its own action buttons on the same per-item logic instead of the return-level
+  // rollup's resolutionType, which reads "mixed" for a mixed claim and would never equal either
+  // "replacement" or "refund"/"credit_note" on its own.
+  const returnHasOpenReplacementItem = (ret) => {
+    const items = Array.isArray(ret.items) ? ret.items : [];
+    return items.some((item) => {
+      const itemStatus = normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status);
       const resolutionType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type);
-      return resolutionType === "replacement" && status !== RETURN_STATUS.COMPLETED && status !== RETURN_STATUS.CANCELLED;
+      if (resolutionType !== "replacement" || itemStatus === RETURN_STATUS.CANCELLED) return false;
+      // Whether there's still something to physically receive is independent of the decision
+      // status — an item whose resolution_status was never explicitly flipped to "resolved"
+      // (e.g. left at "submitted" throughout, since receiving doesn't itself change that field)
+      // must not be treated as perpetually "open" once it's actually been fully received. Bug:
+      // this used to read `itemStatus !== COMPLETED || receivedQty < claimedQty`, which stayed
+      // true forever for a never-"resolved" item regardless of receivedQty.
+      const claimedQty = Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? 0);
+      const receivedQty = Number(item.replacementReceivedQty ?? item.replacement_received_qty ?? 0);
+      return receivedQty < claimedQty;
     });
   };
 
-  const getOpenMoneyClaim = (purchase) => {
-    return getRelatedPurchaseReturns(purchase).find((item) => {
-      const status = normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status);
+  const returnHasOpenMoneyItem = (ret) => {
+    const items = Array.isArray(ret.items) ? ret.items : [];
+    return items.some((item) => {
+      const itemStatus = normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status);
       const resolutionType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type);
-      return ["refund", "credit_note"].includes(resolutionType) && status !== RETURN_STATUS.COMPLETED && status !== RETURN_STATUS.CANCELLED;
+      return ["refund", "credit_note"].includes(resolutionType) && itemStatus !== RETURN_STATUS.COMPLETED && itemStatus !== RETURN_STATUS.CANCELLED;
     });
   };
+
+  const getOpenReplacementClaim = (purchase) => getRelatedPurchaseReturns(purchase).find(returnHasOpenReplacementItem);
+
+  const getOpenMoneyClaim = (purchase) => getRelatedPurchaseReturns(purchase).find(returnHasOpenMoneyItem);
 
   const getReturnItemResolution = (item, resolutionType, ret = {}) => {
+    // Item-level amounts/qty take priority over the return-level rollup — a mixed claim's rollup
+    // fields aggregate across ALL of the return's same-type items, which would misreport this
+    // specific item's own figure once a return has more than one item of that type. The `ret.*`
+    // fallback only matters for legacy data with no per-item resolution recorded at all.
+    // A nonzero refund_amount_usd/credit_amount_usd only means the settlement has been
+    // CALCULATED (done immediately at claim creation, before the supplier has actually paid) —
+    // it does not by itself mean the money has been confirmed received/issued. Without checking
+    // the item's own resolution_status here, this line reads identically ("សង $32.00") both
+    // while still waiting on the supplier AND after clicking "resolve", which is exactly the
+    // ambiguity a user asked about live. Mirror the replacement branch below, which already shows
+    // a "✓" only once actually complete.
+    const itemStatus = normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status);
+    const isMoneyResolved = itemStatus === RETURN_STATUS.COMPLETED;
     if (resolutionType === "refund") {
-      const amt = Number(ret.refundAmountUsd || item.refund_amount_usd || item.refundAmountUsd || 0);
-      return amt > 0 ? `សង $${amt.toFixed(2)}` : "រង់ចាំការសង";
+      const amt = Number(item.refund_amount_usd ?? item.refundAmountUsd ?? ret.refundAmountUsd ?? 0);
+      if (amt <= 0) return "រង់ចាំការសង";
+      return isMoneyResolved ? `សង $${amt.toFixed(2)} ✓` : `សង $${amt.toFixed(2)} (រង់ចាំបញ្ជាក់)`;
     }
     if (resolutionType === "credit_note") {
-      const amt = Number(ret.creditAmountUsd || item.credit_amount_usd || item.creditAmountUsd || 0);
-      return amt > 0 ? `Credit $${amt.toFixed(2)}` : "រង់ចាំ Credit";
+      const amt = Number(item.credit_amount_usd ?? item.creditAmountUsd ?? ret.creditAmountUsd ?? 0);
+      if (amt <= 0) return "រង់ចាំកាត់លុយលើកក្រោយ";
+      return isMoneyResolved ? `កាត់លុយលើកក្រោយ $${amt.toFixed(2)} ✓` : `កាត់លុយលើកក្រោយ $${amt.toFixed(2)} (រង់ចាំបញ្ជាក់)`;
     }
-    const received = Number(ret.replacementReceivedQty || item.replacement_received_qty || item.replacementReceivedQty || 0);
-    const total = Number(ret.replacementQty || item.replacement_qty || item.replacementQty || item.qty_returned || item.qtyReturned || item.qty || 0);
+    const received = Number(item.replacement_received_qty ?? item.replacementReceivedQty ?? ret.replacementReceivedQty ?? 0);
+    const total = Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? item.replacement_qty ?? item.replacementQty ?? ret.replacementQty ?? 0);
     if (total === 0) return "រង់ចាំ";
     return received >= total ? `${received}/${total} បានទទួល ✓` : `${received}/${total} បានទទួល`;
   };
 
-  const getPurchaseProblemLabel = (purchase) => {
-    const claimQty = getClaimRequiredCount(purchase);
-    const damagedQty = getDamagedCount(purchase);
+  // Only the replacement-claim progress nuance (agreed but not fully received/stocked yet) —
+  // used on its own in the Receive tab row, which already has its own separate ខូច/claim pill
+  // and its own status badge, so the other generic branches below (claim count, pending-receive)
+  // would just repeat what that row already shows elsewhere.
+  const getReplacementProgressLabel = (purchase) => {
     const replacementClaim = getOpenReplacementClaim(purchase);
+    if (replacementClaim) {
+      // Always just "រង់ចាំដំណោះស្រាយ" while anything's still outstanding, whether nothing or only
+      // part has been received so far — the adjacent "N ខូច · សង M" pill already spells out the
+      // exact damaged/resolved quantities, so a separate "សល់ N ទៀត" wording here was a redundant
+      // second way of saying the same thing.
+      return "រង់ចាំដំណោះស្រាយ";
+    }
+    // getOpenReplacementClaim above is receiving-based (isReplacementNotFullyReceived) — once
+    // the full claimed qty has been received, it stops matching even though the goods still
+    // haven't been stocked into inventory yet. Catch that distinct sub-state here so it doesn't
+    // fall through to the generic "claim created" label below. Unlike the Returns tab's own 3-state
+    // wording (which has its own separate stock-in action button right next to it), this badge is
+    // the only place the Purchases-tab row communicates this, so it spells out that stock-in
+    // confirmation specifically is what's still pending.
+    // isReplacementClaimIncomplete is already item-aware (checks each item's own resolutionType) —
+    // re-checking the return's own rollup resolutionType === "replacement" here was redundant AND
+    // wrong: a mixed claim's rollup type reads "mixed", which never equals "replacement" and made
+    // this branch never match for a mixed claim's still-pending replacement item at all, silently
+    // leaving the purchase stuck showing "រង់ចាំការទាមទារ" forever even once genuinely done except
+    // for the stock-in step.
+    const pendingStockInReplacement = getRelatedPurchaseReturns(purchase).find(isReplacementClaimIncomplete);
+    if (pendingStockInReplacement) return "ដោះស្រាយរួច ចាំបញ្ជាក់ស្តុកចូល";
+    // Don't gate this on raw purchase.status === PENDING_CLAIM — the backend already flips it to
+    // PENDING_STOCK_IN as soon as a money claim (refund/credit_note) resolves, so that check never
+    // matched and this message silently never showed for resolved money claims. Gate on
+    // hasRemainingStockInQty instead: only worth saying "claim resolved" while there's still an
+    // accepted-qty stock-in action pending — once that's done too, this stops being relevant.
+    if (hasResolvedSupplierClaim(purchase) && !getOpenSupplierClaim(purchase) && hasRemainingStockInQty(purchase)) {
+      const resolvedReturn = getRelatedPurchaseReturns(purchase).find(
+        (item) =>
+          normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status) === RETURN_STATUS.COMPLETED &&
+          !isReplacementClaimIncomplete(item)
+      );
+      const resolutionType = normalizeReturnResolutionType(resolvedReturn?.resolutionType || resolvedReturn?.resolution_type);
+      // A replacement item can reach this branch too: its OWN claim stock-in is already done
+      // (isReplacementClaimIncomplete is false, checked above), but the purchase's separate
+      // accepted/usable-qty stock-in is still outstanding — a genuinely different, standalone
+      // fact ("the replacement side is finished") rather than "waiting to confirm" like the other
+      // three, so it doesn't get the generic " ចាំបញ្ជាក់ស្តុកចូល" suffix appended (that would
+      // self-contradict "already confirmed" and "waiting to confirm" in the same label). Still
+      // shares the "បញ្ជាក់ស្តុកចូល" substring so it gets the same purple-pill treatment as the
+      // other three (see isPendingStockInAfterResolution's substring check).
+      if (resolutionType === "replacement") return "ទំនិញជំនួសថ្មីបញ្ជាក់ស្តុកចូលរួចរាល់";
+      // Used to append " ចាំបញ្ជាក់ស្តុកចូល" here (unlike the replacement case above, which never
+      // did — see its own comment). That made sense back when this text only ever surfaced as plain
+      // problemLabel text, with nothing else in the row saying stock-in was still pending. Now that
+      // getPurchaseStatusBadge promotes this text into the primary purple badge unconditionally
+      // (not just while effectiveStatus === PENDING_CLAIM), hasSeparatePendingStockIn's own blue
+      // "រង់ចាំបញ្ជាក់ស្តុកចូលចំនួនប្រើបាន" pill already fires right alongside it under the exact same
+      // hasRemainingStockInQty condition — so the suffix became a duplicate of that pill. Drop it,
+      // matching the replacement case's own reasoning above.
+      const resolvedLabel = resolutionType === "refund" ? "សងប្រាក់រួចរាល់" : resolutionType === "credit_note" ? "កាត់លុយលើកក្រោយ ចប់ស្រេច" : "ការទាមទារ អ្នកផ្គត់ផ្គង់ បានដោះស្រាយ";
+      return resolvedLabel;
+    }
+    return "";
+  };
+
+  const getPurchaseProblemLabel = (purchase) => {
+    const damagedQty = getDamagedCount(purchase);
+    const replacementProgress = getReplacementProgressLabel(purchase);
+    if (replacementProgress) return replacementProgress;
     const moneyClaim = getOpenMoneyClaim(purchase);
-    if (replacementClaim) return "រង់ចាំ​ជំនួស​ពីអ្នកផ្គត់ផ្គង់";
     if (moneyClaim) {
       const resolutionType = normalizeReturnResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type);
-      return resolutionType === "refund" ? "រង់ចាំការសងពី អ្នកផ្គត់ផ្គង់" : "Credit Note កំពុងដំណើរការ";
+      return resolutionType === "refund" ? "រង់ចាំការសងប្រាក់" : "កាត់លុយលើកក្រោយ កំពុងដំណើរការ";
     }
-    if (purchase.status === STATUS.PENDING_CLAIM && hasResolvedSupplierClaim(purchase) && !getOpenSupplierClaim(purchase)) return "ការទាមទារ អ្នកផ្គត់ផ្គង់ បានដោះស្រាយ";
     if (getOpenSupplierClaim(purchase)) return "ការទាមទារ អ្នកផ្គត់ផ្គង់ បានបង្កើត";
-    if ((purchase.paymentMode === "prepaid" || purchase.paymentMode === "partial_prepaid") && claimQty > 0) return `ទាមទារ ${claimQty}`;
+    // The plain "ចំនួនខូច N" number itself now always shows as its own dedicated line in
+    // PurchaseTable.jsx (regardless of claim state) — this branch used to be the only place it
+    // showed, and only before a claim existed, so it's been moved rather than duplicated. Still
+    // used in the list/table (see below) — only the ViewPurchaseModal detail popup drops this
+    // specific branch, since that popup separately spells out the excluded amount in its own
+    // payment summary (see hasPayAfterCheckDamage in ViewPurchaseModal.jsx) and showing both was
+    // reported as a redundant duplicate there.
     if (purchase.paymentMode === "pay_after_check" && damagedQty > 0) return `${damagedQty} ខូចដកចេញ`;
-    if (purchase.status === STATUS.PENDING_RECEIVE) return "រង់ចាំទំនិញ";
+    // No PENDING_RECEIVE branch here: wherever this label is shown, the purchase's own status
+    // badge already reads "រង់ចាំទទួលទំនិញ" right next to it — repeating that as a sub-line
+    // added no new information, just duplicate text.
     return "";
+  };
+
+  // Once a replacement claim exists (any resolution status — even still "submitted"), we already
+  // know specifically what's being waited on. Showing the generic "រង់ចាំការទាមទារ" ("waiting for
+  // claim") badge next to a "រង់ចាំទំនិញជំនួសថ្មី" sub-line said the same thing twice in less-clear
+  // words first — replace the badge itself with the specific text instead, matching how the
+  // Returns tab already displays this same claim. `overrode: true` tells callers to skip the
+  // separate problemLabel sub-line since it would now just repeat the badge.
+  const getPurchaseStatusBadge = (purchase) => {
+    const effectiveStatus = getEffectivePurchaseStatus(purchase);
+    // Not gated on effectiveStatus === PENDING_CLAIM: normally a claim only exists while
+    // effectiveStatus genuinely still reads PENDING_CLAIM, so this gate used to be a no-op safety
+    // net. But partial_prepaid's "silently absorbed" case (isSupplierClaimNeeded skips the claim
+    // step entirely when the damage value fits inside the still-unpaid balance) can reach
+    // PENDING_STOCK_IN/RECEIVED with purchase.status frozen there — and the user can still create a
+    // claim manually afterward (e.g. choosing replacement instead of accepting the silent
+    // deduction). effectiveStatus never reflects that later claim, so this check must run
+    // unconditionally to still catch it. Both helpers already self-gate correctly once truly done
+    // (not completed/cancelled, or replacement not fully received), so this is safe for every
+    // payment mode — for prepaid/pay_after_check, isSupplierClaimNeeded never takes the silent-
+    // absorption shortcut, so effectiveStatus always genuinely reflects an open claim already;
+    // removing this gate changes nothing for them.
+    const replacementProgress = getReplacementProgressLabel(purchase);
+    if (replacementProgress) {
+      // Icon must match which of getReplacementProgressLabel's possible messages this actually
+      // is — a hardcoded FiTruck here read as a delivery-in-transit icon even for the "nothing
+      // received yet" and "fully received/resolved" messages, which aren't about a truck at all.
+      const icon = replacementProgress.includes("រង់ចាំដំណោះស្រាយ") ? <FiClock /> : <FiCheckCircle />;
+      return {
+        label: replacementProgress,
+        className: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+        icon,
+        overrode: true,
+      };
+    }
+    // Same idea for a money claim (refund/credit_note) that's been created but not yet
+    // resolved — we already know what's specifically being waited on, so show that instead
+    // of the generic "រង់ចាំការទាមទារ" badge, consistent with the replacement case above.
+    const moneyClaim = getOpenMoneyClaim(purchase);
+    if (moneyClaim) {
+      const resolutionType = normalizeReturnResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type);
+      return {
+        label: resolutionType === "refund" ? "រង់ចាំការសងប្រាក់" : "កាត់លុយលើកក្រោយ កំពុងដំណើរការ",
+        className: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+        icon: <FiDollarSign />,
+        overrode: true,
+      };
+    }
+    // partial_prepaid purchases can reach PENDING_STOCK_IN with damaged qty still on them without
+    // ever creating a formal supplier claim — isSupplierClaimNeeded skips the claim step whenever
+    // the damaged goods' value can just be silently deducted from the still-unpaid balance instead
+    // (see getPartialPrepaidClaimDeduction/getUnpaidItemAmountBeforeClaim above). The plain "រង់ចាំ
+    // បញ្ចូលក្នុងស្តុក" label then reads as if the FULL invoiced qty is going to stock, when really
+    // only the accepted/usable portion is — same "waiting to confirm usable qty" wording already
+    // used elsewhere (isPendingStockInAfterResolution, the PENDING_CLAIM stock-in sub-badge) fits
+    // here too.
+    if (
+      effectiveStatus === STATUS.PENDING_STOCK_IN &&
+      purchase.paymentMode === "partial_prepaid" &&
+      getDamagedCount(purchase) > 0
+    ) {
+      return {
+        label: "រង់ចាំបញ្ជាក់ស្តុកចូលចំនួនប្រើបាន",
+        className: getStatusClass(effectiveStatus),
+        icon: getStatusIcon(effectiveStatus),
+        overrode: false,
+      };
+    }
+    return {
+      label: STATUS_LABEL[effectiveStatus] ?? effectiveStatus,
+      className: getStatusClass(effectiveStatus),
+      icon: getStatusIcon(effectiveStatus),
+      overrode: false,
+    };
   };
 
   const getNextActionLabel = (purchase) => {
@@ -774,7 +1426,7 @@ export default function Purchases() {
     const moneyClaim = getOpenMoneyClaim(purchase);
     if (moneyClaim) {
       const resolutionType = normalizeReturnResolutionType(moneyClaim.resolutionType || moneyClaim.resolution_type);
-      return resolutionType === "refund" ? "កត់ការសងបានទទួល" : "ដោះស្រាយ Credit Note";
+      return resolutionType === "refund" ? "ប្រាក់ត្រូវបានសង" : "ដោះស្រាយកាត់លុយលើកក្រោយ";
     }
     if (getOpenSupplierClaim(purchase)) return "ការទាមទារ អ្នកផ្គត់ផ្គង់ បានបង្កើត";
     if (effectiveStatus === STATUS.PENDING_CLAIM) return "បង្កើតការទាមទារ អ្នកផ្គត់ផ្គង់";
@@ -785,7 +1437,7 @@ export default function Purchases() {
 
   const getPrimarySaveLabel = () => {
     if (modalMode === "receive_goods") return "រក្សាការទទួល";
-    if (purchaseForm.paymentMode === "pay_after_check") return "រក្សារង់ចាំបញ្ចូលក្នុងស្តុក";
+    if (purchaseForm.paymentMode === "pay_after_check") return "រក្សាទុកការទិញ";
     if (purchaseForm.paymentMode === "prepaid" || purchaseForm.paymentMode === "partial_prepaid") {
       const hasReceived = purchaseItems.some((item) => Number(item.receivedQty || 0) > 0);
       const hasClaim = purchaseItems.some((item) => Number(item.claimQty || 0) > 0);
@@ -889,7 +1541,7 @@ export default function Purchases() {
       }),
     onSuccess: () => {
       invalidatePurchaseQueries();
-      notify.success("ការទាមទារ អ្នកផ្គត់ផ្គង់ បានដោះស្រាយ", "ការសង ឬ Credit Note បានកត់ទុកថាបានបញ្ចប់រួចហើយ។");
+      notify.success("ការទាមទារ អ្នកផ្គត់ផ្គង់ បានដោះស្រាយ", "ការសង ឬ កាត់លុយលើកក្រោយ បានកត់ទុកថាបានបញ្ចប់រួចហើយ។");
       closeModal();
     },
     onError: (error) => {
@@ -939,6 +1591,7 @@ export default function Purchases() {
     const dateKey = new Date().toISOString().slice(0, 10).replaceAll("-", "");
     setSelectedPurchase(null);
     setPurchaseErrors({});
+    setPaidCurrencyTouched(false);
     setPurchaseForm({
       ...emptyPurchaseForm,
       purchaseNo: `PUR-${dateKey}-${String((pagination.total || purchases.length) + 1).padStart(5, "0")}`,
@@ -960,6 +1613,7 @@ export default function Purchases() {
     const detail = await loadPurchaseDetail(purchase);
     setSelectedPurchase(detail);
     setPurchaseErrors({});
+    setPaidCurrencyTouched(true);
     setPurchaseForm({
       purchaseNo: detail.purchaseNo,
       supplierId: detail.supplierId,
@@ -979,6 +1633,11 @@ export default function Purchases() {
       deliveryPaidBy: detail.deliveryPaidBy,
       paidAmount: detail.paidAmount || 0,
       paidCurrency: detail.paidCurrency || "USD",
+      // Already-applied supplier credit (from creation time, or a later apply-credit pass) —
+      // read-only here (this form doesn't re-expose the apply-credit control outside "add" mode),
+      // just needed so calculateCurrencyPreview's summary figures stay accurate for this purchase.
+      creditApplied: detail.creditAppliedUsd || 0,
+      creditAppliedCurrency: "USD",
       note: detail.note,
       status: detail.status,
     });
@@ -989,6 +1648,7 @@ export default function Purchases() {
   const openReceiveGoodsModal = async (purchase) => {
     const detail = await loadPurchaseDetail(purchase);
     setSelectedPurchase(detail);
+    setPaidCurrencyTouched(true);
     setPurchaseForm({
       purchaseNo: detail.purchaseNo,
       supplierId: detail.supplierId,
@@ -999,7 +1659,10 @@ export default function Purchases() {
       exchangeRateSource: detail.exchangeRateSource || "manual",
       exchangeRateNote: detail.exchangeRateNote || "",
       paymentMode: detail.paymentMode || "prepaid",
-      paymentStatus: detail.paymentStatus || "paid",
+      // Was "paid" — a stale/inconsistent fallback vs. every other spot in this file (see
+      // openEditModal's own "unpaid" fallback just below), and specifically wrong for
+      // pay_after_check purchases, which are never paid upfront.
+      paymentStatus: detail.paymentStatus || "unpaid",
       discountTotal: detail.discountTotal,
       discountCurrency: detail.discountCurrency || "USD",
       deliveryOption: detail.deliveryOption,
@@ -1008,6 +1671,11 @@ export default function Purchases() {
       deliveryPaidBy: detail.deliveryPaidBy,
       paidAmount: detail.paidAmount || 0,
       paidCurrency: detail.paidCurrency || "USD",
+      // Already-applied supplier credit (from creation time, or a later apply-credit pass) —
+      // read-only here (this form doesn't re-expose the apply-credit control outside "add" mode),
+      // just needed so calculateCurrencyPreview's summary figures stay accurate for this purchase.
+      creditApplied: detail.creditAppliedUsd || 0,
+      creditAppliedCurrency: "USD",
       note: detail.note,
       status: detail.status,
     });
@@ -1018,11 +1686,20 @@ export default function Purchases() {
   const openPurchaseReturnModal = async (purchase) => {
     const detail = await loadPurchaseDetail(purchase);
     const claimItems = (detail.items || [])
+      // Only auto-add items that actually have recorded damage/claim — getAvailableReturnQty
+      // falls back to the full acceptedQty for items with neither, which is meant for manually
+      // adding an item to a claim later (e.g. wrong-item returns), not for auto-populating a
+      // brand-new claim with fully-good, undamaged items.
       .filter((item) => Number(item.claimQty || 0) > 0 || Number(item.damagedQty || 0) > 0)
-      .map((item) =>
+      .map((item) => {
+        const availableQty = getAvailableReturnQty(item, { purchaseContext: detail, draftItems: [] });
+        return { item, availableQty };
+      })
+      .filter(({ availableQty }) => availableQty > 0)
+      .map(({ item, availableQty }) =>
         buildPurchaseReturnItemFromPurchaseItem(item, {
           purchaseContext: detail,
-          qtyReturned: Number(item.claimQty || item.damagedQty || 0),
+          qtyReturned: availableQty,
           condition: "damaged",
           reason: "ទំនិញខូចបានទាមទារទៅអ្នកផ្គត់ផ្គង់ ។",
         })
@@ -1058,6 +1735,7 @@ export default function Purchases() {
     setModalMode(null);
     setSelectedPurchase(null);
     setPurchaseForm(emptyPurchaseForm);
+    setPaidCurrencyTouched(false);
     setPurchaseItems([]);
     setPurchaseErrors({});
     setItemErrors({});
@@ -1069,9 +1747,116 @@ export default function Purchases() {
     closeItemModal();
   };
 
+  const clampPaidAmountForForm = (formToClamp, itemsToUse = purchaseItems) => {
+    const next = { ...formToClamp };
+    const paidValue = Number(next.paidAmount || 0);
+
+    if (next.paymentMode === "pay_after_check" || next.paymentStatus === "paid" || paidValue <= 0) {
+      return next;
+    }
+
+    if (itemsToUse.length === 0) {
+      next.paidAmount = 0;
+      return next;
+    }
+
+    const totals = calculateCurrencyPreview({
+      items: itemsToUse,
+      form: { ...next, paidAmount: 0 },
+    });
+    const maxAmount = next.paidCurrency === "KHR" ? totals.grandTotalKhr : totals.grandTotalUsd;
+
+    if (maxAmount <= 0) {
+      next.paidAmount = 0;
+      return next;
+    }
+
+    if (paidValue > maxAmount) {
+      next.paidAmount = next.paidCurrency === "KHR"
+        ? String(Math.floor(maxAmount))
+        : String(Number(maxAmount).toFixed(2));
+    }
+
+    return next;
+  };
+
+  const clampDiscountForForm = (formToClamp, itemsToUse = purchaseItems) => {
+    const next = { ...formToClamp };
+
+    if ((next.discountType || "amount") === "percent") {
+      const percent = Number(next.discountPercent || 0);
+      if (percent > 100) next.discountPercent = 100;
+      if (percent < 0) next.discountPercent = 0;
+      return next;
+    }
+
+    const discountValue = Number(next.discountTotal || 0);
+    if (discountValue <= 0) return next;
+
+    if (itemsToUse.length === 0) {
+      next.discountTotal = 0;
+      return next;
+    }
+
+    const totals = calculateCurrencyPreview({
+      items: itemsToUse,
+      form: { ...next, discountTotal: 0, discountPercent: 0 },
+    });
+    const discountCurrency = String(next.discountCurrency || itemsToUse[0]?.inputCurrency || next.inputCurrency || "USD").toUpperCase();
+    const maxDiscount = discountCurrency === "KHR" ? totals.subtotalKhr : totals.subtotalUsd;
+
+    if (maxDiscount <= 0) {
+      next.discountTotal = 0;
+      return next;
+    }
+
+    if (discountValue > maxDiscount) {
+      next.discountTotal = discountCurrency === "KHR"
+        ? String(Math.floor(maxDiscount))
+        : String(Number(maxDiscount).toFixed(2));
+    }
+
+    return next;
+  };
+
+  const normalizePurchaseFormAmounts = (formToNormalize, itemsToUse = purchaseItems) =>
+    clampPaidAmountForForm(clampDiscountForForm(formToNormalize, itemsToUse), itemsToUse);
+
   const handlePurchaseFormChange = (field, value) => {
+    if (field === "paidCurrency") {
+      setPaidCurrencyTouched(true);
+    }
+
     setPurchaseForm((previous) => {
       const next = { ...previous, [field]: value };
+
+      // Credit balance is per-supplier — switching supplier makes any previously-selected
+      // credit meaningless (it belonged to the OLD supplier's balance).
+      if (field === "supplierId") {
+        next.creditApplied = 0;
+        next.selectedCreditIds = [];
+      }
+
+      // Checkbox toggle for one SOURCE PURCHASE's whole group of supplier_credits rows (see
+      // PurchaseFormModal's grouped credit list — multiple damaged items claimed within the same
+      // invoice are one invoice's worth of credit, so checking the box selects/deselects all of
+      // that group's underlying ids together, never just one). Not a real form field itself, so
+      // it's translated into selectedCreditIds plus the derived creditApplied/
+      // creditAppliedCurrency that the rest of this form (totals, validation, save payload)
+      // already knows how to read.
+      if (field === "toggleCreditGroup") {
+        const groupIds = (Array.isArray(value) ? value : [value]).map(Number);
+        const currentIds = Array.isArray(previous.selectedCreditIds) ? previous.selectedCreditIds : [];
+        const groupAlreadySelected = groupIds.every((id) => currentIds.includes(id));
+        const nextIds = groupAlreadySelected
+          ? currentIds.filter((id) => !groupIds.includes(id))
+          : [...new Set([...currentIds, ...groupIds])];
+        const totals = getSelectedCreditsTotal(nextIds);
+        next.selectedCreditIds = nextIds;
+        next.creditApplied = totals.usd;
+        next.creditAppliedCurrency = "USD";
+        delete next.toggleCreditGroup;
+      }
 
       if (field === "paymentMode") {
         if (value === "prepaid") {
@@ -1084,6 +1869,7 @@ export default function Purchases() {
         } else {
           next.paymentStatus = "partial";
           next.status = STATUS.PENDING_RECEIVE;
+          next.paidAmount = 0;
         }
       }
 
@@ -1092,7 +1878,11 @@ export default function Purchases() {
         next.paidAmount = grandTotal;
       }
 
-      return next;
+      if (field === "paymentStatus" && value !== "paid") {
+        next.paidAmount = 0;
+      }
+
+      return normalizePurchaseFormAmounts(next);
     });
 
     setPurchaseErrors((previous) => ({ ...previous, [field]: "" }));
@@ -1103,6 +1893,7 @@ export default function Purchases() {
     setItemEditIndex(null);
     setItemForm({
       ...emptyItemForm,
+      inputCurrency: purchaseItems[0]?.inputCurrency || purchaseForm.paidCurrency || "USD",
       receivedQty: (purchaseForm.paymentMode === "prepaid" || purchaseForm.paymentMode === "partial_prepaid" || purchaseForm.paymentMode === "pay_after_check") ? 0 : "",
       acceptedQty: (purchaseForm.paymentMode === "prepaid" || purchaseForm.paymentMode === "partial_prepaid" || purchaseForm.paymentMode === "pay_after_check") ? 0 : "",
     });
@@ -1128,12 +1919,7 @@ export default function Purchases() {
         const qty = Number(item.invoicedQty || 0);
         return cost > 0 && qty > 0 ? String(parseFloat((cost * qty).toFixed(2))) : "";
       })(),
-      paidAmount: (() => {
-        if (item.paidAmount) return String(Number(item.paidAmount).toFixed(2));
-        const cost = Number(item.inputUnitCost || item.unitCost || 0);
-        const qty = Number(item.paidQty || 0);
-        return cost > 0 && qty > 0 ? String(parseFloat((cost * qty).toFixed(2))) : "";
-      })(),
+      paidAmount: "",
       unitCost: item.unitCost,
       expiredDate: formatDateOnly(item.expiredDate) === "-" ? "" : formatDateOnly(item.expiredDate),
     });
@@ -1157,33 +1943,16 @@ export default function Purchases() {
         if (qty > 0 && value !== "") {
           next.inputUnitCost = String(Number(value) / qty > 0 ? Number(Number(value) / qty).toFixed(2) : "0.00");
           next.unitCost = next.inputUnitCost;
-          if (purchaseForm.paymentMode === "partial_prepaid" && next.paidAmount !== "") {
-            const newCost = Number(next.inputUnitCost || 0);
-            next.paidQty = newCost > 0 ? String(parseFloat((Number(next.paidAmount) / newCost).toFixed(4))) : "";
-          }
         }
       }
 
       if (field === "inputUnitCost") {
         const qty = Number(next.invoicedQty || 0);
         next.invoiceTotal = qty > 0 ? String(parseFloat((Number(value || 0) * qty).toFixed(2))) : "";
-        if (purchaseForm.paymentMode === "partial_prepaid" && next.paidAmount !== "") {
-          const newCost = Number(value || 0);
-          next.paidQty = newCost > 0 ? String(parseFloat((Number(next.paidAmount) / newCost).toFixed(4))) : "";
-        }
-      }
-
-      if (field === "paidAmount") {
-        const unitCost = Number(next.inputUnitCost || 0);
-        if (unitCost > 0 && value !== "") {
-          next.paidQty = String(parseFloat((Number(value) / unitCost).toFixed(4)));
-        } else {
-          next.paidQty = "0";
-        }
       }
 
       if (field === "invoicedQty") {
-        if (purchaseForm.paymentMode === "prepaid") next.paidQty = value;
+        if (purchaseForm.paymentMode === "prepaid" || purchaseForm.paymentMode === "partial_prepaid") next.paidQty = value;
         const unitCost = Number(next.inputUnitCost || 0);
         if (unitCost > 0) {
           next.invoiceTotal = String(parseFloat((unitCost * Number(value || 0)).toFixed(2)));
@@ -1218,23 +1987,33 @@ export default function Purchases() {
     setItemErrors((previous) => ({ ...previous, [field]: "" }));
   };
 
-  const validatePurchaseItem = () => {
+  const validatePurchaseItem = (formToValidate = itemForm) => {
     const nextErrors = {};
-    const selectedUnit = variantUnits.find((unit) => String(unit.id) === String(itemForm.variantUnitId));
+    const selectedUnit = variantUnits.find((unit) => String(unit.id) === String(formToValidate.variantUnitId));
 
-    if (!itemForm.variantUnitId) nextErrors.variantUnitId = "សូមជ្រើសប្រភេទផលិតផល";
-    if (!itemForm.inputCurrency) nextErrors.inputCurrency = "សូមជ្រើសរូបិយប័ណ្ណ";
-    if (!itemForm.invoicedQty || Number(itemForm.invoicedQty) <= 0) nextErrors.invoicedQty = "ចំនួនកម្មង់ត្រូវតែធំជាង 0";
-    if (!itemForm.invoiceTotal || Number(itemForm.invoiceTotal) <= 0) nextErrors.invoiceTotal = "សរុបលុយវិក្កយបត្រត្រូវតែធំជាង 0";
-    if (purchaseForm.paymentMode === "partial_prepaid" && (itemForm.paidAmount === "" || Number(itemForm.paidAmount) < 0)) nextErrors.paidAmount = "ទឹកប្រាក់បានបង់ចាំបាច់";
-    if (purchaseForm.paymentMode === "partial_prepaid" && Number(itemForm.paidAmount || 0) > Number(itemForm.invoicedQty || 0) * Number(itemForm.inputUnitCost || 0)) nextErrors.paidAmount = "ទឹកប្រាក់បានបង់មិនអាចលើសសរុបលុយវិក្កយបត្រ";
-    if (itemForm.receivedQty === "" || Number(itemForm.receivedQty) < 0) nextErrors.receivedQty = "ចំនួនទទួលមិនអាចតិចជាង 0";
-    if (itemForm.acceptedQty === "" || Number(itemForm.acceptedQty) < 0) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចតិចជាង 0";
-    if (Number(itemForm.acceptedQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចលើសចំនួនកម្មង់";
-    if (Number(itemForm.acceptedQty || 0) + Number(itemForm.damagedQty || 0) > Number(itemForm.invoicedQty || 0)) nextErrors.damagedQty = "ចំនួនទទួលយក + ខូចមិនអាចលើសចំនួនកម្មង់";
-    if (Number(itemForm.acceptedQty || 0) > Number(itemForm.receivedQty || 0)) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចលើសចំនួនទទួល";
-    if (Number(itemForm.damagedQty || 0) < 0) nextErrors.damagedQty = "ចំនួនខូចមិនអាចតិចជាង 0";
-    if (selectedUnit?.isExpirable && Number(itemForm.receivedQty || 0) > 0 && !itemForm.expiredDate) {
+    if (!formToValidate.variantUnitId) {
+      nextErrors.variantUnitId = "សូមជ្រើសប្រភេទផលិតផល";
+    } else {
+      // Nothing previously stopped picking the same product+unit twice, leaving two fully
+      // identical rows in the items table with no way to tell them apart — block it here instead,
+      // excluding the row currently being edited (re-saving it unchanged isn't a duplicate).
+      const duplicateIndex = purchaseItems.findIndex(
+        (row, index) => String(row.variantUnitId) === String(formToValidate.variantUnitId) && index !== itemEditIndex
+      );
+      if (duplicateIndex !== -1) {
+        nextErrors.variantUnitId = "ផលិតផលនេះមានរួចហើយក្នុងបញ្ជី — សូមកែប្រែជួរដែលមានស្រាប់ជំនួសវិញ។";
+      }
+    }
+    if (!formToValidate.inputCurrency) nextErrors.inputCurrency = "សូមជ្រើសរូបិយប័ណ្ណ";
+    if (!formToValidate.invoicedQty || Number(formToValidate.invoicedQty) <= 0) nextErrors.invoicedQty = "ចំនួនកម្មង់ត្រូវតែធំជាង 0";
+    if (!formToValidate.invoiceTotal || Number(formToValidate.invoiceTotal) <= 0) nextErrors.invoiceTotal = "សរុបតម្លៃទំនិញនេះត្រូវតែធំជាង 0";
+    if (formToValidate.receivedQty === "" || Number(formToValidate.receivedQty) < 0) nextErrors.receivedQty = "ចំនួនមកដល់មិនអាចតិចជាង 0";
+    if (formToValidate.acceptedQty === "" || Number(formToValidate.acceptedQty) < 0) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចតិចជាង 0";
+    if (Number(formToValidate.acceptedQty || 0) > Number(formToValidate.invoicedQty || 0)) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចលើសចំនួនកម្មង់";
+    if (Number(formToValidate.acceptedQty || 0) + Number(formToValidate.damagedQty || 0) > Number(formToValidate.invoicedQty || 0)) nextErrors.damagedQty = "ចំនួនទទួលយក + ខូចមិនអាចលើសចំនួនកម្មង់";
+    if (Number(formToValidate.acceptedQty || 0) > Number(formToValidate.receivedQty || 0)) nextErrors.acceptedQty = "ចំនួនទទួលយកមិនអាចលើសចំនួនមកដល់";
+    if (Number(formToValidate.damagedQty || 0) < 0) nextErrors.damagedQty = "ចំនួនខូចមិនអាចតិចជាង 0";
+    if (selectedUnit?.isExpirable && Number(formToValidate.receivedQty || 0) > 0 && !formToValidate.expiredDate) {
       nextErrors.expiredDate = "ថ្ងៃផុតកំណត់ចាំបាច់ក្រោយទទួលទំនិញ";
     }
 
@@ -1242,17 +2021,17 @@ export default function Purchases() {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const buildPurchaseItemFromForm = () => {
-    const selectedUnit = variantUnits.find((unit) => String(unit.id) === String(itemForm.variantUnitId));
+  const buildPurchaseItemFromForm = (formToBuild = itemForm) => {
+    const selectedUnit = variantUnits.find((unit) => String(unit.id) === String(formToBuild.variantUnitId));
     if (!selectedUnit) return null;
 
     const paymentMode = purchaseForm.paymentMode;
-    const invoicedQty = Number(itemForm.invoicedQty || 0);
-    const receivedQty = Number(itemForm.receivedQty || 0);
-    const acceptedQty = Number(itemForm.acceptedQty || 0);
-    const damagedQty = Number(itemForm.damagedQty || 0);
-    const inputCurrency = itemForm.inputCurrency || "USD";
-    const inputUnitCost = Number(itemForm.inputUnitCost || itemForm.unitCost || 0);
+    const invoicedQty = Number(formToBuild.invoicedQty || 0);
+    const receivedQty = Number(formToBuild.receivedQty || 0);
+    const acceptedQty = Number(formToBuild.acceptedQty || 0);
+    const damagedQty = Number(formToBuild.damagedQty || 0);
+    const inputCurrency = formToBuild.inputCurrency || "USD";
+    const inputUnitCost = Number(formToBuild.inputUnitCost || formToBuild.unitCost || 0);
     const exchangeRate = Number(purchaseForm.exchangeRateUsed || activeExchangeRate || 0);
     const { unitCostUsd, unitCostKhr } = convertCost({
       inputCurrency,
@@ -1260,8 +2039,8 @@ export default function Purchases() {
       exchangeRate,
     });
 
-    let paidQty = Number(itemForm.paidQty || 0);
-    let claimQty = Number(itemForm.claimQty || 0);
+    let paidQty = Number(formToBuild.paidQty || 0);
+    let claimQty = Number(formToBuild.claimQty || 0);
 
     if (paymentMode === "pay_after_check") {
       paidQty = acceptedQty;
@@ -1274,17 +2053,20 @@ export default function Purchases() {
     }
 
     if (paymentMode === "partial_prepaid") {
-      claimQty = receivedQty > 0 ? Math.max(0, paidQty - acceptedQty) : 0;
+      paidQty = invoicedQty;
+      claimQty = receivedQty > 0 ? Math.max(0, invoicedQty - acceptedQty) : 0;
     }
 
     const { lineTotalUsd, lineTotalKhr } = calculateLineTotalsByPaymentMode({
       paymentMode,
       inputCurrency,
       inputUnitCost,
-      invoiceTotal: itemForm.invoiceTotal,
-      paidAmount: itemForm.paidAmount,
+      invoiceTotal: formToBuild.invoiceTotal,
+      paidAmount: paymentMode === "prepaid" ? formToBuild.invoiceTotal : 0,
       invoicedQty,
       acceptedQty,
+      receivedQty,
+      damagedQty,
       paidQty,
       exchangeRate,
     });
@@ -1307,8 +2089,8 @@ export default function Purchases() {
       claimQty,
       inputCurrency,
       inputUnitCost,
-      invoiceTotal: Number(itemForm.invoiceTotal || 0),
-      paidAmount: Number(itemForm.paidAmount || 0),
+      invoiceTotal: Number(formToBuild.invoiceTotal || 0),
+      paidAmount: Number((paymentMode === "prepaid" ? formToBuild.invoiceTotal : 0) || 0),
       unitCost: unitCostUsd,
       unitCostUsd,
       unitCostKhr,
@@ -1316,14 +2098,16 @@ export default function Purchases() {
       lineTotal: lineTotalUsd,
       lineTotalUsd,
       lineTotalKhr,
-      expiredDate: itemForm.expiredDate || "",
+      expiredDate: formToBuild.expiredDate || "",
     };
   };
 
-  const handleSaveItem = () => {
-    if (!validatePurchaseItem()) return;
+  const handleSaveItem = (submittedValues = null) => {
+    const effectiveItemForm = submittedValues ? { ...itemForm, ...submittedValues } : itemForm;
+    setItemForm(effectiveItemForm);
+    if (!validatePurchaseItem(effectiveItemForm)) return;
 
-    const item = buildPurchaseItemFromForm();
+    const item = buildPurchaseItemFromForm(effectiveItemForm);
     if (!item) {
       setItemErrors({ variantUnitId: "Invalid purchase item." });
       return;
@@ -1335,9 +2119,16 @@ export default function Purchases() {
 
     setPurchaseItems(newItems);
 
-    if (purchaseForm.paymentMode === "partial_prepaid") {
-      const totalPaid = parseFloat(newItems.reduce((sum, it) => sum + Number(it.lineTotalUsd || 0), 0).toFixed(2));
-      setPurchaseForm((prev) => ({ ...prev, paidAmount: totalPaid }));
+    const itemCurrency = String(item.inputCurrency || "").toUpperCase();
+    const shouldAutoPaidCurrency =
+      !paidCurrencyTouched &&
+      purchaseForm.paymentMode !== "pay_after_check" &&
+      ["USD", "KHR"].includes(itemCurrency);
+
+    if (shouldAutoPaidCurrency) {
+      setPurchaseForm((prev) => normalizePurchaseFormAmounts({ ...prev, paidCurrency: itemCurrency }, newItems));
+    } else {
+      setPurchaseForm((prev) => normalizePurchaseFormAmounts(prev, newItems));
     }
 
     closeItemModal();
@@ -1348,38 +2139,75 @@ export default function Purchases() {
     setPurchaseItems(newItems);
     setPurchaseErrors((previous) => ({ ...previous, items: "" }));
 
-    if (purchaseForm.paymentMode === "partial_prepaid") {
-      const totalPaid = parseFloat(newItems.reduce((sum, it) => sum + Number(it.lineTotalUsd || 0), 0).toFixed(2));
-      setPurchaseForm((prev) => ({ ...prev, paidAmount: totalPaid }));
+    if (purchaseForm.paymentMode !== "pay_after_check" && !paidCurrencyTouched && newItems.length > 0) {
+      const autoCurrency = String(newItems[0]?.inputCurrency || purchaseForm.paidCurrency || "USD").toUpperCase();
+      if (["USD", "KHR"].includes(autoCurrency)) {
+        setPurchaseForm((prev) => normalizePurchaseFormAmounts({ ...prev, paidCurrency: autoCurrency }, newItems));
+        return;
+      }
     }
+
+    setPurchaseForm((prev) => normalizePurchaseFormAmounts(prev, newItems));
   };
 
   const validatePurchaseForm = () => {
     const nextErrors = {};
     const requiresPaymentInfo = purchaseForm.paymentMode !== "pay_after_check";
-    if (!purchaseForm.purchaseNo.trim()) nextErrors.purchaseNo = "Purchase number is required.";
-    if (!purchaseForm.supplierId) nextErrors.supplierId = "Please select supplier.";
-    if (!purchaseForm.purchaseDate) nextErrors.purchaseDate = "Purchase date is required.";
-    if (requiresPaymentInfo && (!purchaseForm.exchangeRateUsed || Number(purchaseForm.exchangeRateUsed) <= 0)) nextErrors.exchangeRateUsed = "Exchange rate must be greater than 0.";
-    if (!purchaseForm.paymentMode) nextErrors.paymentMode = "Payment mode is required.";
-    if (requiresPaymentInfo && !purchaseForm.paymentStatus) nextErrors.paymentStatus = "Payment status is required.";
-    if (Number(purchaseForm.discountTotal || 0) < 0) nextErrors.discountTotal = "Discount cannot be negative.";
-    if (Number(purchaseForm.deliveryFee || 0) < 0) nextErrors.deliveryFee = "Delivery fee cannot be negative.";
-    if (requiresPaymentInfo && Number(purchaseForm.paidAmount || 0) < 0) nextErrors.paidAmount = "Paid amount cannot be negative.";
-    if (purchaseItems.length === 0) nextErrors.items = "Please add at least one purchase item.";
+    if (!purchaseForm.purchaseNo.trim()) nextErrors.purchaseNo = "សូមបញ្ចូលលេខការទិញ។";
+    if (!purchaseForm.supplierId) nextErrors.supplierId = "សូមជ្រើសអ្នកផ្គត់ផ្គង់។";
+    if (!purchaseForm.purchaseDate) nextErrors.purchaseDate = "សូមជ្រើសកាលបរិច្ឆេទទិញ។";
+    if (requiresPaymentInfo && (!purchaseForm.exchangeRateUsed || Number(purchaseForm.exchangeRateUsed) <= 0)) nextErrors.exchangeRateUsed = "អត្រាប្ដូររូបិយប័ណ្ណត្រូវតែធំជាង 0។";
+    if (!purchaseForm.paymentMode) nextErrors.paymentMode = "សូមជ្រើសរបៀបទូទាត់។";
+    if (requiresPaymentInfo && !purchaseForm.paymentStatus) nextErrors.paymentStatus = "សូមជ្រើសស្ថានភាពទូទាត់។";
+    if (!purchaseForm.deliveryOption) nextErrors.deliveryOption = "សូមជ្រើសជម្រើសដឹក។";
+    if (Number(purchaseForm.discountTotal || 0) < 0) nextErrors.discountTotal = "ចំនួនបញ្ចុះតម្លៃមិនអាចតិចជាង 0។";
+    if (Number(purchaseForm.deliveryFee || 0) < 0) nextErrors.deliveryFee = "ថ្លៃដឹកមិនអាចតិចជាង 0។";
+    if (requiresPaymentInfo && Number(purchaseForm.paidAmount || 0) < 0) nextErrors.paidAmount = purchaseForm.paymentMode === "partial_prepaid" ? "ចំនួនបង់មុនមិនអាចតិចជាង 0។" : "ចំនួនបានបង់មិនអាចតិចជាង 0។";
+    if (purchaseItems.length === 0) nextErrors.items = "សូមបន្ថែមទំនិញយ៉ាងហោចណាស់មួយ។";
 
     const totals = calculateCurrencyPreview({
       items: purchaseItems,
       form: purchaseForm,
     });
+    const discountCurrency = String(purchaseForm.discountCurrency || purchaseItems[0]?.inputCurrency || purchaseForm.inputCurrency || "USD").toUpperCase();
+    const discountMax = discountCurrency === "KHR" ? totals.subtotalKhr : totals.subtotalUsd;
+    if ((purchaseForm.discountType || "amount") === "percent" && Number(purchaseForm.discountPercent || 0) > 100) {
+      nextErrors.discountPercent = "ភាគរយបញ្ចុះមិនអាចលើស 100%។";
+    }
+    if ((purchaseForm.discountType || "amount") === "amount" && Number(purchaseForm.discountTotal || 0) > discountMax) {
+      nextErrors.discountTotal = "ចំនួនបញ្ចុះមិនអាចលើសតម្លៃមុនបញ្ចុះ។";
+    }
+    // Same shape as the discount check above — a delivery fee larger than the goods themselves
+    // (e.g. $10,000 delivery on a $160 order) is always a typo, not a real charge.
+    const deliveryFeeCurrency = String(purchaseForm.deliveryFeeCurrency || discountCurrency || "USD").toUpperCase();
+    const deliveryFeeMax = deliveryFeeCurrency === "KHR" ? totals.subtotalKhr : totals.subtotalUsd;
+    if (Number(purchaseForm.deliveryFee || 0) > deliveryFeeMax) {
+      nextErrors.deliveryFee = "ថ្លៃដឹកមិនអាចលើសតម្លៃទំនិញ។";
+    }
+    // Defense-in-depth alongside PurchaseFormModal's live checkbox-disabling (same pattern as
+    // discount/delivery fee above) — catches a stale supplierCreditBalance at typing time.
+    if (Number(purchaseForm.creditApplied || 0) > getCreditAppliedMaxUsd()) {
+      nextErrors.creditApplied = "ចំនួនកាត់លុយលើកក្រោយ ដែលប្រើ លើសពីកាត់លុយលើកក្រោយ ដែលមាន ឬចំនួននៅសល់ត្រូវបង់នៃការទិញនេះ។";
+    }
+    const paidAmount = Number(purchaseForm.paidAmount || 0);
+    const paidOverTotal =
+      totals.paidAmountUsd > totals.grandTotalUsd + 0.0001 ||
+      totals.paidAmountKhr > totals.grandTotalKhr + 1;
+    const paidCoversTotal =
+      totals.grandTotalUsd > 0 &&
+      (totals.paidAmountUsd >= totals.grandTotalUsd - 0.0001 ||
+        totals.paidAmountKhr >= totals.grandTotalKhr - 1);
 
-    if (
-      requiresPaymentInfo &&
-      purchaseForm.paymentStatus !== "paid" &&
-      (totals.paidAmountUsd > totals.grandTotalUsd + 0.0001 ||
-        totals.paidAmountKhr > totals.grandTotalKhr + 1)
-    ) {
-      nextErrors.paidAmount = "Paid amount cannot exceed grand total.";
+    if (requiresPaymentInfo && purchaseForm.paymentStatus !== "paid" && paidOverTotal) {
+      nextErrors.paidAmount = purchaseForm.paymentMode === "partial_prepaid" ? "ចំនួនបង់មុនមិនអាចលើសតម្លៃសរុប។" : "ចំនួនបានបង់មិនអាចលើសតម្លៃសរុប។";
+    }
+
+    if (purchaseForm.paymentMode === "partial_prepaid" && purchaseForm.paymentStatus === "partial") {
+      if (paidAmount <= 0) {
+        nextErrors.paidAmount = "សូមបញ្ចូលចំនួនបង់មុន។";
+      } else if (!paidOverTotal && paidCoversTotal) {
+        nextErrors.paidAmount = "បើបង់គ្រប់តម្លៃសរុប សូមជ្រើសបង់ប្រាក់ជាមុន។";
+      }
     }
 
     setPurchaseErrors(nextErrors);
@@ -1390,13 +2218,17 @@ export default function Purchases() {
     const supplier = suppliers.find((item) => String(item.id) === String(purchaseForm.supplierId));
     const subtotal = calculateSubtotal(purchaseItems);
     const grandTotal = calculateGrandTotal(purchaseItems, purchaseForm);
+    const totals = calculateCurrencyPreview({
+      items: purchaseItems,
+      form: purchaseForm,
+    });
     const paidAmount =
       purchaseForm.paymentMode === "pay_after_check"
         ? 0
         : purchaseForm.paymentStatus === "paid"
           ? grandTotal
           : Number(purchaseForm.paidAmount || 0);
-    const balanceAmount = calculateBalanceAmount(grandTotal, paidAmount);
+    const balanceAmount = totals.balanceUsd;
     const totalClaimQty = purchaseItems.reduce((total, item) => total + Number(item.claimQty || 0), 0);
 
     let nextStatus = statusOverride || purchaseForm.status;
@@ -1412,6 +2244,8 @@ export default function Purchases() {
     }
 
     const now = new Date().toISOString().slice(0, 10);
+    const purchaseCurrency = purchaseItems[0]?.inputCurrency || purchaseForm.paidCurrency || purchaseForm.inputCurrency || "USD";
+    const usesDeliveryFee = Boolean(purchaseForm.deliveryOption) && purchaseForm.deliveryOption !== "none" && purchaseForm.deliveryOption !== "self_pickup";
 
     return {
       id: selectedPurchase?.id || Date.now(),
@@ -1420,15 +2254,15 @@ export default function Purchases() {
       supplierName: supplier?.name || "",
       createdBy: "Admin",
       purchaseDate: purchaseForm.purchaseDate,
-      inputCurrency: purchaseForm.inputCurrency || "USD",
+      inputCurrency: purchaseCurrency,
       exchangeRateUsed: Number(purchaseForm.exchangeRateUsed || activeExchangeRate || 0),
       paymentMode: purchaseForm.paymentMode,
       paymentStatus: purchaseForm.paymentStatus,
       subtotal,
       discountTotal: Number(purchaseForm.discountTotal || 0),
       deliveryOption: purchaseForm.deliveryOption,
-      deliveryFee: Number(purchaseForm.deliveryFee || 0),
-      deliveryFeeCurrency: purchaseForm.deliveryFeeCurrency,
+      deliveryFee: usesDeliveryFee ? Number(purchaseForm.deliveryFee || 0) : 0,
+      deliveryFeeCurrency: usesDeliveryFee ? purchaseForm.deliveryFeeCurrency : "KHR",
       deliveryPaidBy: purchaseForm.deliveryPaidBy,
       grandTotal,
       paidAmount,
@@ -1454,9 +2288,14 @@ export default function Purchases() {
     });
     const unitCostUsd = Number(item.unitCostUsd ?? item.unitCost ?? converted.unitCostUsd ?? 0);
     const unitCostKhr = Number(item.unitCostKhr ?? converted.unitCostKhr ?? 0);
+    // Same "before anything's been checked, fall back to invoiced qty" rule as
+    // calculateLineTotalsByPaymentMode below (mirrors the backend's resolvePayableQty) — this
+    // local payableQty is only ever used as a last-resort fallback when lineTotals somehow comes
+    // back nullish, but keep it consistent so it isn't a second, differently-wrong source of $0.
+    const hasCheckedQtyForFallback = Number(item.receivedQty || 0) > 0 || Number(item.acceptedQty || 0) > 0 || Number(item.damagedQty || 0) > 0;
     const payableQty =
       paymentMode === "pay_after_check"
-        ? Number(item.acceptedQty || 0)
+        ? (hasCheckedQtyForFallback ? Number(item.acceptedQty || 0) : Number(item.invoicedQty || 0))
         : Number(item.paidQty ?? item.invoicedQty ?? 0);
     const lineTotals = calculateLineTotalsByPaymentMode({
       paymentMode,
@@ -1466,6 +2305,8 @@ export default function Purchases() {
       paidAmount: item.paidAmount,
       invoicedQty: item.invoicedQty,
       acceptedQty: item.acceptedQty,
+      receivedQty: item.receivedQty,
+      damagedQty: item.damagedQty,
       paidQty: item.paidQty ?? item.invoicedQty,
       exchangeRate,
     });
@@ -1484,8 +2325,8 @@ export default function Purchases() {
       input_unit_cost: inputUnitCost,
       unit_cost_usd: unitCostUsd,
       unit_cost_khr: unitCostKhr,
-      line_total_usd: Number(item.lineTotalUsd ?? item.lineTotal ?? lineTotals.lineTotalUsd ?? payableQty * unitCostUsd),
-      line_total_khr: Number(item.lineTotalKhr ?? lineTotals.lineTotalKhr ?? payableQty * unitCostKhr),
+      line_total_usd: Number(lineTotals.lineTotalUsd ?? item.lineTotalUsd ?? item.lineTotal ?? payableQty * unitCostUsd),
+      line_total_khr: Number(lineTotals.lineTotalKhr ?? item.lineTotalKhr ?? payableQty * unitCostKhr),
       expired_date: expiredDate === "-" ? null : expiredDate,
       expiry_date: expiredDate === "-" ? null : expiredDate,
     };
@@ -1493,17 +2334,23 @@ export default function Purchases() {
 
   const buildBackendPurchasePayload = (statusOverride = null) => {
     const localPayload = buildPurchasePayload(statusOverride);
+    const previewForm = {
+      ...purchaseForm,
+      deliveryFee: localPayload.deliveryFee,
+      deliveryFeeCurrency: localPayload.deliveryFeeCurrency,
+    };
     const totals = calculateCurrencyPreview({
       items: purchaseItems,
-      form: purchaseForm,
+      form: previewForm,
     });
     const exchangeRateForApi = Number(purchaseForm.exchangeRateUsed || activeExchangeRate || 0);
+    const purchaseCurrency = purchaseItems[0]?.inputCurrency || purchaseForm.paidCurrency || purchaseForm.inputCurrency || "USD";
 
     return {
       purchase_no: modalMode === "add" ? null : localPayload.purchaseNo,
       supplier_id: localPayload.supplierId,
       purchase_date: localPayload.purchaseDate,
-      input_currency: currencyToApi(purchaseForm.inputCurrency || "USD"),
+      input_currency: currencyToApi(purchaseCurrency),
       exchange_rate_used: exchangeRateForApi > 0 ? exchangeRateForApi : null,
       khr_rounding: purchaseForm.khrRounding || "floor",
       exchange_rate_source: purchaseForm.exchangeRateSource || "manual",
@@ -1513,25 +2360,37 @@ export default function Purchases() {
       status: statusToApi(localPayload.status),
       subtotal_usd: Number(totals.subtotalUsd || 0),
       subtotal_khr: Number(totals.subtotalKhr || 0),
-      discount_currency: currencyToApi(purchaseForm.discountCurrency || "USD"),
-      discount_amount_input: Number(purchaseForm.discountTotal || 0),
+      discount_currency: currencyToApi(totals.discountInputCurrency || purchaseForm.discountCurrency || "USD"),
+      discount_amount_input: Number(totals.discountInputAmount ?? purchaseForm.discountTotal ?? 0),
       discount_total_usd: Number(totals.discountUsd || 0),
       discount_total_khr: Number(totals.discountKhr || 0),
       delivery_option: normalizeDeliveryOption(localPayload.deliveryOption),
-      delivery_fee_currency: currencyToApi(localPayload.deliveryFeeCurrency || "USD"),
-      delivery_fee_input: Number(purchaseForm.deliveryFee || 0),
+      delivery_fee_currency: currencyToApi(localPayload.deliveryFeeCurrency || "KHR"),
+      delivery_fee_input: Number(localPayload.deliveryFee || 0),
       delivery_fee_usd: Number(totals.deliveryUsd || 0),
       delivery_fee_khr: Number(totals.deliveryKhr || 0),
       delivery_paid_by: normalizeDeliveryPaidBy(localPayload.deliveryPaidBy),
       grand_total_usd: Number(totals.grandTotalUsd || 0),
       grand_total_khr: Number(totals.grandTotalKhr || 0),
       paid_currency: currencyToApi(purchaseForm.paidCurrency || "USD"),
+      // pay_after_check never has money paid upfront — "paid" only becomes meaningful once goods
+      // are checked and a payment is separately recorded, so this must never send the full grand
+      // total as paid regardless of what purchaseForm.paymentStatus happens to hold (that field's
+      // own UI control is hidden entirely during pay_after_check, per PurchaseFormModal.jsx, so it
+      // can carry a stale "paid" value from before the payment mode was set/switched). Matches the
+      // same guard buildPurchasePayload (the local/demo-mode twin of this function) already has.
+      // "paid in full" subtracts creditAppliedUsd/Khr here too — otherwise this would send the
+      // full grand total as cash paid even when part of it was actually covered by supplier
+      // credit (applied separately, right after this purchase is created), overstating how much
+      // cash actually changed hands. Mirrors the same fix in calculateCurrencyPreview.
       paid_amount_input: Number(
-        purchaseForm.paymentStatus === "paid"
-          ? purchaseForm.paidCurrency === "KHR"
-            ? totals.grandTotalKhr
-            : totals.grandTotalUsd
-          : purchaseForm.paidAmount || 0
+        purchaseForm.paymentMode === "pay_after_check"
+          ? purchaseForm.paidAmount || 0
+          : purchaseForm.paymentStatus === "paid"
+            ? purchaseForm.paidCurrency === "KHR"
+              ? Math.max(0, totals.grandTotalKhr - (totals.creditAppliedKhr || 0))
+              : Math.max(0, totals.grandTotalUsd - (totals.creditAppliedUsd || 0))
+            : purchaseForm.paidAmount || 0
       ),
       paid_amount_usd: Number(totals.paidAmountUsd || 0),
       paid_amount_khr: Number(totals.paidAmountKhr || 0),
@@ -1640,7 +2499,36 @@ export default function Purchases() {
 
     if (modalMode === "add") {
       if (purchasesQuery.data) {
-        createPurchaseMutation.mutate(backendPayload);
+        // Captured now (this render's closure) rather than read inside onSuccess later —
+        // the mutation-level onSuccess/closeModal may run against a purchaseForm that's
+        // already been reset by the time this async call actually resolves.
+        // Captured now (this render's closure), same reasoning as the comment above — the
+        // backend independently re-sums each selected row's OWN remaining_usd/khr from the
+        // ledger when applying, so this list of ids is the actual source of truth, not an
+        // amount computed here.
+        const selectedCreditIds = Array.isArray(purchaseForm.selectedCreditIds) ? purchaseForm.selectedCreditIds : [];
+
+        createPurchaseMutation.mutate(backendPayload, {
+          onSuccess: (result) => {
+            const createdPurchaseId = result?.data?.id;
+            if (!createdPurchaseId || selectedCreditIds.length === 0) return;
+
+            applyPurchaseCreditApi({
+              id: createdPurchaseId,
+              payload: { credit_ids: selectedCreditIds },
+            })
+              .then(() => {
+                invalidatePurchaseQueries();
+                queryClient.invalidateQueries({ queryKey: ["supplier-credit-balance"] });
+              })
+              .catch((error) => {
+                notify.error(
+                  "ការទិញបានបង្កើតរួច ប៉ុន្តែអនុវត្តកាត់លុយលើកក្រោយ បរាជ័យ",
+                  getErrorMessage(error)
+                );
+              });
+          },
+        });
         return;
       }
 
@@ -1672,6 +2560,7 @@ export default function Purchases() {
     const hasReplacementStockIn = hasPendingReplacementStockIn(purchase);
     const hasStockedIn = hasAnyStockedInQty(purchase);
     const canOpenInventory =
+      hasReplacementStockIn ||
       (effectiveStatus === STATUS.PENDING_STOCK_IN && (hasRemainingStock || hasReplacementStockIn || purchaseLines.length === 0)) ||
       (effectiveStatus === STATUS.PENDING_CLAIM && hasRemainingStock && !hasStockedIn);
 
@@ -1703,9 +2592,14 @@ export default function Purchases() {
   const isPurchaseAlreadyStocked = (purchase) =>
     purchase?.status === STATUS.RECEIVED || (purchase?.items || []).some((item) => Number(item.stockedInQty || 0) > 0);
 
-  const buildReplacementItemFromPurchaseItem = (purchaseItem, qty, returnItem = null) => {
+  const buildReplacementItemFromPurchaseItem = (purchaseItem, qty, returnItem = null, claimedQtyForLine = null) => {
     const replacementQty = Number(qty || purchaseItem.claimQty || purchaseItem.damagedQty || 0);
     const originalExpiry = formatDateOnly(purchaseItem.expiredDate);
+    // Total originally claimed/damaged for this line vs. how much of that has already been
+    // received in an earlier partial receipt — kept as separate fields so the modal can show
+    // "ខូច 2 / ទទួលរួច 1 / នៅសល់ 1" instead of only the remaining number.
+    const claimedQty = Number(claimedQtyForLine ?? replacementQty);
+    const receivedSoFarQty = Math.max(0, claimedQty - replacementQty);
 
     return {
       purchaseItemId: purchaseItem.id,
@@ -1717,6 +2611,13 @@ export default function Purchases() {
       baseUnit: purchaseItem.baseUnit,
       conversionQty: Number(purchaseItem.conversionQty || 1),
       qty: replacementQty,
+      claimedQty,
+      receivedSoFarQty,
+      // Ceiling for the editable "received this time" qty below — how much of this line is
+      // still outstanding (claimed minus whatever was already received in an earlier partial
+      // receipt). Supplier can send replacements in batches (e.g. out of stock, ships the rest
+      // later), so this must not always default to the full original claim.
+      maxQty: replacementQty,
       baseQty: getReturnItemBaseQty(returnItem || {}) || replacementQty * Number(purchaseItem.conversionQty || 1),
       originalExpiry,
       expiryDate: originalExpiry === "-" ? "" : originalExpiry,
@@ -1741,21 +2642,30 @@ export default function Purchases() {
   };
 
   const buildReplacementItems = (purchase, purchaseReturn) => {
-    const returnItems = getReturnItems(purchaseReturn);
-    const claimItems = (purchase.items || []).filter((item) => Number(item.claimQty || 0) > 0);
-    const fallbackQty = Number(
-      purchaseReturn?.replacement_qty ??
-        purchaseReturn?.replacementQty ??
-        claimItems.reduce((total, item) => total + Number(item.claimQty || 0), 0)
+    // Only this return's REPLACEMENT-type items — a claim can now mix resolution types, so a
+    // refund/credit_note line in the same return must never be offered here.
+    const returnItems = getReturnItems(purchaseReturn).filter(
+      (returnItem) => normalizeReturnResolutionType(returnItem.resolutionType || returnItem.resolution_type) === "replacement"
     );
+    const claimItems = (purchase.items || []).filter((item) => Number(item.claimQty || 0) > 0);
 
-    if (returnItems.length === 0 && fallbackQty > 0) {
+    if (returnItems.length === 0) {
+      // Legacy fallback for old data with no per-item resolution recorded at all.
+      const fallbackQty = Number(
+        purchaseReturn?.replacement_qty ??
+          purchaseReturn?.replacementQty ??
+          claimItems.reduce((total, item) => total + Number(item.claimQty || 0), 0)
+      );
+      const receivedQty = Number(purchaseReturn?.replacementReceivedQty ?? purchaseReturn?.replacement_received_qty ?? 0);
+      const remainingQty = Math.max(0, fallbackQty - receivedQty);
       const purchaseItem = claimItems[0];
-      if (!purchaseItem) return [];
-      return [buildReplacementItemFromPurchaseItem(purchaseItem, fallbackQty)];
+      if (!purchaseItem || remainingQty <= 0) return [];
+      return [buildReplacementItemFromPurchaseItem(purchaseItem, remainingQty, null, fallbackQty)];
     }
 
-    const mappedItems = returnItems
+    // Each return item now tracks its own replacement_received_qty directly (no more implicit
+    // sequential-allocation-by-item-order guessing needed) — read it straight off the item.
+    return returnItems
       .map((returnItem) => {
         const purchaseItemId = getReturnItemPurchaseItemId(returnItem);
         const purchaseItem =
@@ -1763,25 +2673,26 @@ export default function Purchases() {
           (claimItems.length === 1 ? claimItems[0] : null);
         if (!purchaseItem) return null;
 
-        const qty = getReturnItemReplacementQty(returnItem) || Number(purchaseItem.claimQty || 0);
-        return buildReplacementItemFromPurchaseItem(purchaseItem, qty, returnItem);
+        const claimQtyForLine = getReturnItemReplacementQty(returnItem) || Number(purchaseItem.claimQty || 0);
+        const receivedQty = Number(returnItem.replacementReceivedQty ?? returnItem.replacement_received_qty ?? 0);
+        const remainingQty = Math.max(0, claimQtyForLine - receivedQty);
+        if (remainingQty <= 0) return null;
+        return buildReplacementItemFromPurchaseItem(purchaseItem, remainingQty, returnItem, claimQtyForLine);
       })
       .filter(Boolean)
       .filter((item) => Number(item.qty || 0) > 0);
-
-    if (mappedItems.length > 0) return mappedItems;
-
-    if (claimItems.length === 0) return [];
-    if (claimItems.length === 1) {
-      return [buildReplacementItemFromPurchaseItem(claimItems[0], fallbackQty || claimItems[0].claimQty)];
-    }
-
-    return claimItems.map((item) => buildReplacementItemFromPurchaseItem(item, item.claimQty));
   };
 
   const handleReceiveReplacement = async (purchase, purchaseReturn = null) => {
     const detail = await loadPurchaseDetail(purchase);
-    const activeReturn = purchaseReturn || getOpenReplacementClaim(detail) || getOpenReplacementClaim(purchase);
+    // Prefer the freshly-loaded copy of this same return (by id) over whatever reference was
+    // passed in — a stale `purchaseReturn` (e.g. from a list row rendered before the last
+    // partial receipt) would carry an outdated replacementReceivedQty and make
+    // buildReplacementItems re-offer already-received quantity.
+    const freshReturn = purchaseReturn
+      ? (detail.returns || []).find((item) => String(item.id) === String(purchaseReturn.id))
+      : null;
+    const activeReturn = freshReturn || purchaseReturn || getOpenReplacementClaim(detail) || getOpenReplacementClaim(purchase);
     if (!activeReturn) return;
 
     const items = buildReplacementItems(detail, activeReturn);
@@ -1821,6 +2732,8 @@ export default function Purchases() {
       }
       if (Number(item.qty || 0) <= 0) {
         itemErrors[index] = { ...(itemErrors[index] || {}), qty: "ចំនួនជំនួសត្រូវតែធំជាង 0។" };
+      } else if (Number(item.qty) > Number(item.maxQty ?? item.qty)) {
+        itemErrors[index] = { ...(itemErrors[index] || {}), qty: `ចំនួនទទួលមិនអាចលើសចំនួននៅសល់ (${item.maxQty})។` };
       }
     });
 
@@ -1922,6 +2835,11 @@ export default function Purchases() {
         purchase_item_id: item.purchaseItemId,
         lot_no: item.lotNo || null,
         expired_date: formatDateOnly(item.expiryDate) || null,
+        // How much of THIS item is being received this pass — the backend now applies this as an
+        // explicit per-item increment to replacement_received_qty (PurchaseReturnService::
+        // applyReplacementReceipt) instead of inferring it from a return-level aggregate delta.
+        // Omitting this meant every "ទទួលជំនួស" save silently recorded 0 received.
+        qty: Number(item.qty || 0),
       })),
       items: getReturnItems(purchaseReturn).map((returnItem) => {
         const receivedItem = items.find((item) => String(item.returnItemId || "") === String(returnItem.id || ""));
@@ -2009,10 +2927,21 @@ export default function Purchases() {
     closeModal();
   };
 
-  const handleResolveSupplierClaim = (purchase, claim) => {
+  // `item` scopes the modal (and, via handleConfirmMoneyResolution below, the actual resolve
+  // action) to exactly that one item — required once a claim can have several independent
+  // refund/credit_note items paid at different times. Without an explicit item, falls back to
+  // whichever open money item is found first, matching the old whole-claim behavior for legacy
+  // callers/data with only one money item anyway.
+  const handleResolveSupplierClaim = (purchase, claim, item = null) => {
     if (!claim) return;
+    const claimItems = Array.isArray(claim.items) ? claim.items : [];
+    const targetItem = item || claimItems.find((candidate) => {
+      const type = normalizeReturnResolutionType(candidate.resolutionType || candidate.resolution_type);
+      const status = normalizeReturnStatusLabel(candidate.resolutionStatus || candidate.resolution_status);
+      return ["refund", "credit_note"].includes(type) && status !== RETURN_STATUS.COMPLETED && status !== RETURN_STATUS.CANCELLED;
+    });
     setResolveMoneyPurchase(purchase);
-    setResolveMoneyReturn(claim);
+    setResolveMoneyReturn(targetItem ? { ...claim, items: [targetItem] } : claim);
     setResolveMoneyModalOpen(true);
   };
 
@@ -2021,30 +2950,58 @@ export default function Purchases() {
     const purchase = resolveMoneyPurchase;
     if (!claim) return;
 
+    // A claim's return-level resolutionType reads "mixed" once its items don't all share one
+    // type — resolve every one of THIS return's still-open money-type items (refund/credit_note)
+    // individually via item_resolutions, instead of assuming the whole return is one money type.
+    // For the common (non-mixed) case this still resolves the return's one money item exactly as
+    // before.
+    const claimItems = Array.isArray(claim.items) ? claim.items : [];
+    const openMoneyItems = claimItems.filter((item) => {
+      const itemType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type);
+      const itemStatus = normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status);
+      return ["refund", "credit_note"].includes(itemType) && itemStatus !== RETURN_STATUS.COMPLETED && itemStatus !== RETURN_STATUS.CANCELLED;
+    });
+    // Fallback for older data with no per-item resolution recorded: resolve the whole return as
+    // its own single resolutionType, matching the pre-mixed-claim behavior exactly.
     const resolutionType = normalizeReturnResolutionType(claim.resolutionType || claim.resolution_type || "");
     const now = new Date().toISOString().slice(0, 10);
     const isRefund = resolutionType === "refund";
     const isCredit = resolutionType === "credit_note";
 
     const payload = {
-      resolution_type: resolutionType,
-      resolution_status: "resolved",
-      status: "resolved",
-      resolved_at: now,
       note: claim.note || "",
     };
 
-    if (isRefund) {
-      payload.refund_status = "received";
-      payload.refund_amount_usd = Number(claim.refundAmountUsd ?? claim.refund_amount_usd ?? claim.subtotalUsd ?? claim.subtotal ?? 0);
-      payload.refund_amount_khr = Number(claim.refundAmountKhr ?? claim.refund_amount_khr ?? claim.subtotalKhr ?? 0);
-      payload.refunded_at = now;
-    }
+    if (openMoneyItems.length > 0) {
+      payload.item_resolutions = openMoneyItems.map((item) => {
+        const itemType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type);
+        return {
+          id: item.id,
+          resolution_status: "resolved",
+          refund_status: itemType === "refund" ? "received" : undefined,
+          credit_status: itemType === "credit_note" ? "issued" : undefined,
+        };
+      });
+    } else {
+      payload.resolution_type = resolutionType;
+      payload.resolution_status = "resolved";
+      payload.status = "resolved";
+      payload.resolved_at = now;
 
-    if (isCredit) {
-      payload.credit_status = "issued";
-      payload.credit_amount_usd = Number(claim.creditAmountUsd ?? claim.credit_amount_usd ?? claim.subtotalUsd ?? claim.subtotal ?? 0);
-      payload.credit_amount_khr = Number(claim.creditAmountKhr ?? claim.credit_amount_khr ?? claim.subtotalKhr ?? 0);
+      if (isRefund) {
+        const amount = getClampedClaimAmount(claim, "refund");
+        payload.refund_status = "received";
+        payload.refund_amount_usd = amount.usd;
+        payload.refund_amount_khr = amount.khr;
+        payload.refunded_at = now;
+      }
+
+      if (isCredit) {
+        const amount = getClampedClaimAmount(claim, "credit_note");
+        payload.credit_status = "issued";
+        payload.credit_amount_usd = amount.usd;
+        payload.credit_amount_khr = amount.khr;
+      }
     }
 
     setResolveMoneyModalOpen(false);
@@ -2062,14 +3019,18 @@ export default function Purchases() {
               status: RETURN_STATUS.COMPLETED,
               resolutionStatus: "resolved",
               refundStatus: isRefund ? "received" : item.refundStatus,
+              refundAmountUsd: isRefund ? payload.refund_amount_usd : item.refundAmountUsd,
+              refundAmountKhr: isRefund ? payload.refund_amount_khr : item.refundAmountKhr,
               refundedAt: isRefund ? now : item.refundedAt,
               creditStatus: isCredit ? "issued" : item.creditStatus,
+              creditAmountUsd: isCredit ? payload.credit_amount_usd : item.creditAmountUsd,
+              creditAmountKhr: isCredit ? payload.credit_amount_khr : item.creditAmountKhr,
               resolvedAt: now,
             }
           : item
       )
     );
-    notify.success("ការទាមទារ អ្នកផ្គត់ផ្គង់ បានដោះស្រាយ", "ការសង ឬ Credit Note បានកត់ទុកថាបានបញ្ចប់រួចហើយ។");
+    notify.success("ការទាមទារ អ្នកផ្គត់ផ្គង់ បានដោះស្រាយ", "ការសង ឬ កាត់លុយលើកក្រោយ បានកត់ទុកថាបានបញ្ចប់រួចហើយ។");
     closeModal();
   };
 
@@ -2094,10 +3055,20 @@ export default function Purchases() {
     );
   };
 
-  const getAvailableReturnQty = (purchaseItem) => {
-    const alreadyReturnedQty = purchaseReturnItems
+  const getSavedReturnQtyForPurchaseItem = (purchaseItem, purchaseContext = selectedPurchase) => {
+    const relatedReturns = purchaseContext ? getRelatedPurchaseReturns(purchaseContext) : [];
+    return relatedReturns
+      .filter((ret) => ![RETURN_STATUS.CANCELLED, RETURN_STATUS.REJECTED].includes(normalizeReturnStatusLabel(ret.status || ret.resolutionStatus || ret.resolution_status)))
+      .flatMap((ret) => ret.items || ret.purchase_return_items || [])
+      .filter((item) => String(item.purchaseItemId ?? item.purchase_item_id) === String(purchaseItem.id))
+      .reduce((total, item) => total + Number(item.qtyReturned ?? item.qty_returned ?? item.qty ?? 0), 0);
+  };
+
+  const getAvailableReturnQty = (purchaseItem, { purchaseContext = selectedPurchase, draftItems = purchaseReturnItems } = {}) => {
+    const draftReturnedQty = draftItems
       .filter((item) => item.purchaseItemId === purchaseItem.id)
       .reduce((total, item) => total + Number(item.qtyReturned || 0), 0);
+    const alreadyReturnedQty = getSavedReturnQtyForPurchaseItem(purchaseItem, purchaseContext) + draftReturnedQty;
 
     if (Number(purchaseItem.claimQty || 0) > 0) return Math.max(0, Number(purchaseItem.claimQty || 0) - alreadyReturnedQty);
     if (Number(purchaseItem.damagedQty || 0) > 0) return Math.max(0, Number(purchaseItem.damagedQty || 0) - alreadyReturnedQty);
@@ -2112,9 +3083,60 @@ export default function Purchases() {
     return "no_stock_change";
   };
 
-  const normalizeReturnResolutionType = (value = "replacement") => {
+  // Hoisted function declaration (not a const arrow fn): hasPendingReplacementStockIn
+  // calls this during render, before this point in the component body would otherwise
+  // execute — a const/let here is in the temporal dead zone and throws.
+  function normalizeReturnResolutionType(value = "replacement") {
     if (value === "credit") return "credit_note";
     return value || "replacement";
+  }
+
+  const roundCurrency = (value) => Math.round(Number(value || 0) * 100) / 100;
+
+  // Each item in a claim can carry its own resolutionType (mixed refund/credit_note/replacement
+  // in one submission) — settlement is computed per item from that item's own line amount, with a
+  // running "how much of the shared partial_prepaid unpaid balance an earlier item already
+  // consumed" accumulator threaded across items in list order (mirrors the backend's
+  // PurchaseReturnService::calculateMoneySettlement by-ref accumulator, and
+  // PurchaseReturnModal.jsx's own copy of this same logic for live preview). Replacement/none
+  // items never touch the offset pool.
+  const getPerItemSettlements = (purchase = {}, items = []) => {
+    const unpaid = getUnpaidItemAmountBeforeClaim(purchase);
+    const isPartialPrepaid = (purchase.paymentMode || "").toLowerCase() === "partial_prepaid";
+    let offsetUsedUsd = 0;
+    let offsetUsedKhr = 0;
+
+    return items.map((item) => {
+      const resolutionType = normalizeReturnResolutionType(item.resolutionType);
+      const amount = getItemOnlyAmount(item, item.qtyReturned ?? item.qty_returned);
+      const isMoneyType = resolutionType === "refund" || resolutionType === "credit_note";
+
+      // credit_note ALWAYS gets the full claim amount and never touches the shared offset pool
+      // below — its whole point is to become a portable credit for a DIFFERENT, later purchase,
+      // not to offset THIS purchase's own unpaid balance (mirrors
+      // PurchaseReturnService::applyItemSettlement, which only ever runs "refund" through
+      // calculateMoneySettlement — credit_note's credit_amount is always the full line_total).
+      if (!isMoneyType || !isPartialPrepaid || resolutionType === "credit_note") {
+        return {
+          resolutionType,
+          usd: isMoneyType ? roundCurrency(amount.usd) : 0,
+          khr: isMoneyType ? Math.round(amount.khr) : 0,
+        };
+      }
+
+      const remainingUsd = Math.max(unpaid.usd - offsetUsedUsd, 0);
+      const remainingKhr = Math.max(unpaid.khr - offsetUsedKhr, 0);
+      const offsetUsd = Math.min(amount.usd, remainingUsd);
+      const offsetKhr = Math.min(amount.khr, remainingKhr);
+      offsetUsedUsd += offsetUsd;
+      offsetUsedKhr += offsetKhr;
+
+      return {
+        resolutionType,
+        usd: roundCurrency(Math.max(0, amount.usd - offsetUsd)),
+        khr: Math.round(Math.max(0, amount.khr - offsetKhr)),
+      };
+    });
   };
 
   const buildPurchaseReturnItemFromPurchaseItem = (
@@ -2124,9 +3146,12 @@ export default function Purchases() {
       qtyReturned = 0,
       condition = "damaged",
       reason = "",
+      resolutionType = purchaseReturnForm.resolutionType,
+      resolutionStatus = "submitted",
     } = {}
   ) => {
     const qty = Number(qtyReturned || 0);
+    const itemResolutionType = normalizeReturnResolutionType(resolutionType);
     const baseQtyReturned = qty * Number(purchaseItem.conversionQty || 1);
     const unitCostUsd = Number(purchaseItem.unitCostUsd ?? purchaseItem.unitCost ?? 0);
     const unitCostKhr = Number(purchaseItem.unitCostKhr || 0);
@@ -2163,12 +3188,14 @@ export default function Purchases() {
       lineTotal: lineTotalUsd,
       lineTotalUsd,
       lineTotalKhr,
-      replacementQty: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "replacement" ? qty : 0,
+      resolutionType: itemResolutionType,
+      resolutionStatus: resolutionStatus || "submitted",
+      replacementQty: itemResolutionType === "replacement" ? qty : 0,
       replacementReceivedQty: 0,
-      refundAmountUsd: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "refund" ? lineTotalUsd : 0,
-      refundAmountKhr: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "refund" ? lineTotalKhr : 0,
-      creditAmountUsd: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "credit_note" ? lineTotalUsd : 0,
-      creditAmountKhr: normalizeReturnResolutionType(purchaseReturnForm.resolutionType) === "credit_note" ? lineTotalKhr : 0,
+      refundAmountUsd: itemResolutionType === "refund" ? lineTotalUsd : 0,
+      refundAmountKhr: itemResolutionType === "refund" ? lineTotalKhr : 0,
+      creditAmountUsd: itemResolutionType === "credit_note" ? lineTotalUsd : 0,
+      creditAmountKhr: itemResolutionType === "credit_note" ? lineTotalKhr : 0,
       condition,
       stockAction,
       reason: reason || "អ្នកផ្គត់ផ្គង់ claim item.",
@@ -2193,19 +3220,10 @@ export default function Purchases() {
       }
       return next;
     });
-    if (field === "resolutionType") {
-      const nextResolutionType = normalizeReturnResolutionType(value);
-      setPurchaseReturnItems((previous) =>
-        previous.map((item) => ({
-          ...item,
-          replacementQty: nextResolutionType === "replacement" ? Number(item.qtyReturned || 0) : 0,
-          refundAmountUsd: nextResolutionType === "refund" ? Number(item.lineTotalUsd ?? item.lineTotal ?? 0) : 0,
-          refundAmountKhr: nextResolutionType === "refund" ? Number(item.lineTotalKhr || 0) : 0,
-          creditAmountUsd: nextResolutionType === "credit_note" ? Number(item.lineTotalUsd ?? item.lineTotal ?? 0) : 0,
-          creditAmountKhr: nextResolutionType === "credit_note" ? Number(item.lineTotalKhr || 0) : 0,
-        }))
-      );
-    }
+    // No longer overwrites every already-added item's resolution/settlement fields here — each
+    // item now carries its own independent resolutionType (editable inline in the modal), so this
+    // form-level field is only the default applied to the NEXT item added, not a blanket retroactive
+    // change to items already in the draft.
     setPurchaseReturnErrors((previous) => ({ ...previous, [field]: "" }));
   };
 
@@ -2271,6 +3289,8 @@ export default function Purchases() {
       qtyReturned: Number(purchaseReturnItemForm.qtyReturned || 0),
       condition: purchaseReturnItemForm.condition,
       reason: purchaseReturnItemForm.reason.trim(),
+      resolutionType: purchaseReturnItemForm.resolutionType,
+      resolutionStatus: purchaseReturnItemForm.resolutionStatus,
     });
 
     setPurchaseReturnItems((previous) => [...previous, item]);
@@ -2283,7 +3303,9 @@ export default function Purchases() {
     const nextErrors = {};
     if (!purchaseReturnForm.purchaseReturnNo.trim()) nextErrors.purchaseReturnNo = "លេខការត្រឡប់ត្រូវបំពេញ។";
     if (!purchaseReturnForm.returnDate) nextErrors.returnDate = "កាលបរិច្ឆេទត្រឡប់ត្រូវបំពេញ។";
-    if (!purchaseReturnForm.resolutionType) nextErrors.resolutionType = "ប្រភេទដំណោះស្រាយត្រូវជ្រើស។";
+    // No form-level resolutionType check here — each item now carries its own resolutionType
+    // (set via the add-item row, defaulted by emptyPurchaseReturnItemForm), so there's no
+    // corresponding UI field left for a user to fix this error against.
     if (purchaseReturnItems.length === 0) nextErrors.items = "សូមបន្ថែមទំនិញបញ្ហាយ៉ាងហោចណាស់មួយ។";
     setPurchaseReturnErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -2293,8 +3315,19 @@ export default function Purchases() {
     if (!selectedPurchase || !validatePurchaseReturnForm()) return;
 
     const now = new Date().toISOString().slice(0, 10);
-    const subtotal = purchaseReturnItems.reduce((total, item) => total + Number(item.lineTotal || 0), 0);
-    const subtotalKhr = purchaseReturnItems.reduce((total, item) => total + Number(item.lineTotalKhr || 0), 0);
+    // Each item resolves independently — settlements[i] lines up with purchaseReturnItems[i].
+    const itemSettlements = getPerItemSettlements(selectedPurchase, purchaseReturnItems);
+    const subtotal = roundCurrency(itemSettlements.reduce((total, s) => total + s.usd, 0));
+    const subtotalKhr = Math.round(itemSettlements.reduce((total, s) => total + s.khr, 0));
+    // Return-level resolutionType is only a best-effort hint now — the server derives the real
+    // rollup (single type, or "mixed") from each item's own resolutionType.
+    const distinctTypes = Array.from(new Set(itemSettlements.map((s) => s.resolutionType)));
+    const rollupResolutionType = distinctTypes.length === 1 ? distinctTypes[0] : "mixed";
+    // Same idea for return_reason: no form-level "return reason" field anymore, since items can
+    // each have their own condition (one damaged, another expired) — this is just a best-effort
+    // rollup hint for the return-level column.
+    const distinctConditions = Array.from(new Set(purchaseReturnItems.map((item) => item.condition || "damaged")));
+    const rollupReturnReason = distinctConditions.length === 1 ? distinctConditions[0] : "other";
     const newReturnId = Date.now();
 
     const payload = {
@@ -2306,8 +3339,8 @@ export default function Purchases() {
       supplierName: selectedPurchase.supplierName,
       returnDate: purchaseReturnForm.returnDate,
       returnType: purchaseReturnForm.returnType,
-      returnReason: purchaseReturnForm.returnReason,
-      resolutionType: purchaseReturnForm.resolutionType,
+      returnReason: rollupReturnReason,
+      resolutionType: rollupResolutionType,
       resolutionStatus: purchaseReturnForm.resolutionStatus,
       subtotal,
       subtotalUsd: subtotal,
@@ -2318,16 +3351,20 @@ export default function Purchases() {
       createdAt: now,
       updatedAt: now,
       resolvedAt: purchaseReturnForm.status === RETURN_STATUS.COMPLETED ? now : null,
-      items: purchaseReturnItems.map((item) => ({ ...item, purchaseReturnId: newReturnId })),
+      items: purchaseReturnItems.map((item, index) => {
+        const settlement = itemSettlements[index];
+        return {
+          ...item,
+          purchaseReturnId: newReturnId,
+          refundAmountUsd: settlement.resolutionType === "refund" ? settlement.usd : 0,
+          refundAmountKhr: settlement.resolutionType === "refund" ? settlement.khr : 0,
+          creditAmountUsd: settlement.resolutionType === "credit_note" ? settlement.usd : 0,
+          creditAmountKhr: settlement.resolutionType === "credit_note" ? settlement.khr : 0,
+        };
+      }),
     };
 
     if (purchasesQuery.data && !String(selectedPurchase.id).startsWith("local-")) {
-      const resolutionType = normalizeReturnResolutionType(payload.resolutionType);
-      const apiResolutionType = resolutionType;
-      const isRefund = resolutionType === "refund";
-      const isCredit = resolutionType === "credit_note";
-      const isReplacement = resolutionType === "replacement";
-
       createPurchaseReturnMutation.mutate({
         purchase_return_no: null,
         purchase_id: payload.purchaseId,
@@ -2335,7 +3372,9 @@ export default function Purchases() {
         return_date: payload.returnDate,
         return_type: payload.returnType,
         return_reason: payload.returnReason,
-        resolution_type: apiResolutionType,
+        // Return-level resolution_type/resolution_status/settlement totals are a hint only — the
+        // backend recomputes the authoritative rollup from each item's own resolution_type.
+        resolution_type: rollupResolutionType === "mixed" ? "replacement" : rollupResolutionType,
         resolution_status: payload.resolutionStatus,
         status: String(payload.status || RETURN_STATUS.SUBMITTED).toLowerCase().replaceAll(" ", "_"),
         input_currency: currencyToApi(selectedPurchase.inputCurrency || "USD"),
@@ -2345,42 +3384,56 @@ export default function Purchases() {
         subtotal_khr: Number(subtotalKhr || 0),
         total_amount_usd: Number(subtotal || 0),
         total_amount_khr: Number(subtotalKhr || 0),
-        refund_status: isRefund ? "pending" : "none",
-        refund_amount_usd: isRefund ? Number(subtotal || 0) : 0,
-        refund_amount_khr: isRefund ? Number(subtotalKhr || 0) : 0,
-        replacement_qty: isReplacement ? purchaseReturnItems.reduce((total, item) => total + Number(item.qtyReturned || 0), 0) : 0,
-        replacement_received_qty: 0,
-        credit_amount_usd: isCredit ? Number(subtotal || 0) : 0,
-        credit_amount_khr: isCredit ? Number(subtotalKhr || 0) : 0,
-        credit_status: isCredit ? "issued" : "none",
         note: payload.note,
         resolved_at: null,
-        items: purchaseReturnItems.map((item) => ({
-          purchase_item_id: item.purchaseItemId,
-          product_variant_unit_id: item.variantUnitId,
-          qty: Number(item.qtyReturned || 0),
-          qty_returned: Number(item.qtyReturned || 0),
-          base_qty: Number(item.baseQtyReturned || 0),
-          base_qty_returned: Number(item.baseQtyReturned || 0),
-          input_currency: currencyToApi(item.inputCurrency || "USD"),
-          input_unit_cost: Number(item.inputUnitCost || item.unitCostUsd || item.unitCost || 0),
-          exchange_rate_used: Number(item.exchangeRateUsed || selectedPurchase.exchangeRateUsed || 0),
-          khr_rounding: item.khrRounding || selectedPurchase.khrRounding || "floor",
-          unit_cost_usd: Number(item.unitCostUsd ?? item.unitCost ?? 0),
-          unit_cost_khr: Number(item.unitCostKhr || 0),
-          line_total_usd: Number(item.lineTotalUsd ?? item.lineTotal ?? 0),
-          line_total_khr: Number(item.lineTotalKhr || 0),
-          replacement_qty: isReplacement ? Number(item.qtyReturned || 0) : 0,
-          replacement_received_qty: Number(item.replacementReceivedQty || 0),
-          refund_amount_usd: isRefund ? Number(item.lineTotalUsd ?? item.lineTotal ?? 0) : 0,
-          refund_amount_khr: isRefund ? Number(item.lineTotalKhr || 0) : 0,
-          credit_amount_usd: isCredit ? Number(item.lineTotalUsd ?? item.lineTotal ?? 0) : 0,
-          credit_amount_khr: isCredit ? Number(item.lineTotalKhr || 0) : 0,
-          condition: item.condition,
-          stock_action: item.stockAction,
-          note: item.reason,
-          reason: item.reason,
-        })),
+        items: purchaseReturnItems.map((item, index) => {
+          const settlement = itemSettlements[index];
+          const isRefund = settlement.resolutionType === "refund";
+          const isCredit = settlement.resolutionType === "credit_note";
+          const isReplacement = settlement.resolutionType === "replacement";
+          // At creation time, a replacement item has no separate "received" action yet to have run —
+          // the ONLY way its own resolutionStatus can already read "resolved" here is if the user
+          // explicitly chose that in the per-item dropdown to mean "the supplier already handed the
+          // replacement over on the spot". Treating that as anything other than "received in full"
+          // left a genuinely inconsistent record (resolution_status: "resolved" but
+          // replacement_received_qty: 0), which then still showed as an open/waiting claim
+          // everywhere despite the user having explicitly marked it done. Checked against THIS
+          // item's own resolutionStatus (per-item now, like resolutionType) — a different item left
+          // at "submitted" must not get its replacement marked received just because some other item
+          // in the same claim was resolved.
+          const itemResolutionStatus = item.resolutionStatus || "submitted";
+          const replacementReceivedImmediately = isReplacement && itemResolutionStatus === "resolved";
+
+          return {
+            purchase_item_id: item.purchaseItemId,
+            product_variant_unit_id: item.variantUnitId,
+            qty: Number(item.qtyReturned || 0),
+            qty_returned: Number(item.qtyReturned || 0),
+            base_qty: Number(item.baseQtyReturned || 0),
+            base_qty_returned: Number(item.baseQtyReturned || 0),
+            input_currency: currencyToApi(item.inputCurrency || "USD"),
+            input_unit_cost: Number(item.inputUnitCost || item.unitCostUsd || item.unitCost || 0),
+            exchange_rate_used: Number(item.exchangeRateUsed || selectedPurchase.exchangeRateUsed || 0),
+            khr_rounding: item.khrRounding || selectedPurchase.khrRounding || "floor",
+            unit_cost_usd: Number(item.unitCostUsd ?? item.unitCost ?? 0),
+            unit_cost_khr: Number(item.unitCostKhr || 0),
+            line_total_usd: Number(item.lineTotalUsd ?? item.lineTotal ?? 0),
+            line_total_khr: Number(item.lineTotalKhr || 0),
+            resolution_type: settlement.resolutionType,
+            resolution_status: itemResolutionStatus,
+            refund_status: isRefund ? "pending" : "none",
+            refund_amount_usd: isRefund ? settlement.usd : 0,
+            refund_amount_khr: isRefund ? settlement.khr : 0,
+            credit_amount_usd: isCredit ? settlement.usd : 0,
+            credit_amount_khr: isCredit ? settlement.khr : 0,
+            credit_status: isCredit ? "issued" : "none",
+            replacement_received_qty: replacementReceivedImmediately ? Number(item.qtyReturned || 0) : 0,
+            condition: item.condition,
+            stock_action: item.stockAction,
+            note: item.reason,
+            reason: item.reason,
+          };
+        }),
       });
       return;
     }
@@ -2401,10 +3454,37 @@ export default function Purchases() {
   return (
     <section className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard theme={theme} title={isDateFiltered ? `ការទិញ${dateFilter === "today" ? "ថ្ងៃនេះ" : dateFilter === "week" ? "អាទិត្យនេះ" : "ខែនេះ"}` : "ការទិញសរុប"} value={fmtUsd(isDateFiltered ? filteredTotalUsd : totalGrandUsd)} subValue={`${isDateFiltered ? filteredCount : totalPurchasesCount} ការទិញ`} subValueColor="text-violet-500" icon={<FiShoppingCart className="text-[34px] text-violet-500" />} iconBg="bg-violet-500/10" />
+        <SummaryCard theme={theme} title={invoiceTotalTitle} value={fmtUsd(isDateFiltered ? filteredTotalUsd : totalGrandUsd)} subValue={`${isDateFiltered ? filteredCount : totalPurchasesCount} ការទិញ`} subValueColor="text-violet-500" icon={<FiShoppingCart className="text-[34px] text-violet-500" />} iconBg="bg-violet-500/10" />
         <SummaryCard theme={theme} title="រង់ចាំទទួល" value={pendingReceiveCount + pendingStockInCount} subValue={pendingReceiveCount > 0 ? `${pendingReceiveCount} រង់ចាំ · ${pendingStockInCount} ស្តុកចូល` : "ទទួលរួចទាំងអស់"} subValueColor={pendingReceiveCount + pendingStockInCount > 0 ? "text-amber-500" : "text-emerald-500"} icon={<FiTruck className="text-[34px] text-blue-500" />} iconBg="bg-blue-500/10" />
         <SummaryCard theme={theme} title="ប្រាក់មិនទាន់បង់" value={fmtUsd(totalOutstandingUsd)} subValue={unpaidCount > 0 ? `${unpaidCount} ការទិញមិនទាន់បង់` : "បានទូទាត់ទាំងអស់"} subValueColor={unpaidCount > 0 ? "text-amber-500" : "text-emerald-500"} icon={<FiCreditCard className="text-[34px] text-amber-500" />} iconBg="bg-amber-500/10" />
         <SummaryCard theme={theme} title="ទាមទារការខូចខាត" value={pendingClaimsCount} subValue={openReturnsCount > 0 ? `${openReturnsCount} ទាមទារនៅសល់` : "ទាមទាររួចរាល់ទាំងអស់"} subValueColor={openReturnsCount > 0 ? "text-red-500" : "text-emerald-500"} icon={<FiRotateCcw className="text-[34px] text-red-500" />} iconBg="bg-red-500/10" />
+      </div>
+
+      <div className={`rounded-2xl border px-4 py-3 shadow-sm ${theme.tableWrap}`}>
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p className="text-sm font-bold">សង្ខេបចំណាយ</p>
+            <p className={`mt-1 text-xs ${theme.muted}`}>ចំណាយពិតដកតែតម្លៃសងដែលដោះស្រាយរួច។</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:min-w-[480px]">
+            <div className={`rounded-xl border px-3 py-2 ${theme.card}`}>
+              <div className="flex items-center gap-2 text-xs font-bold text-red-500">
+                <FiRotateCcw />
+                <span>តម្លៃសង</span>
+              </div>
+              <p className="mt-1 text-base font-black text-red-500">
+                {formatCurrencyPair(summaryClaimDeduction.usd, summaryClaimDeductionKhr)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+              <div className="flex items-center gap-2 text-xs font-bold">
+                <FiDollarSign />
+                <span>ចំណាយពិត</span>
+              </div>
+              <p className="mt-1 text-lg font-black">{formatCurrencyPair(summaryNetUsd, summaryNetKhr)}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── Tab Card ── */}
@@ -2415,7 +3495,7 @@ export default function Purchases() {
           {[
             { key: "orders",   label: "បញ្ជាទិញ",    count: totalPurchasesCount,                        icon: <FiShoppingCart /> },
             { key: "receive",  label: "ទទួលទំនិញ",  count: pendingReceiveCount + pendingStockInCount,   icon: <FiTruck /> },
-            { key: "returns",  label: "ត្រឡប់ទំនិញ", count: openReturnsCount,                           icon: <FiRotateCcw /> },
+            { key: "returns",  label: "ការទាមទារ",   count: openReturnsCount,                           icon: <FiRotateCcw /> },
             { key: "payments", label: "ការទូទាត់",  count: unpaidCount,                                icon: <FiCreditCard /> },
           ].map((tab) => {
             const isAlert = (tab.key === "receive" && pendingReceiveCount + pendingStockInCount > 0)
@@ -2521,13 +3601,16 @@ export default function Purchases() {
             </div>
 
             <div className="hidden xl:block">
-              {purchasesQuery.isLoading ? (
+              {allPurchasesQuery.isLoading ? (
                 <table className="w-full"><tbody><TableLoading theme={theme} colSpan={5} text="រង់ចាំបន្តិច..." /></tbody></table>
               ) : (
                 <PurchaseTable purchases={filteredPurchases} purchaseReturns={purchaseReturns} theme={theme}
                   getEffectivePurchaseStatus={getEffectivePurchaseStatus}
                   getPurchaseProblemLabel={getPurchaseProblemLabel}
+                  getPurchaseStatusBadge={getPurchaseStatusBadge}
                   getClaimRequiredCount={getClaimRequiredCount}
+                  hasUnresolvedClaimDecision={hasUnresolvedClaimDecision}
+                  getOpenSupplierClaim={getOpenSupplierClaim}
                   getDamagedCount={getDamagedCount}
                   getNextActionLabel={getNextActionLabel}
                   getStatusClass={getStatusClass}
@@ -2540,36 +3623,40 @@ export default function Purchases() {
                   handleResolveSupplierClaim={handleResolveSupplierClaim}
                   handleConfirmStockIn={handleConfirmStockIn}
                   handleCancelPurchase={handleCancelPurchase}
+                  onContinuePayment={goToPaymentTab}
                   simplified
                 />
               )}
             </div>
 
             <div className="grid grid-cols-1 gap-4 p-4 xl:hidden">
-              {purchasesQuery.isLoading ? (
+              {allPurchasesQuery.isLoading ? (
                 <table className="w-full"><tbody><TableLoading theme={theme} colSpan={1} text="រង់ចាំបន្តិច..." /></tbody></table>
               ) : filteredPurchases.length === 0 ? (
                 <EmptyState theme={theme} icon={<FiSearch />} title="រកមិនឃើញការទិញ" description="ព្យាយាមប្តូរការស្វែងរក ឬតម្រង។" />
               ) : (
                 filteredPurchases.map((purchase) => (
                   <PurchaseMobileCard key={purchase.id} purchase={purchase} purchaseReturns={purchaseReturns} theme={theme}
-                    effectiveStatus={getEffectivePurchaseStatus(purchase)} problemLabel={getPurchaseProblemLabel(purchase)}
+                    effectiveStatus={getEffectivePurchaseStatus(purchase)}
+                    statusBadge={getPurchaseStatusBadge(purchase)}
+                    problemLabel={getPurchaseStatusBadge(purchase).overrode ? "" : getPurchaseProblemLabel(purchase)}
                     nextActionLabel={getNextActionLabel(purchase)} getStatusClass={getStatusClass} getStatusIcon={getStatusIcon}
                     openViewModal={openViewModal} openEditModal={openEditModal} openReceiveGoodsModal={openReceiveGoodsModal}
                     openPurchaseReturnModal={openPurchaseReturnModal} handleReceiveReplacement={handleReceiveReplacement}
                     handleResolveSupplierClaim={handleResolveSupplierClaim} handleConfirmStockIn={handleConfirmStockIn}
                     handleCancelPurchase={handleCancelPurchase}
+                    onContinuePayment={goToPaymentTab}
                     simplified
                   />
                 ))
               )}
             </div>
 
-            {!purchasesQuery.isLoading && pagination.lastPage > 1 && (
+            {!allPurchasesQuery.isLoading && pagination.lastPage > 1 && (
               <div className="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 dark:border-white/10 md:flex-row md:items-center md:justify-between">
                 <p className={`text-xs ${theme.muted}`}>ទំព័រ {pagination.currentPage} នៃ {pagination.lastPage}</p>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" disabled={page <= 1 || purchasesQuery.isFetching}
+                  <button type="button" disabled={page <= 1}
                     onClick={() => setPage((c) => Math.max(1, c - 1))}
                     className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
                     <FiChevronLeft /> មុន
@@ -2577,13 +3664,13 @@ export default function Purchases() {
                   {pageNumbers.map((item) => item === "..." ? (
                     <span key={item} className={`px-2 text-sm font-semibold ${theme.muted}`}>...</span>
                   ) : (
-                    <button key={item} type="button" disabled={purchasesQuery.isFetching} onClick={() => setPage(item)}
+                    <button key={item} type="button" onClick={() => setPage(item)}
                       className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
                         item === pagination.currentPage ? "bg-red-600 text-white" : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
                       }`}>{item}
                     </button>
                   ))}
-                  <button type="button" disabled={page >= pagination.lastPage || purchasesQuery.isFetching}
+                  <button type="button" disabled={page >= pagination.lastPage}
                     onClick={() => setPage((c) => Math.min(pagination.lastPage, c + 1))}
                     className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
                     បន្ទាប់ <FiChevronRight />
@@ -2597,33 +3684,41 @@ export default function Purchases() {
         {/* ── Receive Tab ── */}
         {activeTab === "receive" && (
           <div className="p-4">
+            {/* Search/count header lives OUTSIDE the loading/empty/results branches below —
+                previously it only rendered inside the "has results" branch, so a search term
+                that matched nothing made the search box itself disappear along with the table,
+                leaving no way to see or clear what was typed. */}
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-3">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                  <FiTruck /> {pendingReceiveCount} រង់ចាំដឹក
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  <FiCheckCircle /> {pendingStockInCount} រួចរាល់ស្តុក
+                </span>
+                {pendingClaimWithStock > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                    <FiAlertTriangle /> {pendingClaimWithStock} រង់ចាំការទាមទារ
+                  </span>
+                )}
+              </div>
+              <div className="relative w-full sm:w-72">
+                <FiSearch className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm ${theme.muted}`} />
+                <input type="text" placeholder="ស្វែងរកលេខការទិញ អ្នកផ្គត់ផ្គង់..."
+                  value={receiveSearchTerm} onChange={(e) => setReceiveSearchTerm(e.target.value)}
+                  className={`h-9 w-full rounded-xl border pl-9 pr-3 text-xs outline-none transition focus:ring-2 ${theme.input}`} />
+              </div>
+            </div>
             {allPurchasesQuery.isLoading ? (
               <table className="w-full"><tbody><TableLoading theme={theme} colSpan={7} text="រង់ចាំបន្តិច..." /></tbody></table>
-            ) : pendingReceiveCount + pendingStockInCount + pendingClaimWithStock === 0 ? (
-              <EmptyState theme={theme} icon={<FiTruck />} title="គ្មានការដឹករង់ចាំ" description="ការទិញទាំងអស់បានទទួលហើយ និងស្តុករួចហើយ។" />
+            ) : receiveFilteredList.length === 0 ? (
+              receiveSearchTerm.trim() ? (
+                <EmptyState theme={theme} icon={<FiSearch />} title={`រកមិនឃើញ "${receiveSearchTerm}"`} description="សាកល្បងស្វែងរកពាក្យផ្សេង ឬលុបចេញដើម្បីមើលទាំងអស់។" />
+              ) : (
+                <EmptyState theme={theme} icon={<FiTruck />} title="គ្មានការដឹករង់ចាំ" description="ការទិញទាំងអស់បានទទួលហើយ និងស្តុករួចហើយ។" />
+              )
             ) : (
               <>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap gap-3">
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
-                      <FiTruck /> {pendingReceiveCount} រង់ចាំដឹក
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                      <FiCheckCircle /> {pendingStockInCount} រួចរាល់ស្តុក
-                    </span>
-                    {pendingClaimWithStock > 0 && (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
-                        <FiAlertTriangle /> {pendingClaimWithStock} រង់ចាំការទាមទារ
-                      </span>
-                    )}
-                  </div>
-                  <div className="relative w-full sm:w-72">
-                    <FiSearch className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm ${theme.muted}`} />
-                    <input type="text" placeholder="ស្វែងរកលេខការទិញ អ្នកផ្គត់ផ្គង់..."
-                      value={receiveSearchTerm} onChange={(e) => setReceiveSearchTerm(e.target.value)}
-                      className={`h-9 w-full rounded-xl border pl-9 pr-3 text-xs outline-none transition focus:ring-2 ${theme.input}`} />
-                  </div>
-                </div>
                 <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
                   <table className="w-full min-w-200 text-sm">
                     <thead className="bg-blue-600 text-white">
@@ -2640,28 +3735,61 @@ export default function Purchases() {
                     <tbody>
                       {receiveFilteredList.length === 0 ? (
                         <tr><td colSpan={7} className={`px-4 py-10 text-center text-sm ${theme.muted}`}>រកមិនឃើញ "{receiveSearchTerm}"</td></tr>
-                      ) : receiveFilteredList.map((purchase) => {
+                      ) : receivePageItems.map((purchase) => {
                           const damagedQty = getDamagedCount(purchase);
                           const itemsCount = purchase.itemsCount || getPurchaseLines(purchase).length;
+                          const paidUsd = Number(purchase.paidAmountUsd ?? purchase.paidAmount ?? 0);
+                          const paidKhr = Number(purchase.paidAmountKhr ?? 0);
+                          const balance = getPurchasePaymentBalance(purchase);
+                          const balanceUsd = balance.usd;
+                          const balanceKhr = balance.khr;
+                          const hasPaymentContext = paidUsd > 0 || paidKhr > 0 || balanceUsd > 0 || balanceKhr > 0;
+                          // "បានបង់មុន" (paid IN ADVANCE) describes WHEN money moved (ahead of receiving),
+                          // not how much — accurate for pure "prepaid" no matter what, since the whole
+                          // amount is always paid upfront there by definition. For pay_after_check it's
+                          // never accurate (money only ever moves via a separate, deliberate ការទូទាត់
+                          // action, after checking, never upfront). For partial_prepaid it's accurate
+                          // ONLY while a balance remains — once fully paid, the remainder was settled via
+                          // a later, separate payment (often after receiving/claims), not "in advance"
+                          // of anything anymore, so it should read the same as a completed payment.
+                          const isPayAfterCheck = purchase.paymentMode === "pay_after_check";
+                          const isPartialPrepaid = purchase.paymentMode === "partial_prepaid";
+                          const isFullyPaid = balanceUsd <= 0.01 && balanceKhr <= 1;
+                          const paidLabel =
+                            (isPayAfterCheck || isPartialPrepaid) && isFullyPaid
+                              ? "បានបង់ប្រាក់ពេញតម្លៃ"
+                              : isPayAfterCheck
+                                ? "បានបង់"
+                                : "បានបង់មុន";
                           return (
                             <tr key={purchase.id} className={`border-t border-zinc-200 dark:border-white/10 ${theme.row}`}>
                               <td className="px-4 py-3 font-semibold">{purchase.purchaseNo}</td>
                               <td className="px-4 py-3">{purchase.supplierName}</td>
                               <td className="px-4 py-3">{purchase.purchaseDate}</td>
-                              <td className="px-4 py-3 font-semibold">{fmtUsd(purchase.grandTotalUsd || 0)}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-semibold">{formatCurrencyPair(purchase.grandTotalUsd || 0, purchase.grandTotalKhr || 0)}</span>
+                                  {hasPaymentContext && paidUsd > 0 && (
+                                    <span className="text-xs font-semibold text-emerald-600">{paidLabel} {formatCurrencyPair(paidUsd, paidKhr)}</span>
+                                  )}
+                                  {hasPaymentContext && balanceUsd > 0 && (
+                                    <span className="text-xs font-semibold text-amber-600">នៅសល់ {formatCurrencyPair(balanceUsd, balanceKhr)}</span>
+                                  )}
+                                </div>
+                              </td>
                               <td className="px-4 py-3">
                                 {(() => {
+                                  // Just the plain damaged count here — the status column already shows a
+                                  // specific badge/sub-line for the claim's own progress, so an extra
+                                  // "· ទាមទារ" suffix here was duplicate info (and inconsistent besides,
+                                  // since claim_qty resets to 0 for resolved refund/credit_note claims but
+                                  // not replacement ones, making this pill's wording depend on claim type
+                                  // for no good reason).
                                   const claimQty = getClaimRequiredCount(purchase);
-                                  const hasBoth = damagedQty > 0 && claimQty > 0;
                                   return (
                                     <div className="flex flex-col gap-1">
                                       <span className={`text-xs ${theme.muted}`}>{itemsCount} មុខទំនិញ</span>
-                                      {hasBoth ? (
-                                        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600">
-                                          <FiAlertTriangle size={9} />
-                                          {damagedQty === claimQty ? `${damagedQty} ខូច · ទាមទារ` : `${damagedQty} ខូច · ${claimQty} ទាមទារ`}
-                                        </span>
-                                      ) : damagedQty > 0 ? (
+                                      {damagedQty > 0 ? (
                                         <span className="inline-flex w-fit items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-500">
                                           <FiAlertTriangle size={9} /> {damagedQty} ខូច
                                         </span>
@@ -2675,10 +3803,161 @@ export default function Purchases() {
                                 })()}
                               </td>
                               <td className="px-4 py-3">
-                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(getEffectivePurchaseStatus(purchase))}`}>
-                                  {getStatusIcon(getEffectivePurchaseStatus(purchase))}
-                                  {STATUS_LABEL[getEffectivePurchaseStatus(purchase)] ?? getEffectivePurchaseStatus(purchase)}
-                                </span>
+                                {(() => {
+                                  const statusBadge = getPurchaseStatusBadge(purchase);
+                                  // Narrower than getPurchaseProblemLabel: this row already has its own separate
+                                  // ខូច/claim pill (previous column) and its own status badge, so only the
+                                  // replacement-progress nuance is worth a sub-line here — the generic claim-count/
+                                  // pending-receive branches would just repeat what's already shown in this row.
+                                  // Skip it entirely when the badge itself already carries that same text.
+                                  const problemLabel = statusBadge.overrode ? "" : getReplacementProgressLabel(purchase);
+                                  // Same "resolved, only stock-in left" case as the Purchases-tab list and
+                                  // the detail view — effectiveStatus has already moved off PENDING_CLAIM by
+                                  // this point, so statusBadge.overrode is false and this text would
+                                  // otherwise show as plain red text under a generic badge instead of the
+                                  // purple pill used everywhere else for it.
+                                  // Broader than "ចាំបញ្ជាក់ស្តុកចូល" alone — also matches the replacement-
+                                  // already-stocked-in fallback label ("ទំនិញជំនួសថ្មីបញ្ជាក់ស្តុកចូលរួចរាល់"),
+                                  // which shares "បញ្ជាក់ស្តុកចូល" but not the leading "ចាំ".
+                                  const isPendingStockInAfterResolution = !statusBadge.overrode && problemLabel.includes("បញ្ជាក់ស្តុកចូល");
+                                  // A still-open claim (money or replacement) is about a DIFFERENT product
+                                  // line than the accepted/usable portion of this same purchase — that
+                                  // usable portion can independently still be waiting on its own stock-in
+                                  // confirmation the whole time, but problemLabel is forced to "" whenever
+                                  // statusBadge.overrode is true (the claim badge already "wins" the slot),
+                                  // so this fact was going unmentioned here entirely.
+                                  // A THIRD case, distinct from both above: no claim exists at all yet
+                                  // (statusBadge shows the plain "រង់ចាំការទាមទារ" status label, problemLabel
+                                  // is "" since getReplacementProgressLabel has nothing to report) — the
+                                  // accepted/usable portion can still independently be waiting on its own
+                                  // stock-in confirmation even before any claim gets created for the damaged
+                                  // portion. Same as the Purchases-tab list's own equivalent fix.
+                                  const effectiveStatus = getEffectivePurchaseStatus(purchase);
+                                  const hasSeparatePendingStockIn =
+                                    (statusBadge.overrode || effectiveStatus === STATUS.PENDING_CLAIM) &&
+                                    !isPendingStockInAfterResolution &&
+                                    hasRemainingStockInQty(purchase);
+                                  // Mirror of the above for the opposite, equally common case: the
+                                  // accepted/usable portion has ALREADY been stocked in while a claim for
+                                  // a DIFFERENT item (or a claim that genuinely still needs creating —
+                                  // e.g. prepaid, which never gets partial_prepaid's silent-absorption
+                                  // shortcut, so it stays at PENDING_CLAIM for as long as unclaimed damage
+                                  // exists) is still outstanding. Without this, confirming stock-in here
+                                  // left no visible trace at all once done, while the main badge still
+                                  // correctly (and separately) says "រង់ចាំការទាមទារ" for the claim side.
+                                  // Not payment-mode-gated — same general fact regardless of mode.
+                                  const hasSeparateStockConfirmed =
+                                    (statusBadge.overrode || effectiveStatus === STATUS.PENDING_CLAIM) &&
+                                    !isPendingStockInAfterResolution &&
+                                    !hasRemainingStockInQty(purchase) &&
+                                    getPurchaseLines(purchase).some((line) => Number(line.acceptedQty ?? line.accepted_qty ?? 0) > 0);
+                                  // The claim-create button below (getClaimRequiredCount > 0 &&
+                                  // !hasUnresolvedClaimDecision) stays clickable even once the purchase
+                                  // reaches RECEIVED — creating a claim now could still mean replacement
+                                  // (which keeps the full remaining balance owed, unlike refund/credit
+                                  // which deducts it — see the confirmed partial_prepaid flows). Once the
+                                  // status badge itself says "done", that live option is easy to forget
+                                  // exists — so this reminder persists for as long as the button does,
+                                  // not just while still PENDING_STOCK_IN like isPartialPrepaidUnclaimedDamage
+                                  // above (whose only job is the label-swap right below, not this pill).
+                                  // Excludes effectiveStatus === PENDING_CLAIM: when the damage value
+                                  // exceeds the unpaid balance, isSupplierClaimNeeded does NOT take the
+                                  // silent-absorption shortcut, so this purchase genuinely stays at
+                                  // PENDING_CLAIM and the main status badge itself already reads plain
+                                  // "រង់ចាំការទាមទារ" — stacking this pill on top of that repeated the
+                                  // exact same text twice.
+                                  const hasClaimableDamageForPartialPrepaid =
+                                    purchase.paymentMode === "partial_prepaid" &&
+                                    effectiveStatus !== STATUS.PENDING_CLAIM &&
+                                    getClaimRequiredCount(purchase) > 0 &&
+                                    !hasUnresolvedClaimDecision(purchase);
+                                  // Broader sibling of the above: a claim CREATED after this purchase
+                                  // already reached RECEIVED doesn't roll purchase.status back to
+                                  // Pending Claim, so statusBadge.overrode never becomes true here either
+                                  // — without this, the badge would keep reading the plain "ស្តុកចូលរួច
+                                  // រាល់អស់" ("fully done") for as long as that claim sits open/
+                                  // unresolved, or a resolved replacement hasn't actually been received/
+                                  // stocked yet. getOpenSupplierClaim already covers both those claim-
+                                  // exists sub-states correctly (unlike claim_qty, which doesn't reliably
+                                  // reset for replacement claims — see the confirmed partial_prepaid
+                                  // flows notes).
+                                  const hasOutstandingDamageFollowUpForPartialPrepaid =
+                                    purchase.paymentMode === "partial_prepaid" &&
+                                    !statusBadge.overrode &&
+                                    (hasClaimableDamageForPartialPrepaid || Boolean(getOpenSupplierClaim(purchase)));
+                                  // Confirming stock-in can move purchase.status all the way to RECEIVED
+                                  // here (no claim was ever required), whose plain label "ស្តុកចូលរួចរាល់អស់"
+                                  // ("fully stocked in / done") overstates it while a claim is still a live
+                                  // option, or open, or a resolved replacement hasn't been received/stocked
+                                  // yet — the damaged units were never actually finalized. Use the same
+                                  // accepted-qty check as the PENDING_STOCK_IN case (this used to only fire
+                                  // there) so every stage before genuine completion reads "usable qty
+                                  // stocked in" instead of a premature "done" — matches PurchaseTable.jsx's
+                                  // hasAcceptedStockConfirmed signal.
+                                  const isPartialPrepaidStockConfirmed =
+                                    hasOutstandingDamageFollowUpForPartialPrepaid &&
+                                    !hasRemainingStockInQty(purchase) &&
+                                    getPurchaseLines(purchase).some((line) => Number(line.acceptedQty ?? line.accepted_qty ?? 0) > 0);
+                                  // Same promotion as isPendingStockInAfterResolution above, for the
+                                  // sibling case where a claim exists but purchase.status stayed at
+                                  // RECEIVED regardless (see hasOutstandingDamageFollowUpForPartialPrepaid's
+                                  // own comment) — getReplacementProgressLabel's text (e.g. "រង់ចាំដំណោះ
+                                  // ស្រាយ") would otherwise sit as plain red text below a main badge that
+                                  // already claims "done" (green). Same fix as PurchaseTable.jsx.
+                                  const promoteProblemLabelToPurplePill =
+                                    isPendingStockInAfterResolution || (isPartialPrepaidStockConfirmed && Boolean(problemLabel));
+                                  return (
+                                    <div className="flex flex-col gap-1">
+                                      {hasClaimableDamageForPartialPrepaid && (
+                                        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                                          <FiAlertTriangle /> រង់ចាំការទាមទារ
+                                        </span>
+                                      )}
+                                      {promoteProblemLabelToPurplePill && (
+                                        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-purple-500/10 px-2.5 py-1 text-xs font-semibold text-purple-600 dark:text-purple-400">
+                                          {/* The badge right below already reads "រង់ចាំបញ្ជាក់ស្តុកចូលចំនួនប្រើបាន",
+                                              so the money-claim label drops the redundant suffix — but the
+                                              replacement label ("ដោះស្រាយរួច ...") keeps it, since "ដោះស្រាយរួច"
+                                              alone reads as fully done, misleadingly, while stock-in is still
+                                              outstanding. */}
+                                          <FiCheckCircle />{" "}
+                                          {problemLabel.startsWith("ដោះស្រាយរួច") ? problemLabel : problemLabel.replace(/ ចាំបញ្ជាក់ស្តុកចូល$/, "")}
+                                        </span>
+                                      )}
+                                      <span className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                        isPartialPrepaidStockConfirmed ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : statusBadge.className
+                                      }`}>
+                                        {isPartialPrepaidStockConfirmed ? <FiCheckCircle /> : statusBadge.icon}
+                                        {isPartialPrepaidStockConfirmed
+                                          ? "ចំនួនប្រើបានចូលស្តុករួច"
+                                          : isPendingStockInAfterResolution
+                                            ? "រង់ចាំបញ្ជាក់ស្តុកចូលចំនួនប្រើបាន"
+                                            : statusBadge.label}
+                                      </span>
+                                      {hasSeparatePendingStockIn && (
+                                        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                                          <FiClock /> រង់ចាំបញ្ជាក់ស្តុកចូលចំនួនប្រើបាន
+                                        </span>
+                                      )}
+                                      {hasSeparateStockConfirmed && (
+                                        <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                          <FiCheckCircle /> ចំនួនប្រើបានចូលស្តុករួច
+                                        </span>
+                                      )}
+                                      {problemLabel && !promoteProblemLabelToPurplePill && (
+                                        <p className={`text-[11px] font-semibold ${
+                                          problemLabel.includes("បានដោះស្រាយ")
+                                            ? "text-emerald-500"
+                                            : problemLabel.includes("រង់ចាំបញ្ចូលស្តុក")
+                                              ? "text-blue-500"
+                                              : "text-red-500"
+                                        }`}>
+                                          {problemLabel}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center justify-center gap-2">
@@ -2690,7 +3969,11 @@ export default function Purchases() {
                                       </button>
                                     </Tooltip>
                                   )}
-                                  {getEffectivePurchaseStatus(purchase) === STATUS.PENDING_STOCK_IN && purchase.status !== STATUS.PENDING_CLAIM && (
+                                  {((getEffectivePurchaseStatus(purchase) === STATUS.PENDING_STOCK_IN && purchase.status !== STATUS.PENDING_CLAIM) ||
+                                    (purchase.status === STATUS.PENDING_CLAIM && (hasRemainingStockInQty(purchase) && !hasAnyStockedInQty(purchase))) ||
+                                    // Replacement goods can be received without being stocked in yet, even after the
+                                    // overall purchase status has already moved on to RECEIVED — keep this reachable.
+                                    hasPendingReplacementStockIn(purchase)) && (
                                     <Tooltip label="បញ្ជាក់ស្តុកចូល">
                                       <button type="button" onClick={() => handleConfirmStockIn(purchase)}
                                         className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm}`}>
@@ -2698,25 +3981,28 @@ export default function Purchases() {
                                       </button>
                                     </Tooltip>
                                   )}
-                                  {purchase.status === STATUS.PENDING_CLAIM && (
-                                    <>
-                                      {((hasRemainingStockInQty(purchase) && !hasAnyStockedInQty(purchase)) || hasPendingReplacementStockIn(purchase)) && (
-                                        <Tooltip label="បញ្ជាក់ស្តុកចូល">
-                                          <button type="button" onClick={() => handleConfirmStockIn(purchase)}
-                                            className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm}`}>
-                                            <FiCheckCircle size={17} />
-                                          </button>
-                                        </Tooltip>
-                                      )}
-                                      {getClaimRequiredCount(purchase) > 0 && !getOpenSupplierClaim(purchase) && !hasResolvedSupplierClaim(purchase) && (
-                                        <Tooltip label="បង្កើតការទាមទារ">
-                                          <button type="button" onClick={() => openPurchaseReturnModal(purchase)}
-                                            className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.claim}`}>
-                                            <FiRotateCcw size={17} />
-                                          </button>
-                                        </Tooltip>
-                                      )}
-                                    </>
+                                  {/* Don't also require !hasResolvedSupplierClaim — a purchase can have several
+                                      claims over its lifetime (one per damaged item/batch), so an earlier claim
+                                      already being resolved must not permanently hide this button while another
+                                      item still genuinely needs its own separate claim. Use hasUnresolvedClaimDecision
+                                      (not getOpenSupplierClaim) so a resolved-but-not-yet-stocked-in replacement
+                                      claim on item A doesn't block starting a fresh claim for item B — those are
+                                      unrelated once the decision itself is made. */}
+                                  {getClaimRequiredCount(purchase) > 0 && !hasUnresolvedClaimDecision(purchase) && (
+                                    <Tooltip label="បង្កើតការទាមទារ">
+                                      <button type="button" onClick={() => openPurchaseReturnModal(purchase)}
+                                        className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.claim}`}>
+                                        <FiRotateCcw size={17} />
+                                      </button>
+                                    </Tooltip>
+                                  )}
+                                  {shouldShowInPaymentFlow(purchase) && isPaymentReady(purchase) && (
+                                    <Tooltip label="ទៅការទូទាត់">
+                                      <button type="button" onClick={() => goToPaymentTab(purchase)}
+                                        className={`${PURCHASE_ACTION_ICON_CLASS} bg-gradient-to-b from-cyan-500 to-blue-600 shadow-blue-600/20 hover:from-cyan-600 hover:to-blue-700 hover:shadow-blue-600/25 focus:ring-blue-500/20`}>
+                                        <FiArrowRightCircle size={17} />
+                                      </button>
+                                    </Tooltip>
                                   )}
                                   <Tooltip label="មើលការទិញ">
                                     <button type="button" onClick={() => openViewModal(purchase)}
@@ -2732,6 +4018,7 @@ export default function Purchases() {
                     </tbody>
                   </table>
                 </div>
+                <ListPagination theme={theme} currentPage={receivePage} lastPage={receiveLastPage} onPageChange={setReceivePage} />
               </>
             )}
           </div>
@@ -2828,12 +4115,12 @@ export default function Purchases() {
                             </div>
                             <div className="flex shrink-0 items-center gap-1.5">
                               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getStatusClass(effStatus)}`}>
-                                {effStatus}
+                                {STATUS_LABEL[effStatus] ?? effStatus}
                               </span>
                               {(claimCount > 0 || damagedCount > 0) && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600">
                                   <FiAlertTriangle size={9} />
-                                  {claimCount > 0 ? `${claimCount} claim` : `${damagedCount} damaged`}
+                                  {claimCount > 0 ? `${claimCount} ទាមទារ` : `${damagedCount} ខូច`}
                                 </span>
                               )}
                             </div>
@@ -2868,15 +4155,54 @@ export default function Purchases() {
                     </tr>
                   </thead>
                   <tbody>
-                    {returnFilteredList.map((ret) => {
+                    {returnPageItems.map((ret) => {
                       const retStatus = normalizeReturnStatusLabel(ret.status || ret.resolutionStatus);
-                      const retIsOpen = ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(retStatus);
+                      const retIsIncompleteReplacement = isReplacementClaimIncomplete(ret);
+                      const retIsOpen = ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(retStatus) || retIsIncompleteReplacement;
                       const retPurchase = allPurchases.find((p) => String(p.id) === String(ret.purchaseId));
-                      const isReplacement = ret.resolutionType === "replacement";
-                      const isMoneyClaim = ["refund", "credit_note"].includes(ret.resolutionType);
+                      const retItems = Array.isArray(ret.items) ? ret.items : [];
+                      // Gate on THIS return's own items, not the return-level rollup's resolutionType —
+                      // a mixed claim's rollup type reads "mixed", which never equals "replacement" or
+                      // ["refund","credit_note"] on its own and used to hide every action button below.
+                      const hasReplacementItem = retItems.length > 0
+                        ? retItems.some((item) => normalizeReturnResolutionType(item.resolutionType || item.resolution_type) === "replacement")
+                        : ret.resolutionType === "replacement";
                       const isExpanded = expandedReturnId === ret.id;
                       const purchaseNo = ret.purchaseNo || retPurchase?.purchaseNo || "-";
-                      const retItems = Array.isArray(ret.items) ? ret.items : [];
+                      // "resolved" only means the supplier agreed to replace — it does not mean the
+                      // goods have physically arrived, so a genuinely-zero received_qty must not be
+                      // treated as "fully received" just because the claim status looks complete.
+                      // Both replacement_received_qty/replacement_stocked_in_qty are already scoped to
+                      // replacement-type items only by the backend rollup (recomputeReturnRollup), so
+                      // they stay correct as-is even for a mixed claim.
+                      const replacementReceivedQty = Number(ret.replacementReceivedQty ?? ret.replacement_received_qty ?? 0);
+                      const replacementStockedInQty = Number(ret.replacementStockedInQty ?? ret.replacement_stocked_in_qty ?? 0);
+                      // Only replacement-type items count toward the claimed replacement qty — summing
+                      // every item regardless of type overcounts as soon as a claim mixes in a
+                      // refund/credit_note item alongside a replacement one.
+                      const claimedReplacementQty = retItems
+                        .filter((item) => normalizeReturnResolutionType(item.resolutionType || item.resolution_type) === "replacement")
+                        .reduce(
+                          (total, item) => total + Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? item.replacement_qty ?? item.replacementQty ?? 0),
+                          0
+                        );
+                      const hasOpenReplacementItem = retItems.length > 0 ? returnHasOpenReplacementItem(ret) : hasReplacementItem;
+                      // Resolving money claims is per-item now — a claim can have two separate
+                      // refund/credit_note items (e.g. two different damaged products) that the
+                      // supplier pays at different times, so one "confirm" click must not always
+                      // mean "resolve everything in this return". When there's exactly one open
+                      // money item, the row-level shortcut button below still resolves it directly
+                      // (no ambiguity, same one click as before); once there are 2+, that shortcut
+                      // hides and each item gets its own confirm action in the expanded row instead.
+                      const openMoneyItemsForRow = retItems.filter((item) => {
+                        const type = normalizeReturnResolutionType(item.resolutionType || item.resolution_type);
+                        const status = normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status);
+                        return ["refund", "credit_note"].includes(type) && status !== RETURN_STATUS.COMPLETED && status !== RETURN_STATUS.CANCELLED;
+                      });
+                      const canReceiveReplacement = retIsOpen && retPurchase && hasOpenReplacementItem && replacementReceivedQty < claimedReplacementQty;
+                      const canStockInReplacement = retPurchase && hasReplacementItem && replacementReceivedQty > replacementStockedInQty;
+                      const retPurchaseHasBalance = retPurchase && hasPurchasePaymentBalance(retPurchase);
+                      const canContinueReturnPayment = hasReplacementItem && retPurchaseHasBalance && isPaymentReady(retPurchase);
                       return (
                         <React.Fragment key={ret.id}>
                           <tr
@@ -2890,15 +4216,66 @@ export default function Purchases() {
                             <td className="px-4 py-3">{purchaseNo}</td>
                             <td className="px-4 py-3">{ret.supplierName || "-"}</td>
                             <td className="px-4 py-3">{ret.returnDate || "-"}</td>
-                            <td className="px-4 py-3">{{ replacement: "ជំនួសទំនិញខូច", refund: "សងប្រាក់", credit_note: "Credit Note" }[ret.resolutionType] ?? (ret.resolutionType || "-")}</td>
+                            <td className="px-4 py-3">{{ replacement: "ជំនួសទំនិញថ្មី", refund: "សងលុយ", credit_note: "កាត់លុយលើវិក្កយបត្រក្រោយ", none: "មិនដោះស្រាយ", mixed: "ចម្រុះ" }[ret.resolutionType] ?? (ret.resolutionType || "-")}</td>
                             <td className="px-4 py-3">
-                              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${getPurchaseReturnStatusClass(retStatus)}`}>
-                                {getPurchaseReturnStatusIcon(retStatus)} {RETURN_STATUS_LABEL[retStatus] ?? retStatus}
-                              </span>
+                              <div className="flex flex-col items-start gap-1.5">
+                                {/* retStatus is "completed" as soon as the supplier agrees to replace — that's the
+                                    resolution *decision*, not physical receipt, so an incomplete replacement gets
+                                    its own styling here instead of falling through to the generic badge below.
+                                    Once the full claimed qty has actually been received, this reads as done
+                                    ("ដោះស្រាយរួច") even if the stock-in step (separate action button) hasn't run
+                                    yet. Always just "រង់ចាំដំណោះស្រាយ" while still open, whether nothing or only
+                                    part has been received — the adjacent "N ខូច · សង M" pill already spells out
+                                    the exact quantities, so a separate "សល់ N ទៀត" wording here was redundant. */}
+                                {retIsIncompleteReplacement ? (
+                                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                    !canReceiveReplacement
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                      : "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                                  }`}>
+                                    {!canReceiveReplacement ? <FiCheckCircle /> : <FiClock />}
+                                    {canReceiveReplacement ? "រង់ចាំដំណោះស្រាយ" : "ដោះស្រាយរួច"}
+                                  </span>
+                                ) : (
+                                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${getPurchaseReturnStatusClass(retStatus)}`}>
+                                    {getPurchaseReturnStatusIcon(retStatus)} {RETURN_STATUS_LABEL[retStatus] ?? retStatus}
+                                  </span>
+                                )}
+                                {/* Same "N ខូច · សង M" breakdown as the Purchases tab's own pill, scoped to just
+                                    THIS return's own items (qty is the return item's own claimed qty, which unlike
+                                    claim_qty on the purchase item never resets) — resolvedQty counts actual progress
+                                    per item: a replacement item's own replacement_received_qty (partial receipt counts
+                                    immediately, not gated on resolution_status reaching "resolved" only once the FULL
+                                    claimed qty arrives), a money item's full qty once resolved (refund/credit have no
+                                    partial-quantity concept of their own, only submitted vs resolved). */}
+                                {(() => {
+                                  const totalDamagedQty = retItems.reduce(
+                                    (total, item) => total + Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? 0),
+                                    0
+                                  );
+                                  const resolvedQty = retItems.reduce((total, item) => {
+                                    const qty = Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? 0);
+                                    const itemType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type);
+                                    if (itemType === "replacement") {
+                                      const receivedQty = Number(item.replacementReceivedQty ?? item.replacement_received_qty ?? 0);
+                                      return total + Math.min(qty, receivedQty);
+                                    }
+                                    const itemStatus = normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status);
+                                    return itemStatus === RETURN_STATUS.COMPLETED ? total + qty : total;
+                                  }, 0);
+                                  if (totalDamagedQty <= 0) return null;
+                                  return (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-500">
+                                      <FiAlertTriangle size={10} /> {totalDamagedQty} ខូច
+                                      {resolvedQty > 0 && <span className="text-emerald-500">{" "}· សង {resolvedQty}</span>}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             </td>
                             <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-2">
-                                {retIsOpen && retPurchase && isReplacement && (
+                                {canReceiveReplacement && (
                                   <Tooltip label="ទទួលជំនួស">
                                     <button type="button" onClick={() => handleReceiveReplacement(retPurchase, ret)}
                                       className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.receive}`}>
@@ -2906,9 +4283,32 @@ export default function Purchases() {
                                     </button>
                                   </Tooltip>
                                 )}
-                                {retIsOpen && retPurchase && isMoneyClaim && (
-                                  <Tooltip label={ret.resolutionType === "refund" ? "កត់ការសងបានទទួល" : "ដោះស្រាយ Credit Note"}>
-                                    <button type="button" onClick={() => handleResolveSupplierClaim(retPurchase, ret)}
+                                {canStockInReplacement && (
+                                  <Tooltip label="បញ្ចូលក្នុងស្តុក">
+                                    <button type="button" onClick={() => handleConfirmStockIn(retPurchase)}
+                                      className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm}`}>
+                                      <FiCheckCircle size={17} />
+                                    </button>
+                                  </Tooltip>
+                                )}
+                                {canContinueReturnPayment && (
+                                  <Tooltip label="ទៅបង់ប្រាក់នៅសល់">
+                                    <button type="button" onClick={() => goToPaymentTab(retPurchase)}
+                                      className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.payment}`}>
+                                      <FiArrowRightCircle size={17} />
+                                    </button>
+                                  </Tooltip>
+                                )}
+                                {/* Only the unambiguous case: exactly one open money item, so this
+                                    shortcut resolves precisely that one item with no guesswork. With
+                                    2+ open money items, this hides — expand the row and use each
+                                    item's own confirm button instead (see the items table below). */}
+                                {retPurchase && openMoneyItemsForRow.length === 1 && (
+                                  <Tooltip label={
+                                    normalizeReturnResolutionType(openMoneyItemsForRow[0].resolutionType || openMoneyItemsForRow[0].resolution_type) === "refund"
+                                      ? "ប្រាក់ត្រូវបានសង" : "ដោះស្រាយកាត់លុយលើកក្រោយ"
+                                  }>
+                                    <button type="button" onClick={() => handleResolveSupplierClaim(retPurchase, ret, openMoneyItemsForRow[0])}
                                       className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm}`}>
                                       <FiCheckCircle size={17} />
                                     </button>
@@ -2956,8 +4356,9 @@ export default function Purchases() {
                                         <tr className={`text-left ${theme.muted} border-b border-zinc-200 dark:border-white/10`}>
                                           <th className="pb-2 font-semibold pr-4">ផលិតផល</th>
                                           <th className="pb-2 font-semibold pr-4">ចំនួនត្រឡប់</th>
-                                          <th className="pb-2 font-semibold pr-4">លក្ខខណ្ឌ</th>
-                                          <th className="pb-2 font-semibold">វឌ្ឍនភាពដំណោះស្រាយ</th>
+                                          <th className="pb-2 font-semibold pr-4">មូលហេតុ</th>
+                                          <th className="pb-2 font-semibold pr-4">ស្ថានភាព</th>
+                                          <th className="pb-2 font-semibold">សកម្មភាព</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -2966,13 +4367,42 @@ export default function Purchases() {
                                           const unit = item.unit_name || item.unitName || "";
                                           const qty = Number(item.qty_returned || item.qtyReturned || item.qty || 0);
                                           const condition = formatCondition(item.condition);
-                                          const resDetail = getReturnItemResolution(item, ret.resolutionType, ret);
+                                          // Each item carries its own resolution type in a mixed claim — the
+                                          // return-level ret.resolutionType reads "mixed" and would make every
+                                          // item's detail fall into the same (wrong) branch below.
+                                          const itemResolutionType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type) || ret.resolutionType;
+                                          const resDetail = getReturnItemResolution(item, itemResolutionType, ret);
+                                          // Confirm action lives per item here once a claim has 2+ open money
+                                          // items (the row-level shortcut only covers the unambiguous single-item
+                                          // case) — lets the supplier pay for one product now and another later
+                                          // without the "confirm" click accidentally settling both at once.
+                                          const itemStatus = normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status);
+                                          const isOpenMoneyItem =
+                                            ["refund", "credit_note"].includes(itemResolutionType) &&
+                                            itemStatus !== RETURN_STATUS.COMPLETED &&
+                                            itemStatus !== RETURN_STATUS.CANCELLED;
                                           return (
                                             <tr key={idx} className="border-t border-zinc-200/60 dark:border-white/10">
                                               <td className="py-2 pr-4 font-medium">{name}</td>
                                               <td className="py-2 pr-4">{qty} {unit}</td>
                                               <td className="py-2 pr-4">{condition || "-"}</td>
-                                              <td className="py-2">{resDetail}</td>
+                                              <td className="py-2 pr-4">{resDetail}</td>
+                                              <td className="py-2">
+                                                {isOpenMoneyItem && retPurchase && openMoneyItemsForRow.length > 1 && (
+                                                  <Tooltip label={itemResolutionType === "refund" ? "ប្រាក់ត្រូវបានសង" : "ដោះស្រាយកាត់លុយលើកក្រោយ"}>
+                                                    <button
+                                                      type="button"
+                                                      onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        handleResolveSupplierClaim(retPurchase, ret, item);
+                                                      }}
+                                                      className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm} h-8 w-8`}
+                                                    >
+                                                      <FiCheckCircle size={15} />
+                                                    </button>
+                                                  </Tooltip>
+                                                )}
+                                              </td>
                                             </tr>
                                           );
                                         })}
@@ -2992,6 +4422,7 @@ export default function Purchases() {
                 </table>
               </div>
             )}
+            <ListPagination theme={theme} currentPage={returnsPage} lastPage={returnsLastPage} onPageChange={setReturnsPage} />
           </div>
         )}
 
@@ -3070,41 +4501,49 @@ export default function Purchases() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paymentFilteredList.map((purchase) => (
-                      <tr key={purchase.id} className={`border-t border-zinc-200 dark:border-white/10 ${theme.row}`}>
-                        <td className="px-4 py-3 font-semibold">{purchase.purchaseNo}</td>
-                        <td className="px-4 py-3">{purchase.supplierName}</td>
-                        <td className="px-4 py-3">{purchase.purchaseDate || "-"}</td>
-                        <td className="px-4 py-3">{fmtUsd(purchase.grandTotalUsd || 0)}</td>
-                        <td className="px-4 py-3 text-emerald-600 dark:text-emerald-400">{fmtUsd(purchase.paidAmountUsd || 0)}</td>
-                        <td className={`px-4 py-3 font-semibold ${Number(purchase.balanceAmountUsd || 0) > 0 ? "text-amber-500" : "text-emerald-500"}`}>
-                          {fmtUsd(purchase.balanceAmountUsd || 0)}
-                        </td>
-                        <td className="px-4 py-3">{paymentModeOptions.find(o => o.value === purchase.paymentMode)?.label ?? (purchase.paymentMode || "-")}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-center gap-2">
-                            {purchase.paymentStatus !== "paid" && Number(purchase.balanceAmountUsd || 0) > 0 && isPaymentReady(purchase) && (
-                              <Tooltip label="កត់ការទូទាត់">
-                                <button type="button" onClick={() => setRecordPaymentPurchase(purchase)}
-                                  className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm}`}>
-                                  <FiCreditCard size={17} />
+                    {paymentPageItems.map((purchase) => {
+                      const balance = getPurchasePaymentBalance(purchase);
+                      const hasBalance = hasPurchasePaymentBalance(purchase);
+                      return (
+                        <tr key={purchase.id} className={`border-t border-zinc-200 dark:border-white/10 ${theme.row}`}>
+                          <td className="px-4 py-3 font-semibold">{purchase.purchaseNo}</td>
+                          <td className="px-4 py-3">{purchase.supplierName}</td>
+                          <td className="px-4 py-3">{purchase.purchaseDate || "-"}</td>
+                          <td className="px-4 py-3">{fmtUsd(purchase.grandTotalUsd || 0)}</td>
+                          <td className="px-4 py-3 text-emerald-600 dark:text-emerald-400">{fmtUsd(purchase.paidAmountUsd || 0)}</td>
+                          <td className={`px-4 py-3 font-semibold ${hasBalance ? "text-amber-500" : "text-emerald-500"}`}>
+                            {fmtUsd(balance.usd)}
+                          </td>
+                          <td className="px-4 py-3">{paymentModeOptions.find(o => o.value === purchase.paymentMode)?.label ?? (purchase.paymentMode || "-")}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-2">
+                              {hasBalance && isPaymentReady(purchase) && (
+                                <Tooltip label="កត់ការទូទាត់">
+                                  <button
+                                    type="button"
+                                    onClick={async () => setRecordPaymentPurchase(await loadPurchaseDetail(purchase))}
+                                    className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.confirm}`}
+                                  >
+                                    <FiCreditCard size={17} />
+                                  </button>
+                                </Tooltip>
+                              )}
+                              <Tooltip label="មើលការទិញ">
+                                <button type="button" onClick={() => openViewModal(purchase)}
+                                  className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.view}`}>
+                                  <FiEye size={17} />
                                 </button>
                               </Tooltip>
-                            )}
-                            <Tooltip label="មើលការទិញ">
-                              <button type="button" onClick={() => openViewModal(purchase)}
-                                className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.view}`}>
-                                <FiEye size={17} />
-                              </button>
-                            </Tooltip>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
+            <ListPagination theme={theme} currentPage={paymentsPage} lastPage={paymentsLastPage} onPageChange={setPaymentsPage} />
           </div>
         )}
 
@@ -3119,12 +4558,20 @@ export default function Purchases() {
           getStatusClass={getStatusClass}
           getStatusIcon={getStatusIcon}
           effectiveStatus={getEffectivePurchaseStatus(selectedPurchase)}
+          problemLabel={(() => {
+            const label = getPurchaseProblemLabel(selectedPurchase);
+            // This modal's own payment summary already spells out the damaged-unit exclusion in
+            // detail (see hasPayAfterCheckDamage in ViewPurchaseModal.jsx) — the short "N ខូចដកចេញ"
+            // sub-line is only kept in the list/table views, where that detail isn't shown.
+            return /ខូចដកចេញ$/.test(label) ? "" : label;
+          })()}
+          statusBadge={getPurchaseStatusBadge(selectedPurchase)}
           getPurchaseReturnStatusClass={getPurchaseReturnStatusClass}
           getPurchaseReturnStatusIcon={getPurchaseReturnStatusIcon}
           onClose={closeModal}
           onReturn={() => openPurchaseReturnModal(selectedPurchase)}
           onReceiveReplacement={(purchaseReturn) => handleReceiveReplacement(selectedPurchase, purchaseReturn)}
-          onResolveClaim={(purchaseReturn) => handleResolveSupplierClaim(selectedPurchase, purchaseReturn)}
+          onResolveClaim={(purchaseReturn, item) => handleResolveSupplierClaim(selectedPurchase, purchaseReturn, item)}
           onConfirmStockIn={() => handleConfirmStockIn(selectedPurchase)}
           onRecordPayment={() => setRecordPaymentPurchase(selectedPurchase)}
         />
@@ -3156,6 +4603,8 @@ export default function Purchases() {
           onSavePrimary={() => handleSavePurchase(STATUS.PENDING_STOCK_IN)}
           primarySaveLabel={getPrimarySaveLabel()}
           isSaving={createPurchaseMutation.isPending || updatePurchaseMutation.isPending}
+          supplierCreditBalance={modalMode === "add" ? supplierCreditBalance : null}
+          creditAppliedMaxUsd={modalMode === "add" ? getCreditAppliedMaxUsd() : 0}
         />
       )}
 
@@ -3172,6 +4621,11 @@ export default function Purchases() {
           onItemChange={handlePurchaseReturnItemFormChange}
           onAddItem={handleAddPurchaseReturnItem}
           onRemoveItem={(index) => setPurchaseReturnItems((previous) => previous.filter((_, itemIndex) => itemIndex !== index))}
+          onUpdateItemField={(index, field, value) =>
+            setPurchaseReturnItems((previous) =>
+              previous.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item))
+            )
+          }
           getAvailableReturnQty={getAvailableReturnQty}
           onClose={closeModal}
           onSave={handleSavePurchaseReturn}
@@ -3246,4 +4700,40 @@ function getPageNumbers(currentPage, totalPages) {
   }
 
   return [1, "...", current - 1, current, current + 1, "...", total];
+}
+
+// Client-side pagination footer for the ទទួលទំនិញ/ការទាមទារ/ការទូទាត់ tabs, which slice an
+// already-fully-fetched list in memory rather than paginating server-side like the "បញ្ជាទិញ"
+// tab — same visual style as that tab's own footer, just without a fetching/loading state to
+// disable buttons against.
+function ListPagination({ theme, currentPage, lastPage, onPageChange }) {
+  if (lastPage <= 1) return null;
+  const pageNumbers = getPageNumbers(currentPage, lastPage);
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 dark:border-white/10 md:flex-row md:items-center md:justify-between">
+      <p className={`text-xs ${theme.muted}`}>ទំព័រ {currentPage} នៃ {lastPage}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" disabled={currentPage <= 1}
+          onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+          className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+          <FiChevronLeft /> មុន
+        </button>
+        {pageNumbers.map((item) => item === "..." ? (
+          <span key={item} className={`px-2 text-sm font-semibold ${theme.muted}`}>...</span>
+        ) : (
+          <button key={item} type="button" onClick={() => onPageChange(item)}
+            className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition ${
+              item === currentPage ? "bg-red-600 text-white" : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+            }`}>{item}
+          </button>
+        ))}
+        <button type="button" disabled={currentPage >= lastPage}
+          onClick={() => onPageChange(Math.min(lastPage, currentPage + 1))}
+          className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+          បន្ទាប់ <FiChevronRight />
+        </button>
+      </div>
+    </div>
+  );
 }

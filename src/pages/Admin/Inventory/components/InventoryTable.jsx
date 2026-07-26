@@ -103,6 +103,15 @@ export default function InventoryTable({
                   const productMeta = item.category && item.category !== "-" ? item.category : item.productName;
                   const hasPending = Number(pendingStockIn.baseQty || 0) > 0;
                   const nearestExpiry = getNearestExpiryInfo(item.batches);
+                  const convertedCostRows = (item.units || [])
+                    .filter((unit) => Number(unit.conversionQty || 1) > 1)
+                    .sort((a, b) => Number(a.conversionQty || 1) - Number(b.conversionQty || 1))
+                    .slice(0, 2)
+                    .map((unit) => ({
+                      key: unit.id || unit.unitName,
+                      unitName: unit.unitName,
+                      cost: Number(item.unitCostBase || 0) * Number(unit.conversionQty || 1),
+                    }));
 
                   return (
                     <tr key={item.id} className={`border-t transition ${theme.row}`}>
@@ -160,8 +169,24 @@ export default function InventoryTable({
                           {formatUsdTwoDigits(item.unitCostBase)}
                           <span className={`ml-1 text-xs font-normal ${theme.muted}`}>/ {item.baseUnit}</span>
                         </p>
+                        {convertedCostRows.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {convertedCostRows.map((unit) => (
+                              <span
+                                key={unit.key}
+                                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${theme.badge}`}
+                              >
+                                {formatUsdTwoDigits(unit.cost)}
+                                <span className={`ml-1 font-normal ${theme.muted}`}>/ {unit.unitName}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <p className={`mt-0.5 text-xs ${theme.muted}`}>
-                          សរុប: {formatUsdTwoDigits(Number(item.stockBaseQty || 0) * Number(item.unitCostBase || 0))}
+                          សរុប: {formatUsdTwoDigits(
+                            Number(item.stockValueUsd || 0) ||
+                              Number(item.stockBaseQty || 0) * Number(item.unitCostBase || 0)
+                          )}
                         </p>
                       </td>
 

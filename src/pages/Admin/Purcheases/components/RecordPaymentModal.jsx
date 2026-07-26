@@ -8,19 +8,31 @@ export function RecordPaymentModal({ purchase, theme, onClose, onSubmit, isSavin
   const grandTotalKhr = Number(purchase.grandTotalKhr ?? 0);
   const paidUsd = Number(purchase.paidAmountUsd ?? purchase.paidAmount ?? 0);
   const paidKhr = Number(purchase.paidAmountKhr ?? 0);
-  const balanceUsd = Number(purchase.balanceAmountUsd ?? purchase.balanceAmount ?? grandTotalUsd);
-  const balanceKhr = Number(purchase.balanceAmountKhr ?? grandTotalKhr);
+  const hasPreviousPayment = paidUsd > 0 || paidKhr > 0;
+  const rawBalanceUsd = Number(purchase.balanceAmountUsd ?? purchase.balanceAmount ?? 0);
+  const rawBalanceKhr = Number(purchase.balanceAmountKhr ?? 0);
+  const fallbackBalanceUsd = Math.max(0, grandTotalUsd - paidUsd);
+  const fallbackBalanceKhr = Math.max(0, grandTotalKhr - paidKhr);
+  const balanceUsd = rawBalanceUsd > 0 ? rawBalanceUsd : fallbackBalanceUsd;
+  const balanceKhr = rawBalanceKhr > 0 ? rawBalanceKhr : fallbackBalanceKhr;
   const exchangeRate = Number(purchase.exchangeRateUsed || 4000);
+  const initialCurrency = balanceUsd > 0 ? "USD" : "KHR";
+  const initialAmount = balanceUsd > 0 ? balanceUsd : balanceKhr;
 
-  const [currency, setCurrency] = useState("USD");
-  const [amount, setAmount] = useState(String(balanceUsd > 0 ? balanceUsd : grandTotalUsd));
+  const [currency, setCurrency] = useState(initialCurrency);
+  const [amount, setAmount] = useState(String(initialAmount));
   const [error, setError] = useState("");
+  const getMaxAmount = (selectedCurrency = currency) => selectedCurrency === "USD" ? balanceUsd : balanceKhr;
+  const formatMaxAmount = (selectedCurrency = currency) => {
+    const maxAmount = getMaxAmount(selectedCurrency);
+    return selectedCurrency === "USD" ? `$${maxAmount.toFixed(2)}` : `៛${maxAmount.toLocaleString()}`;
+  };
 
   const handlePayInFull = () => {
     if (currency === "USD") {
-      setAmount(String(balanceUsd > 0 ? balanceUsd : grandTotalUsd));
+      setAmount(String(balanceUsd));
     } else {
-      setAmount(String(balanceKhr > 0 ? balanceKhr : grandTotalKhr));
+      setAmount(String(balanceKhr));
     }
     setError("");
   };
@@ -29,10 +41,24 @@ export function RecordPaymentModal({ purchase, theme, onClose, onSubmit, isSavin
     setCurrency(value);
     setError("");
     if (value === "USD") {
-      setAmount(String(balanceUsd > 0 ? balanceUsd : grandTotalUsd));
+      setAmount(String(balanceUsd));
     } else {
-      setAmount(String(balanceKhr > 0 ? balanceKhr : grandTotalKhr));
+      setAmount(String(balanceKhr));
     }
+  };
+
+  const handleAmountChange = (value) => {
+    const numeric = Number(value || 0);
+    const maxAllowed = getMaxAmount();
+
+    if (value !== "" && numeric > maxAllowed) {
+      setAmount(currency === "USD" ? String(maxAllowed.toFixed(2)) : String(Math.floor(maxAllowed)));
+      setError(`ចំនួនបង់មិនអាចលើស ${formatMaxAmount()}។`);
+      return;
+    }
+
+    setAmount(value);
+    setError("");
   };
 
   const handleSubmit = () => {
@@ -41,9 +67,9 @@ export function RecordPaymentModal({ purchase, theme, onClose, onSubmit, isSavin
       setError("ចំនួនត្រូវតែធំជាង 0។");
       return;
     }
-    const maxAllowed = currency === "USD" ? balanceUsd : balanceKhr;
+    const maxAllowed = getMaxAmount();
     if (numeric > maxAllowed) {
-      setError(`ចំនួនមិនអាចលើស${currency === "USD" ? `$${maxAllowed.toFixed(2)}` : `៛${maxAllowed.toLocaleString()}`} (នៅសល់ត្រូវបង់)។`);
+      setError(`ចំនួនបង់មិនអាចលើស ${formatMaxAmount()}។`);
       return;
     }
     onSubmit({
@@ -87,9 +113,9 @@ export function RecordPaymentModal({ purchase, theme, onClose, onSubmit, isSavin
       }
     >
       <div className="space-y-5">
-        <div className="grid grid-cols-3 gap-3">
+        <div className={`grid gap-3 ${hasPreviousPayment ? "grid-cols-3" : "grid-cols-2"}`}>
           <SummaryMiniBox theme={theme} label="តម្លៃសរុប" value={formatCurrencyPair(grandTotalUsd, grandTotalKhr)} strong />
-          <SummaryMiniBox theme={theme} label="បានបង់រួច" value={formatCurrencyPair(paidUsd, paidKhr)} />
+          {hasPreviousPayment && <SummaryMiniBox theme={theme} label="បានបង់ពីមុន" value={formatCurrencyPair(paidUsd, paidKhr)} />}
           <SummaryMiniBox theme={theme} label="នៅសល់ត្រូវបង់" value={formatCurrencyPair(balanceUsd, balanceKhr)} strong colorClass="text-red-500" />
         </div>
 
@@ -111,7 +137,7 @@ export function RecordPaymentModal({ purchase, theme, onClose, onSubmit, isSavin
             required
             type="number"
             value={amount}
-            onChange={(value) => { setAmount(value); setError(""); }}
+            onChange={handleAmountChange}
             theme={theme}
             icon={<FiCreditCard />}
             error={error}
@@ -124,7 +150,7 @@ export function RecordPaymentModal({ purchase, theme, onClose, onSubmit, isSavin
           onClick={handlePayInFull}
           className={`text-sm font-medium underline ${theme.muted} hover:text-emerald-500`}
         >
-          បង់ទាំងស្រុង ({currency === "USD" ? `$${(balanceUsd > 0 ? balanceUsd : grandTotalUsd).toFixed(2)}` : `₭${(balanceKhr > 0 ? balanceKhr : grandTotalKhr).toLocaleString()}`})
+          បង់ទាំងស្រុង ({formatMaxAmount()})
         </button>
       </div>
     </ModalShell>

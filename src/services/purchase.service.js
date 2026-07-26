@@ -153,3 +153,8 @@ export const recordPurchasePaymentApi = async ({ id, payload }) => {
   const response = await api.patch(`/purchases/${id}/record-payment`, payload);
   return response.data;
 };
+
+export const applyPurchaseCreditApi = async ({ id, payload }) => {
+  const response = await api.post(`/purchases/${id}/apply-credit`, payload);
+  return response.data;
+};

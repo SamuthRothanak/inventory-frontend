@@ -7,15 +7,17 @@ const requiredNonNegativeNumber = z.coerce.number().min(0, "មិនអាច�
 
 export const purchaseFormSchema = z
   .object({
-    purchaseNo: z.string().trim().min(1, "Purchase no is required."),
-    supplierId: z.union([z.string().trim().min(1, "អ្នកផ្គត់ផ្គង់ is required."), z.coerce.number().positive("អ្នកផ្គត់ផ្គង់ is required.")]),
-    purchaseDate: z.string().trim().min(1, "Purchase date is required."),
+    purchaseNo: z.string().trim().min(1, "សូមបញ្ចូលលេខការទិញ។"),
+    supplierId: z.union([z.string().trim().min(1, "សូមជ្រើសអ្នកផ្គត់ផ្គង់។"), z.coerce.number().positive("សូមជ្រើសអ្នកផ្គត់ផ្គង់។")]),
+    purchaseDate: z.string().trim().min(1, "សូមជ្រើសកាលបរិច្ឆេទទិញ។"),
     inputCurrency: z.enum(["USD", "KHR"]),
     exchangeRateUsed: optionalNumber,
     paymentMode: z.enum(["pay_after_check", "prepaid", "partial_prepaid"]),
     paymentStatus: z.enum(["unpaid", "partial", "paid"]),
-    status: z.string().trim().min(1, "Status is required."),
+    status: z.string().trim().min(1, "សូមជ្រើសស្ថានភាព។"),
+    discountType: z.enum(["amount", "percent"]).optional(),
     discountTotal: optionalNumber,
+    discountPercent: optionalNumber,
     deliveryFee: optionalNumber,
     paidAmount: optionalNumber,
     discountCurrency: z.enum(["USD", "KHR"]),
@@ -32,7 +34,7 @@ export const purchaseFormSchema = z
       context.addIssue({
         code: "custom",
         path: ["exchangeRateUsed"],
-        message: "Exchange rate must be greater than 0.",
+        message: "អត្រាប្ដូររូបិយប័ណ្ណត្រូវតែធំជាង 0។",
       });
     }
 
@@ -40,7 +42,7 @@ export const purchaseFormSchema = z
       context.addIssue({
         code: "custom",
         path: ["paidAmount"],
-        message: "ចំនួនទឹកប្រាក់បានបង់ចាំបាច់សម្រាប់ការបង់ប្រាក់មួយផ្នែក។",
+        message: "ចំនួនបង់មុនចាំបាច់សម្រាប់ការបង់ជាមុនមួយផ្នែក។",
       });
     }
   });
@@ -70,7 +72,7 @@ export const createPurchaseItemSchema = (paymentMode = "pay_after_check") =>
       const damagedQty = Number(item.damagedQty || 0);
 
       if (receivedQty > invoicedQty) {
-        context.addIssue({ code: "custom", path: ["receivedQty"], message: "ចំនួនទទួលមិនអាចលើសចំនួនកម្មង់។" });
+        context.addIssue({ code: "custom", path: ["receivedQty"], message: "ចំនួនមកដល់មិនអាចលើសចំនួនកម្មង់។" });
       }
       if (acceptedQty > invoicedQty) {
         context.addIssue({ code: "custom", path: ["acceptedQty"], message: "ចំនួនទទួលយកមិនអាចលើសចំនួនកម្មង់។" });
@@ -79,7 +81,7 @@ export const createPurchaseItemSchema = (paymentMode = "pay_after_check") =>
         context.addIssue({ code: "custom", path: ["damagedQty"], message: "ចំនួនទទួលយក + ខូចមិនអាចលើសចំនួនកម្មង់។" });
       }
       if (acceptedQty > receivedQty) {
-        context.addIssue({ code: "custom", path: ["acceptedQty"], message: "ចំនួនទទួលយកមិនអាចលើសចំនួនទទួល។" });
+        context.addIssue({ code: "custom", path: ["acceptedQty"], message: "ចំនួនទទួលយកមិនអាចលើសចំនួនមកដល់។" });
       }
     });
 
@@ -95,13 +97,18 @@ export const emptyPurchaseForm = {
   paymentMode: "pay_after_check",
   paymentStatus: "unpaid",
   discountTotal: 0,
+  discountType: "amount",
+  discountPercent: 0,
   discountCurrency: "USD",
-  deliveryOption: "none",
+  deliveryOption: "",
   deliveryFee: 0,
-  deliveryFeeCurrency: "USD",
+  deliveryFeeCurrency: "KHR",
   deliveryPaidBy: "buyer",
   paidAmount: 0,
   paidCurrency: "USD",
+  creditApplied: 0,
+  creditAppliedCurrency: "USD",
+  selectedCreditIds: [],
   note: "",
   status: STATUS.DRAFT,
 };
@@ -140,5 +147,6 @@ export const emptyPurchaseReturnItemForm = {
   qtyReturned: "",
   condition: "damaged",
   reason: "",
+  resolutionType: "replacement",
+  resolutionStatus: "submitted",
 };
-

@@ -15,12 +15,37 @@ export function formatDateTime(value) {
   }).format(date);
 }
 
+// Raw snake_case DB column names old_values/new_values are keyed by — shown here translated
+// instead of verbatim (e.g. "purchase_no" -> "លេខការទិញ"). Only covers the fields this app's
+// controllers actually log (see the various logFromRequest calls' oldValues/newValues); an
+// unmapped key just falls back to itself rather than showing blank.
+const CHANGE_FIELD_LABELS = {
+  name: "ឈ្មោះ",
+  purchase_no: "លេខការទិញ",
+  sale_no: "លេខការលក់",
+  sale_id: "លេខការលក់",
+  total_amount_usd: "តម្លៃសរុប (USD)",
+  grand_total_usd: "តម្លៃសរុប (USD)",
+  payment_status: "ស្ថានភាពទូទាត់",
+  return_type: "ប្រភេទត្រឡប់",
+};
+
+export function changeFieldLabel(key) {
+  return CHANGE_FIELD_LABELS[key] ?? key;
+}
+
 export function formatJsonPreview(value) {
   if (!value || typeof value !== "object") return "-";
   const keys = Object.keys(value);
   if (!keys.length) return "-";
 
-  return keys.slice(0, 2).join(", ") + (keys.length > 2 ? ` +${keys.length - 2}` : "");
+  const shown = keys.slice(0, 2).map((key) => {
+    const fieldValue = value[key];
+    const displayValue = fieldValue === null || fieldValue === undefined || fieldValue === "" ? "-" : String(fieldValue);
+    return `${changeFieldLabel(key)}: ${displayValue}`;
+  });
+
+  return shown.join(", ") + (keys.length > 2 ? ` +${keys.length - 2}` : "");
 }
 
 export function actionTone(action = "") {
@@ -79,6 +104,24 @@ export function actionLabel(action = "") {
   return ACTION_LABELS[key] ?? action;
 }
 
+// The "ឯកសារ" column used to show the raw internal ref_id (e.g. "#168") right next to the
+// description's own human-readable identifier (e.g. "PUR-20260726-00167") — two different
+// numbering schemes that happen to look alike, inviting the reader to expect them to match when
+// they never do (ref_id is a plain auto-increment counter; purchase_no/sale_no etc. have their
+// own separate, gap-prone sequence). Pull the SAME identifier the description already names
+// instead, so this column and the description agree.
+export function extractRefLabel(description = "") {
+  if (!description) return null;
+
+  const hashMatch = description.match(/#([\w-]+)/);
+  if (hashMatch) return `#${hashMatch[1]}`;
+
+  const quoteMatch = description.match(/"([^"]+)"/);
+  if (quoteMatch) return `"${quoteMatch[1]}"`;
+
+  return null;
+}
+
 export function translateDescription(text = "") {
   if (!text) return "-";
 
@@ -135,6 +178,10 @@ export function translateDescription(text = "") {
   // Payment recorded for Purchase #X
   m = text.match(/^Payment recorded for Purchase #(.+)\.$/i);
   if (m) return `បានកត់ត្រាការទូទាត់សម្រាប់ការទិញ #${m[1]}។`;
+
+  // Supplier credit applied to Purchase #X
+  m = text.match(/^Supplier credit applied to Purchase #(.+)\.$/i);
+  if (m) return `បានអនុវត្តលុយកាត់លើកក្រោយទៅលើការទិញ #${m[1]}។`;
 
   // Stock adjusted for X
   m = text.match(/^Stock adjusted for (.+)\.$/i);

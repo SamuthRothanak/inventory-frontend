@@ -1,14 +1,29 @@
 import React from "react";
 import { FiActivity, FiDatabase, FiMonitor, FiUser, FiX } from "react-icons/fi";
-import { actionLabel, actionTone, formatDateTime, moduleLabel, translateDescription } from "../utils/auditLogFormat";
+import { actionLabel, actionTone, changeFieldLabel, extractRefLabel, formatDateTime, moduleLabel, translateDescription } from "../utils/auditLogFormat";
 
 function JsonPanel({ title, value, isDark }) {
+  const keys = value && typeof value === "object" ? Object.keys(value) : [];
+
   return (
     <div className={`rounded-2xl border p-4 ${isDark ? "border-white/10 bg-[#111113]" : "border-zinc-200 bg-zinc-50"}`}>
       <p className={`mb-3 text-sm font-bold ${isDark ? "text-zinc-300" : "text-zinc-600"}`}>{title}</p>
-      <pre className={`max-h-72 overflow-auto whitespace-pre-wrap text-xs leading-6 ${isDark ? "text-zinc-200" : "text-zinc-700"}`}>
-        {value ? JSON.stringify(value, null, 2) : "-"}
-      </pre>
+      {keys.length === 0 ? (
+        <p className={`text-xs ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>-</p>
+      ) : (
+        <div className="space-y-2 text-xs leading-6">
+          {keys.map((key) => {
+            const fieldValue = value[key];
+            const displayValue = fieldValue === null || fieldValue === undefined || fieldValue === "" ? "-" : String(fieldValue);
+            return (
+              <div key={key} className="flex items-baseline justify-between gap-3">
+                <span className={isDark ? "text-zinc-400" : "text-zinc-500"}>{changeFieldLabel(key)}</span>
+                <span className={`font-semibold ${isDark ? "text-zinc-200" : "text-zinc-700"}`}>{displayValue}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -56,7 +71,7 @@ export default function AuditLogDetailModal({ log, isDark = false, onClose }) {
             <div className={`rounded-2xl border p-4 ${isDark ? "border-white/10 bg-[#202023]" : "border-zinc-200 bg-white"}`}>
               <FiDatabase className="mb-3 text-2xl text-blue-500" />
               <p className={`text-xs font-bold uppercase ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>ឯកសារ</p>
-              <p className="mt-1 font-bold">{log.ref_table || "-"} #{log.ref_id || "-"}</p>
+              <p className="mt-1 font-bold">{log.ref_table || "-"} {extractRefLabel(log.description) || `#${log.ref_id || "-"}`}</p>
             </div>
             <div className={`rounded-2xl border p-4 ${isDark ? "border-white/10 bg-[#202023]" : "border-zinc-200 bg-white"}`}>
               <FiMonitor className="mb-3 text-2xl text-emerald-500" />

@@ -19,6 +19,7 @@ import {
   bulkDeleteSuppliersApi,
   createSupplierApi,
   deleteSupplierApi,
+  getSupplierCreditBalanceApi,
   getSuppliersApi,
   updateSupplierApi,
 } from "../../../services/supplier.service";
@@ -161,6 +162,15 @@ export default function Supplier() {
   const suppliers = useMemo(() => {
     return extractSuppliers(suppliersQuery.data);
   }, [suppliersQuery.data]);
+
+  // Only fetched while the view modal is actually open — no need to know every supplier's
+  // credit balance up front just to render the list/table.
+  const supplierCreditQuery = useQuery({
+    queryKey: ["supplier-credit-balance", selectedSupplier?.id],
+    queryFn: () => getSupplierCreditBalanceApi(selectedSupplier.id),
+    enabled: modalMode === "view" && Boolean(selectedSupplier?.id),
+  });
+  const supplierCreditBalance = supplierCreditQuery.data?.data || null;
 
   const pagination = useMemo(() => {
     return getPaginationMeta(suppliersQuery.data, suppliers.length);
@@ -602,6 +612,8 @@ export default function Supplier() {
           theme={theme}
           onClose={closeModal}
           onEdit={() => openEditModal(selectedSupplier)}
+          creditBalance={supplierCreditBalance}
+          creditBalanceLoading={supplierCreditQuery.isLoading}
         />
       )}
 

@@ -35,10 +35,10 @@ const key = (value) => String(value || "").trim().toLowerCase();
 
 const statusLabel = (value) => ({
   draft: "ព្រាង",
-  pending_receive: "រង់ចាំទទួល",
+  pending_receive: "រង់ចាំទទួលទំនិញ",
   pending_stock_in: "រង់ចាំបញ្ចូលស្តុក",
   pending_claim: "មានបញ្ហា",
-  received: "បានទទួល",
+  received: "ស្តុកចូលរួចរាល់អស់",
   cancelled: "បានបោះបង់",
   canceled: "បានបោះបង់",
 }[key(value)] ?? value ?? "");

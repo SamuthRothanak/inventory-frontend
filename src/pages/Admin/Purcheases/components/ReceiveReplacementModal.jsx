@@ -75,29 +75,62 @@ export function ReceiveReplacementModal({
           icon={<FiPackage />}
           theme={theme}
         >
-          <div className="space-y-3">
+          <div className="space-y-4">
             {items.map((item, index) => (
               <div key={`${item.purchaseItemId}-${index}`} className={`rounded-2xl border p-4 ${theme.softCard}`}>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.9fr_1fr] lg:items-end">
+                {/* Info row — read-only context about this line, at a glance */}
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-200 pb-3 dark:border-white/10">
                   <div>
                     <p className="text-sm font-bold">{item.variantName}</p>
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      ទាមទារ {item.qty} {item.unitName} = {item.baseQty} {item.baseUnit}
+                      ថ្ងៃផុតកំណត់ដើម {formatDateOnly(item.originalExpiry)}
                     </p>
-                    <p className={`mt-1 text-xs ${theme.muted}`}>
-                      ថ្ងៃផុតកំណត់ដើម: {formatDateOnly(item.originalExpiry)}
-                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400">
+                        ខូច/ទាមទារ {item.claimedQty ?? item.maxQty ?? item.qty} {item.unitName}
+                      </span>
+                      {Number(item.receivedSoFarQty) > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                          ទទួលរួច {item.receivedSoFarQty} {item.unitName}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-purple-500/10 px-2 py-0.5 text-xs font-semibold text-purple-600 dark:text-purple-400">
+                        នៅសល់ត្រូវទទួល {item.maxQty ?? item.qty} {item.unitName}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <p className={`text-xs font-semibold ${theme.muted}`}>តម្លៃទាមទារ</p>
-                    <p className="mt-2 text-sm font-semibold">{formatCurrencyPair(item.lineTotalUsd, item.lineTotalKhr)}</p>
+                  <div className="flex items-center gap-4 text-right">
+                    <div>
+                      <p className={`text-xs font-semibold ${theme.muted}`}>តម្លៃទាមទារ</p>
+                      <p className="mt-0.5 text-sm font-semibold">{formatCurrencyPair(item.lineTotalUsd, item.lineTotalKhr)}</p>
+                    </div>
+                    <div>
+                      <p className={`text-xs font-semibold ${theme.muted}`}>ការគ្រប់គ្រង</p>
+                      <p className="mt-0.5 text-sm font-semibold">
+                        {formatDateOnly(item.originalExpiry) === formatDateOnly(item.expiryDate) ? "បញ្ចូលរួម" : "Batch ថ្មី"}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className={`text-xs font-semibold ${theme.muted}`}>ការគ្រប់គ្រង</p>
-                    <p className="mt-2 text-sm font-semibold">
-                      {formatDateOnly(item.originalExpiry) === formatDateOnly(item.expiryDate) ? "បញ្ចូលរួម" : "Batch ថ្មី"}
-                    </p>
-                  </div>
+                </div>
+
+                {/* Action row — what actually needs to be filled in for this receipt */}
+                <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <FormInput
+                    label="ចំនួនទទួលបានលើកនេះ"
+                    type="number"
+                    value={item.qty}
+                    error={errors?.items?.[index]?.qty}
+                    onChange={(value) => {
+                      const maxQty = Number(item.maxQty ?? item.qty ?? 0);
+                      const numericValue = Number(value);
+                      const nextValue = maxQty > 0 && Number.isFinite(numericValue) && numericValue > maxQty ? maxQty : value;
+                      onChangeItem(index, "qty", nextValue);
+                    }}
+                    theme={theme}
+                    icon={<FiPackage />}
+                    decimalPlaces={4}
+                    helper={`អតិបរមា ${item.maxQty ?? item.qty} ${item.unitName}`}
+                  />
                   <FormInput
                     label="លេខ Lot ជំនួស"
                     value={item.lotNo || ""}

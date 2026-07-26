@@ -47,6 +47,9 @@ const hasFileUpload = (payload) => {
   );
 };
 
+const hasPriceRules = (payload) =>
+  (payload?.variants || []).some((variant) => (variant.priceRules || []).length > 0);
+
 const buildSetupPayload = (payload) => ({
   product: {
     name: payload.product?.name,
@@ -131,7 +134,7 @@ const createProductSetupLegacyApi = async (payload) => {
   try {
     const exchangeRateUsed = Number(payload.exchangeRate || 0);
 
-    if (!exchangeRateUsed) {
+    if (hasPriceRules(payload) && !exchangeRateUsed) {
       throw new Error(
         "No active exchange rate found. Please create and activate an exchange rate before saving product prices."
       );
