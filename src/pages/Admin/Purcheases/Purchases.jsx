@@ -37,8 +37,9 @@ import {
   applyPurchaseCreditApi,
   createPurchaseApi,
   createPurchaseReturnApi,
+  getAllPurchaseReturnsApi,
+  getAllPurchasesApi,
   getPurchaseByIdApi,
-  getPurchaseReturnsApi,
   getPurchaseStatsApi,
   getPurchasesApi,
   recordPurchasePaymentApi,
@@ -139,6 +140,8 @@ export default function Purchases() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -211,7 +214,7 @@ export default function Purchases() {
   // one of the client filter criteria the page needs to reset for.
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, statusFilter, paymentStatusFilter, dateFilter, perPage]);
+  }, [searchTerm, statusFilter, paymentStatusFilter, dateFilter, dateFrom, dateTo, perPage]);
 
   useEffect(() => {
     setNewReturnPanelOpen(false);
@@ -252,13 +255,13 @@ export default function Purchases() {
 
   const allPurchasesQuery = useQuery({
     queryKey: ["purchases", "all-unpaginated"],
-    queryFn: () => getPurchasesApi({ per_page: 500 }),
+    queryFn: () => getAllPurchasesApi(),
     staleTime: 1000 * 60,
   });
 
   const purchaseReturnsQuery = useQuery({
     queryKey: ["purchase-returns", "purchase-page"],
-    queryFn: () => getPurchaseReturnsApi({ per_page: 500 }),
+    queryFn: () => getAllPurchaseReturnsApi(),
     staleTime: 1000 * 60,
   });
 
@@ -737,7 +740,10 @@ export default function Purchases() {
         dateFilter === "all" ||
         (dateFilter === "today" && d === todayStr) ||
         (dateFilter === "week" && d >= weekStartStr && d <= todayStr) ||
-        (dateFilter === "month" && d >= monthStartStr && d <= todayStr);
+        (dateFilter === "month" && d >= monthStartStr && d <= todayStr) ||
+        (dateFilter === "custom" &&
+          (!dateFrom || d >= dateFrom) &&
+          (!dateTo || d <= dateTo));
 
       return matchesSearch && matchesStatus && matchesPaymentStatus && matchesDate;
     });
@@ -749,8 +755,15 @@ export default function Purchases() {
   // over allPurchases (already fetched in full for the receive/returns/payments tabs) instead
   // keeps the filter and the badge it's supposed to match in sync.
   const exportPurchases = useMemo(() => {
-    return filterPurchaseList(allPurchases.length > 0 ? allPurchases : purchases);
-  }, [allPurchases, purchases, searchTerm, statusFilter, paymentStatusFilter, dateFilter]);
+    // Attach the effective status here too, not just raw purchase.status — purchaseExport.js
+    // has no access to getEffectivePurchaseStatus's closure (it depends on purchaseReturns
+    // state), so the export's status column would otherwise show a stale value that
+    // contradicts the badge this same filtered list renders on screen.
+    return filterPurchaseList(allPurchases.length > 0 ? allPurchases : purchases).map((purchase) => ({
+      ...purchase,
+      effectiveStatus: getEffectivePurchaseStatus(purchase),
+    }));
+  }, [allPurchases, purchases, searchTerm, statusFilter, paymentStatusFilter, dateFilter, dateFrom, dateTo]);
 
   // Client-side page slice of the same fully-filtered list Export uses.
   const filteredPurchases = useMemo(() => {
@@ -3546,6 +3559,7 @@ export default function Purchases() {
                     { value: "today", label: "ថ្ងៃនេះ" },
                     { value: "week", label: "អាទិត្យនេះ" },
                     { value: "month", label: "ខែនេះ" },
+                    { value: "custom", label: "កំណត់ដោយខ្លួនឯង" },
                   ]} />
                 <FilterSelect value={perPage} setValue={(v) => setPerPage(Number(v))} theme={theme} icon={<FiHash />}
                   options={[10, 25, 50, 100].map((v) => ({ value: v, label: `${v} / ទំព័រ` }))} />
@@ -3557,6 +3571,18 @@ export default function Purchases() {
                 </button>
               </PermissionGate>
             </div>
+            {dateFilter === "custom" && (
+              <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-white/10">
+                <span className={`text-xs font-semibold ${theme.muted}`}>ចាប់ពី</span>
+                <input type="date" value={dateFrom} max={dateTo || undefined}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className={`h-10 rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
+                <span className={`text-xs font-semibold ${theme.muted}`}>ដល់</span>
+                <input type="date" value={dateTo} min={dateFrom || undefined}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className={`h-10 rounded-xl border px-3 text-sm outline-none transition focus:ring-4 ${theme.input}`} />
+              </div>
+            )}
 
             <div className="flex items-center justify-between px-5 py-3">
               <p className={`text-xs ${theme.muted}`}>បង្ហាញ {pagination.from || 0}–{pagination.to || filteredPurchases.length} នៃ {pagination.total || purchases.length} ការទិញ</p>

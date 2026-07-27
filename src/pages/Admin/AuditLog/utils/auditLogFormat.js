@@ -20,6 +20,32 @@ export function formatDateTime(value) {
 // controllers actually log (see the various logFromRequest calls' oldValues/newValues); an
 // unmapped key just falls back to itself rather than showing blank.
 const CHANGE_FIELD_LABELS = {
+  purchase_return_no: "លេខបណ្ណត្រឡប់ទំនិញ",
+  purchase_id: "ការទិញ",
+  purchase_return_id: "បណ្ណត្រឡប់ទំនិញ",
+  product_variant_unit_id: "ផលិតផល / ឯកតា",
+  status: "ស្ថានភាព",
+  payment_mode: "របៀបទូទាត់",
+  grand_total_khr: "តម្លៃសរុប (KHR)",
+  paid_amount_usd: "បានបង់ (USD)",
+  paid_amount_khr: "បានបង់ (KHR)",
+  balance_amount_usd: "នៅខ្វះ (USD)",
+  balance_amount_khr: "នៅខ្វះ (KHR)",
+  invoiced_qty: "ចំនួនក្នុងវិក្កយបត្រ",
+  paid_qty: "ចំនួនបានបង់",
+  received_qty: "ចំនួនបានទទួល",
+  accepted_qty: "ចំនួនបានទទួលយក",
+  stocked_in_qty: "ចំនួនបានបញ្ចូលស្តុក",
+  damaged_qty: "ចំនួនខូច",
+  claim_qty: "ចំនួនទាមទារ",
+  unit_cost_usd: "ថ្លៃដើមឯកតា (USD)",
+  line_total_usd: "តម្លៃជួរ (USD)",
+  return_reason: "មូលហេតុត្រឡប់",
+  resolution_type: "វិធីដោះស្រាយ",
+  resolution_status: "ស្ថានភាពដោះស្រាយ",
+  refund_status: "ស្ថានភាពសងប្រាក់",
+  credit_status: "ស្ថានភាពលុយកាត់លើកក្រោយ",
+  items: "ទំនិញ",
   name: "ឈ្មោះ",
   purchase_no: "លេខការទិញ",
   sale_no: "លេខការលក់",
@@ -34,6 +60,37 @@ export function changeFieldLabel(key) {
   return CHANGE_FIELD_LABELS[key] ?? key;
 }
 
+const AUDIT_VALUE_LABELS = {
+  draft: "ព្រាង",
+  pending: "កំពុងរង់ចាំ",
+  pending_receive: "រង់ចាំទទួល",
+  pending_stock_in: "រង់ចាំបញ្ចូលស្តុក",
+  pending_claim: "រង់ចាំដោះស្រាយការទាមទារ",
+  completed: "បានបញ្ចប់",
+  approved: "បានអនុម័ត",
+  resolved: "បានដោះស្រាយ",
+  cancelled: "បានបោះបង់",
+  paid: "បានបង់រួច",
+  unpaid: "មិនទាន់បង់",
+  partial: "បានបង់ខ្លះ",
+  prepaid: "បង់មុន",
+  partial_prepaid: "បង់មុនខ្លះ",
+  pay_after_check: "បង់ក្រោយពិនិត្យ",
+  replacement: "ប្តូរជំនួស",
+  refund: "សងប្រាក់",
+  credit_note: "លុយកាត់លើកក្រោយ",
+  submitted: "បានដាក់ស្នើ",
+  issued: "បានចេញ",
+  used: "បានប្រើ",
+};
+
+export function formatAuditValue(key, value) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (Array.isArray(value)) return `${value.length} មុខទំនិញ`;
+  if (typeof value === "object") return JSON.stringify(value);
+  return AUDIT_VALUE_LABELS[String(value).toLowerCase()] ?? String(value);
+}
+
 export function formatJsonPreview(value) {
   if (!value || typeof value !== "object") return "-";
   const keys = Object.keys(value);
@@ -41,7 +98,7 @@ export function formatJsonPreview(value) {
 
   const shown = keys.slice(0, 2).map((key) => {
     const fieldValue = value[key];
-    const displayValue = fieldValue === null || fieldValue === undefined || fieldValue === "" ? "-" : String(fieldValue);
+    const displayValue = formatAuditValue(key, fieldValue);
     return `${changeFieldLabel(key)}: ${displayValue}`;
   });
 
@@ -151,6 +208,30 @@ export function translateDescription(text = "") {
   m = text.match(/^Purchase #(.+) deleted\.$/i);
   if (m) return `ការទិញ #${m[1]} បានលុប។`;
 
+  m = text.match(/^Purchase return #(.+) (created|updated|deleted)\.$/i);
+  if (m) {
+    const action = { created: "បានបង្កើត", updated: "បានកែប្រែ", deleted: "បានលុប" }[m[2].toLowerCase()];
+    return `បណ្ណត្រឡប់ទំនិញ #${m[1]} ${action}។`;
+  }
+
+  m = text.match(/^Purchase item #(.+) (created|updated) for Purchase #(.+)\.$/i);
+  if (m) {
+    const action = m[2].toLowerCase() === "created" ? "បានបង្កើត" : "បានកែប្រែ";
+    return `ទំនិញ #${m[1]} ក្នុងការទិញ #${m[3]} ${action}។`;
+  }
+
+  m = text.match(/^Purchase item #(.+) deleted from Purchase #(.+)\.$/i);
+  if (m) return `ទំនិញ #${m[1]} ត្រូវបានលុបចេញពីការទិញ #${m[2]}។`;
+
+  m = text.match(/^Purchase return item #(.+) (created|updated) for Purchase return #(.+)\.$/i);
+  if (m) {
+    const action = m[2].toLowerCase() === "created" ? "បានបង្កើត" : "បានកែប្រែ";
+    return `ទំនិញត្រឡប់ #${m[1]} ក្នុងបណ្ណត្រឡប់ #${m[3]} ${action}។`;
+  }
+
+  m = text.match(/^Purchase return item #(.+) deleted from Purchase return #(.+)\.$/i);
+  if (m) return `ទំនិញត្រឡប់ #${m[1]} ត្រូវបានលុបចេញពីបណ្ណត្រឡប់ #${m[2]}។`;
+
   // Product "X" created/updated/deleted.
   m = text.match(/^Product "(.+)" (created|updated|deleted)\.$/i);
   if (m) return `ផលិតផល "${m[1]}" ${ACTION_LABELS[m[2].toLowerCase()] ?? m[2]}។`;
@@ -197,4 +278,3 @@ export function translateDescription(text = "") {
 
   return text;
 }
-

@@ -1,6 +1,6 @@
 import React from "react";
 import { FiActivity, FiDatabase, FiMonitor, FiUser, FiX } from "react-icons/fi";
-import { actionLabel, actionTone, changeFieldLabel, extractRefLabel, formatDateTime, moduleLabel, translateDescription } from "../utils/auditLogFormat";
+import { actionLabel, actionTone, changeFieldLabel, extractRefLabel, formatAuditValue, formatDateTime, moduleLabel, translateDescription } from "../utils/auditLogFormat";
 
 function JsonPanel({ title, value, isDark }) {
   const keys = value && typeof value === "object" ? Object.keys(value) : [];
@@ -14,7 +14,7 @@ function JsonPanel({ title, value, isDark }) {
         <div className="space-y-2 text-xs leading-6">
           {keys.map((key) => {
             const fieldValue = value[key];
-            const displayValue = fieldValue === null || fieldValue === undefined || fieldValue === "" ? "-" : String(fieldValue);
+            const displayValue = formatAuditValue(key, fieldValue);
             return (
               <div key={key} className="flex items-baseline justify-between gap-3">
                 <span className={isDark ? "text-zinc-400" : "text-zinc-500"}>{changeFieldLabel(key)}</span>
@@ -102,4 +102,3 @@ export default function AuditLogDetailModal({ log, isDark = false, onClose }) {
     </div>
   );
 }
-

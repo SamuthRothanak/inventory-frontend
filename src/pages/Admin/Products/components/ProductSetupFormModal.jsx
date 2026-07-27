@@ -221,6 +221,7 @@ export default function ProductSetupFormModal({
           local_key: baseUnitKey,
           unit_id: "",
           conversion_qty: 1,
+          barcode: "",
           is_base_unit: true,
           is_default_sale_unit: true,
           is_default_purchase_unit: false,
@@ -648,6 +649,7 @@ function VariantSetupCard({
       local_key: makeLocalKey("unit"),
       unit_id: "",
       conversion_qty: "",
+      barcode: "",
       is_base_unit: false,
       is_default_sale_unit: false,
       is_default_purchase_unit: true,
@@ -994,7 +996,7 @@ function VariantSetupCard({
                 </div>
 
                 {/* UNIT FIELDS */}
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_1fr_2fr]">
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                   <SearchableDropdown label="ខ្នាតទំនិញ" required error={unitErrors?.unit_id?.message} theme={theme} icon={<FiLayers />}
                     value={watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`)}
                     onChange={(v) => {
@@ -1034,29 +1036,33 @@ function VariantSetupCard({
                       }} />
                   </div>
                   <div>
-                    <p className={`mb-2 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
-                      <FiInfo /> ជម្រើសខ្នាតទំនិញ
-                    </p>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <CheckBox label="ខ្នាតទំនិញស្តុក" helper="តាមដានស្តុកក្នុងខ្នាតទំនិញនេះ"
-                        checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`)}
-                        onChange={(c) => {
-                          setValue(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`, c, { shouldValidate: true });
-                          if (c) {
-                            autoFillPackageType(watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`));
-                          }
-                        }} />
-                      <CheckBox label="លក់ក្នុង POS" helper="ប្រើស្វ័យប្រវត្ដិពេលលក់ដល់អតិថិជន"
-                        checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`)}
-                        onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`, c, { shouldValidate: true })} />
-                      <CheckBox label="ទិញពីអ្នកផ្គត់ផ្គង់" helper="ប្រើស្វ័យប្រវត្ដិពេលបញ្ជាទិញស្តុក"
-                        checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_purchase_unit`)}
-                        onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_purchase_unit`, c, { shouldValidate: true })} />
-                      <CheckBox label="ដំណើរការ" helper="អាចប្រើខ្នាតទំនិញនេះ"
-                        checked={watch(`variants.${variantIndex}.units.${unitIndex}.status`)}
-                        onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.status`, c, { shouldValidate: true })} />
-                    </div>
+                    <FormInput label="បាកូដ (Barcode)" theme={theme} icon={<FiHash />}
+                      hint="ស្រេចចិត្ត — ខ្នាតនីមួយៗអាចមាន barcode ខុសគ្នា"
+                      inputProps={register(`variants.${variantIndex}.units.${unitIndex}.barcode`)} />
                   </div>
+                </div>
+
+                <p className={`mb-2 mt-3 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
+                  <FiInfo /> ជម្រើសខ្នាតទំនិញ
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <CheckBox label="ខ្នាតទំនិញស្តុក" helper="តាមដានស្តុកក្នុងខ្នាតទំនិញនេះ"
+                    checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`)}
+                    onChange={(c) => {
+                      setValue(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`, c, { shouldValidate: true });
+                      if (c) {
+                        autoFillPackageType(watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`));
+                      }
+                    }} />
+                  <CheckBox label="លក់ក្នុង POS" helper="ប្រើស្វ័យប្រវត្ដិពេលលក់ដល់អតិថិជន"
+                    checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`)}
+                    onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`, c, { shouldValidate: true })} />
+                  <CheckBox label="ទិញពីអ្នកផ្គត់ផ្គង់" helper="ប្រើស្វ័យប្រវត្ដិពេលបញ្ជាទិញស្តុក"
+                    checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_purchase_unit`)}
+                    onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_purchase_unit`, c, { shouldValidate: true })} />
+                  <CheckBox label="ដំណើរការ" helper="អាចប្រើខ្នាតទំនិញនេះ"
+                    checked={watch(`variants.${variantIndex}.units.${unitIndex}.status`)}
+                    onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.status`, c, { shouldValidate: true })} />
                 </div>
 
                 {/* NESTED PRICE RULES for this unit */}

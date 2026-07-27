@@ -1541,6 +1541,21 @@ export default function Products() {
             createVariantUnitMutation.isPending ||
             createPriceRuleMutation.isPending
           }
+          isCreatingUnit={createUnitMutation.isPending}
+          isUpdatingUnit={updateUnitMutation.isPending}
+          isDeletingUnit={deleteUnitMutation.isPending}
+          onCreateUnit={async (payload) => {
+            await createUnitMutation.mutateAsync(payload);
+            await unitsQuery.refetch();
+          }}
+          onUpdateUnit={async ({ id, payload }) => {
+            await updateUnitMutation.mutateAsync({ id, payload });
+            await unitsQuery.refetch();
+          }}
+          onDeleteUnit={async (id) => {
+            await deleteUnitMutation.mutateAsync(id);
+            await unitsQuery.refetch();
+          }}
           onClose={closeVariantSetupForm}
           onSave={handleSaveVariantSetup}
         />

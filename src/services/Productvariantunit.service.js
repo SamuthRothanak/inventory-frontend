@@ -15,11 +15,26 @@ export const getProductVariantUnitByIdApi = async (id) => {
   return response.data;
 };
 
+// Used by the POS barcode-scan fallback (client-side match against the already-loaded POS
+// product/unit list is tried first — see usePosData.js/Pos.jsx — this only runs when that
+// misses, e.g. a unit created after the POS page loaded). Returns null instead of throwing on
+// a 404 so callers can just check truthiness.
+export const getProductVariantUnitByBarcodeApi = async (code) => {
+  try {
+    const response = await api.get(`/product-variant-units/barcode/${encodeURIComponent(code)}`);
+    return response.data;
+  } catch (error) {
+    if (error?.response?.status === 404) return null;
+    throw error;
+  }
+};
+
 export const createProductVariantUnitApi = async (payload) => {
   const response = await api.post("/product-variant-units", {
     product_variant_id: payload.product_variant_id,
     unit_id: payload.unit_id,
     conversion_qty: Number(payload.conversion_qty || 1),
+    barcode: payload.barcode || null,
     is_base_unit: Boolean(payload.is_base_unit),
     is_default_sale_unit: Boolean(payload.is_default_sale_unit),
     is_default_purchase_unit: Boolean(payload.is_default_purchase_unit),
@@ -34,6 +49,7 @@ export const updateProductVariantUnitApi = async ({ id, payload }) => {
     product_variant_id: payload.product_variant_id,
     unit_id: payload.unit_id,
     conversion_qty: Number(payload.conversion_qty || 1),
+    barcode: payload.barcode || null,
     is_base_unit: Boolean(payload.is_base_unit),
     is_default_sale_unit: Boolean(payload.is_default_sale_unit),
     is_default_purchase_unit: Boolean(payload.is_default_purchase_unit),

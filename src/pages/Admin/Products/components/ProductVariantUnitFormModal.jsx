@@ -103,6 +103,7 @@ export default function ProductVariantUnitFormModal({
         product_variant_id: String(variantUnit.productVariantId || variant?.id || ""),
         unit_id: String(variantUnit.unitId || ""),
         conversion_qty: Number(variantUnit.conversionQty || 1),
+        barcode: variantUnit.barcode || "",
         is_base_unit: Boolean(variantUnit.isBaseUnit),
         is_default_sale_unit: Boolean(variantUnit.isDefaultSaleUnit),
         is_default_purchase_unit: Boolean(variantUnit.isDefaultPurchaseUnit),
@@ -179,7 +180,7 @@ export default function ProductVariantUnitFormModal({
         className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
         <input type="hidden" {...register("product_variant_id")} />
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <FormSelect label="ខ្នាតទំនិញ" required error={errors.unit_id?.message} theme={theme} icon={<FiLayers />}
             value={watch("unit_id")}
             onChange={(value) => setValue("unit_id", value, { shouldValidate: true })}
@@ -191,6 +192,9 @@ export default function ProductVariantUnitFormModal({
             error={errors.conversion_qty?.message} theme={theme} icon={<FiHash />}
             hint="ឧ. កេសមួយមាន 24 កំប៉ុង/ដប"
             inputProps={register("conversion_qty")} />
+          <FormInput label="បាកូដ (Barcode)" error={errors.barcode?.message} theme={theme} icon={<FiHash />}
+            hint="ស្រេចចិត្ត — ខ្នាតនីមួយៗអាចមាន barcode ខុសគ្នា"
+            inputProps={register("barcode")} />
         </div>
 
         <p className={`mb-2 mt-5 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>

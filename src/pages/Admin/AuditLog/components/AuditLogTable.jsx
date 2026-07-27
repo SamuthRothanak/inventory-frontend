@@ -50,7 +50,7 @@ export default function AuditLogTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[1180px] w-full text-left">
+        <table className="min-w-[1320px] w-full text-left">
           <thead>
             <tr className="bg-red-600 text-sm font-bold text-white">
               <th className="px-6 py-4">ពេល / អ្នកប្រើ</th>
@@ -99,15 +99,17 @@ export default function AuditLogTable({
                         {row.user_name || "-"}
                       </p>
                     </td>
-                    <td className="w-36 px-6 py-4 align-middle">
-                      <p className="text-sm font-bold">
-                        {moduleLabel(row.module)}
-                      </p>
-                      <span
-                        className={`mt-1.5 inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ${badgeClass(tone, isDark)}`}
-                      >
-                        {actionLabel(row.action)}
-                      </span>
+                    <td className="min-w-52 px-6 py-4 align-middle">
+                      <div className="flex items-center gap-3 whitespace-nowrap">
+                        <p className="text-sm font-bold">
+                          {moduleLabel(row.module)}
+                        </p>
+                        <span
+                          className={`inline-flex shrink-0 rounded-full px-3 py-1 text-[11px] font-bold ${badgeClass(tone, isDark)}`}
+                        >
+                          {actionLabel(row.action)}
+                        </span>
+                      </div>
                     </td>
                     <td className="w-32 px-6 py-4 align-middle">
                       {row.ref_table ? (

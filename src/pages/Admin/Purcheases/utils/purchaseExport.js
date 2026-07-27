@@ -56,6 +56,12 @@ const paymentStatusLabel = (value) => ({
   unpaid: "មិនទាន់បង់",
 }[key(value)] ?? value ?? "");
 
+// Prefer the effective status the on-screen table/badges already show (a resolved claim reads
+// "ស្តុកចូលរួចរាល់អស់" even while the raw persisted status still lags at "មានបញ្ហា") — Purchases.jsx
+// attaches this onto each row before handing the list to export since the effective-status
+// calculation itself depends on purchaseReturns state that lives outside this module.
+const effectiveStatusOf = (purchase) => purchase.effectiveStatus ?? purchase.status;
+
 const actualPaid = (purchase) => {
   if (purchase.paymentStatus === "unpaid") return usd(0);
   const currency = String(purchase.paidCurrency || purchase.inputCurrency || "USD").toUpperCase();
@@ -63,16 +69,31 @@ const actualPaid = (purchase) => {
   return usd(purchase.paidAmount || purchase.paidAmountUsd);
 };
 
-const itemSummary = (purchase) => {
-  const items = purchase.items?.length ? purchase.items : purchase.summaryItems || [];
-  return items.map((item) => {
-    const name = item.variantName || item.productName || item.variantCode || "-";
-    const qty = Number(item.invoicedQty || item.paidQty || item.receivedQty || 0).toLocaleString("en-US");
-    return `${name} x ${qty}`;
-  }).join(" | ");
+// Split by currency (rather than one mixed "paid" cell) so CSV/Excel totals stay summable —
+// a purchase is paid in either USD or KHR, never both, so the other column is always 0.
+const paidAmounts = (purchase) => {
+  if (purchase.paymentStatus === "unpaid") return { usd: 0, khr: 0 };
+  const currency = String(purchase.paidCurrency || purchase.inputCurrency || "USD").toUpperCase();
+  if (currency === "KHR") return { usd: 0, khr: Number(purchase.paidAmount || purchase.paidAmountKhr || 0) };
+  return { usd: Number(purchase.paidAmount || purchase.paidAmountUsd || 0), khr: 0 };
 };
 
-const headers = [
+const purchaseItems = (purchase) => (purchase.items?.length ? purchase.items : purchase.summaryItems || []);
+
+const itemSummary = (purchase) => purchaseItems(purchase).map((item) => {
+  const name = item.variantName || item.productName || item.variantCode || "-";
+  const qty = Number(item.invoicedQty || item.paidQty || item.receivedQty || 0).toLocaleString("en-US");
+  return `${name} x ${qty}`;
+}).join(" | ");
+
+const claimTotals = (purchase) => purchaseItems(purchase).reduce((totals, item) => ({
+  damaged: totals.damaged + Number(item.damagedQty ?? item.damaged_qty ?? 0),
+  claimed: totals.claimed + Number(item.claimQty ?? item.claim_qty ?? 0),
+}), { damaged: 0, claimed: 0 });
+
+// Human-readable header/row set — used by the PDF, where currency symbols and one combined
+// "paid" cell read better and nothing needs to be summed by the reader's spreadsheet software.
+const displayHeaders = [
   "លេខវិក្កយបត្រទិញ",
   "ថ្ងៃទិញ",
   "អ្នកផ្គត់ផ្គង់",
@@ -85,31 +106,82 @@ const headers = [
   "បានបង់ពិត",
   "មិនទាន់បង់ USD",
   "មិនទាន់បង់ KHR",
+  "ខូច/ទាមទារ",
   "ចំណាំ",
 ];
 
-const buildRows = (purchases) => purchases.map((purchase) => [
-  purchase.purchaseNo,
-  purchase.purchaseDate,
-  purchase.supplierName,
-  itemSummary(purchase),
-  paymentModeLabel(purchase.paymentMode),
-  paymentStatusLabel(purchase.paymentStatus),
-  statusLabel(purchase.status),
-  usd(purchase.grandTotalUsd),
-  khr(purchase.grandTotalKhr),
-  actualPaid(purchase),
-  usd(purchase.balanceAmountUsd),
-  khr(purchase.balanceAmountKhr),
-  purchase.note,
-]);
+const buildDisplayRows = (purchases) => purchases.map((purchase) => {
+  const { damaged, claimed } = claimTotals(purchase);
+  return [
+    purchase.purchaseNo,
+    purchase.purchaseDate,
+    purchase.supplierName,
+    itemSummary(purchase),
+    paymentModeLabel(purchase.paymentMode),
+    paymentStatusLabel(purchase.paymentStatus),
+    statusLabel(effectiveStatusOf(purchase)),
+    usd(purchase.grandTotalUsd),
+    khr(purchase.grandTotalKhr),
+    actualPaid(purchase),
+    usd(purchase.balanceAmountUsd),
+    khr(purchase.balanceAmountKhr),
+    damaged || claimed ? `ខូច ${damaged.toLocaleString("en-US")} / ទាមទារ ${claimed.toLocaleString("en-US")}` : "-",
+    purchase.note,
+  ];
+});
+
+// Numeric header/row set — used by CSV/Excel. Money cells hold plain numbers (no currency
+// symbol, no thousands separator) so a reader can actually SUM/AVERAGE them in a spreadsheet
+// instead of getting text cells; the mixed "paid" column is split into USD/KHR for the same
+// reason, and claim/damaged quantities get their own numeric columns.
+const numericHeaders = [
+  "លេខវិក្កយបត្រទិញ",
+  "ថ្ងៃទិញ",
+  "អ្នកផ្គត់ផ្គង់",
+  "ទំនិញ",
+  "របៀបទូទាត់",
+  "ស្ថានភាពទូទាត់",
+  "ស្ថានភាពទិញ",
+  "សរុប USD",
+  "សរុប KHR",
+  "បានបង់ពិត USD",
+  "បានបង់ពិត KHR",
+  "មិនទាន់បង់ USD",
+  "មិនទាន់បង់ KHR",
+  "ចំនួនខូច",
+  "ចំនួនទាមទារ",
+  "ចំណាំ",
+];
+
+const buildNumericRows = (purchases) => purchases.map((purchase) => {
+  const paid = paidAmounts(purchase);
+  const { damaged, claimed } = claimTotals(purchase);
+  return [
+    purchase.purchaseNo,
+    purchase.purchaseDate,
+    purchase.supplierName,
+    itemSummary(purchase),
+    paymentModeLabel(purchase.paymentMode),
+    paymentStatusLabel(purchase.paymentStatus),
+    statusLabel(effectiveStatusOf(purchase)),
+    Number(Number(purchase.grandTotalUsd || 0).toFixed(2)),
+    Math.round(Number(purchase.grandTotalKhr || 0)),
+    Number(paid.usd.toFixed(2)),
+    Math.round(paid.khr),
+    Number(Number(purchase.balanceAmountUsd || 0).toFixed(2)),
+    Math.round(Number(purchase.balanceAmountKhr || 0)),
+    damaged,
+    claimed,
+    purchase.note,
+  ];
+});
 
 const filenameBase = () => `purchases-${new Date().toISOString().slice(0, 10)}`;
 
 export const exportPurchasesCsv = (purchases) => {
-  const rows = buildRows(purchases);
+  const rows = buildNumericRows(purchases);
   const csv = [
-    headers.map(csvCell).join(","),
+    numericHeaders.map(csvCell).join(","),
     ...rows.map((row) => row.map(csvCell).join(",")),
   ].join("\r\n");
 
@@ -117,13 +189,13 @@ export const exportPurchasesCsv = (purchases) => {
 };
 
 export const exportPurchasesExcel = (purchases) => {
-  const rows = buildRows(purchases);
+  const rows = buildNumericRows(purchases);
   const html = `
     <html>
       <head><meta charset="UTF-8" /></head>
       <body>
         <table border="1">
-          <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+          <thead><tr>${numericHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
           <tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>
         </table>
       </body>
@@ -134,7 +206,7 @@ export const exportPurchasesExcel = (purchases) => {
 };
 
 export const exportPurchasesPdf = (purchases) => {
-  const rows = buildRows(purchases);
+  const rows = buildDisplayRows(purchases);
   const total = purchases.reduce((sum, item) => sum + Number(item.grandTotalUsd || 0), 0);
   const paidUsd = purchases.reduce((sum, item) => {
     if (item.paymentStatus === "unpaid") return sum;
@@ -194,11 +266,11 @@ export const exportPurchasesPdf = (purchases) => {
           <div class="card"><div class="label">វិក្កយបត្រទិញ</div><div class="value">${purchases.length.toLocaleString("en-US")}</div></div>
         </div>
         <table>
-          <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+          <thead><tr>${displayHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
           <tbody>
             ${rows.length
               ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")
-              : `<tr><td colspan="${headers.length}" class="empty">គ្មានទិន្នន័យ</td></tr>`}
+              : `<tr><td colspan="${displayHeaders.length}" class="empty">គ្មានទិន្នន័យ</td></tr>`}
           </tbody>
         </table>
         <script>window.onload = function () { window.focus(); window.print(); };</script>

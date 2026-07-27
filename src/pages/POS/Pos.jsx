@@ -7,6 +7,8 @@ import CurrentSalePanel from "./components/currentSalePanel";
 import QuickAddModal       from "./components/quickAddModal";
 import PaymentModal        from "./components/paymentModal";
 import SalesReturnsModal   from "./components/salesReturnsModal";
+import HardwareScannerInput from "./components/hardwareScannerInput";
+import BarcodeCameraModal   from "./components/barcodeCameraModal";
 
 import {
   ScanLine, LogOut, X,
@@ -15,6 +17,8 @@ import {
 } from "./components/posIcons";
 import { getAppliedRule, usd } from "./components/posData";
 import { usePosData } from "./usePosData";
+import { useNotification } from "../../components/AppNotification";
+import { getProductVariantUnitByBarcodeApi } from "../../services/productVariantUnit.service";
 
 // ─── Held Orders Modal ────────────────────────────────────────────
 function HeldOrdersModal({ heldOrders, onResume, onDelete, onClose }) {
@@ -249,6 +253,10 @@ export default function Pos() {
   const [isFullscreen,   setIsFullscreen]   = useState(false);
   const [saleNote,       setSaleNote]       = useState("");
 
+  const [showBarcodeCameraModal, setShowBarcodeCameraModal] = useState(false);
+
+  const notify = useNotification();
+
   const currentUser      = useAuthStore((s) => s.user);
   const isAdmin          = useAuthStore((s) => s.can("dashboard.view"));
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null;
@@ -341,32 +349,51 @@ export default function Pos() {
     setQty(1);
   }
 
-  function addToCart() {
-    if (!selectedProduct || !selectedUnit || !appliedRule) return;
+  // Core add-to-cart logic, parameterized so both the QuickAdd modal and the barcode
+  // scan paths (camera + hardware scanner) can share one implementation. Returns true
+  // if anything was actually added (false when out of stock).
+  function addProductUnitToCart(product, unit, requestedQty) {
+    if (!product || !unit) return false;
+    const rule = getAppliedRule(unit, requestedQty, appliesTo);
+    if (!rule) return false;
+
+    // Decide the result synchronously from the current render so callers can show the
+    // correct notification. A value mutated inside a React state updater is unreliable:
+    // React may run that updater later (and more than once in StrictMode), after this
+    // function has already returned.
+    const reqQty = Math.max(0, Number(requestedQty) || 0);
+    const requestedBaseQty = reqQty * unit.conversionQty;
+    const usedBaseQty = cart.reduce((sum, item) => (
+      item.productId === product.id ? sum + (Number(item.baseQty) || 0) : sum
+    ), 0);
+    const remainingBaseQty = Math.max(0, product.stockBaseQty - usedBaseQty);
+    const addQty = Math.floor(Math.min(requestedBaseQty, remainingBaseQty) / unit.conversionQty);
+    if (addQty <= 0) return false;
+
     setCart((prev) => {
-      const requestedQty = Math.max(0, Number(qty) || 0);
-      const requestedBaseQty = requestedQty * selectedUnit.conversionQty;
-      const usedBaseQty = prev.reduce((sum, item) => (
-        item.productId === selectedProduct.id ? sum + (Number(item.baseQty) || 0) : sum
+      // Recalculate against `prev` as well, so queued cart updates can never exceed stock.
+      const latestUsedBaseQty = prev.reduce((sum, item) => (
+        item.productId === product.id ? sum + (Number(item.baseQty) || 0) : sum
       ), 0);
-      const remainingBaseQty = Math.max(0, selectedProduct.stockBaseQty - usedBaseQty);
-      const addBaseQty = Math.min(requestedBaseQty, remainingBaseQty);
-      const addQty = Math.floor(addBaseQty / selectedUnit.conversionQty);
-      if (addQty <= 0) return prev;
+      const latestRemainingBaseQty = Math.max(0, product.stockBaseQty - latestUsedBaseQty);
+      const latestAddQty = Math.floor(
+        Math.min(requestedBaseQty, latestRemainingBaseQty) / unit.conversionQty
+      );
+      if (latestAddQty <= 0) return prev;
 
       const existingIdx = prev.findIndex(
-        (item) => item.productId === selectedProduct.id && item.unitId === selectedUnit.id
+        (item) => item.productId === product.id && item.unitId === unit.id
       );
       if (existingIdx !== -1) {
         return prev.map((item, i) => {
           if (i !== existingIdx) return item;
-          const newQty   = item.qty + addQty;
-          const newRule  = getAppliedRule(selectedUnit, newQty, appliesTo);
+          const newQty   = item.qty + latestAddQty;
+          const newRule  = getAppliedRule(unit, newQty, appliesTo);
           const newPrice = newRule?.usd ?? item.unitPrice;
           return {
             ...item,
             qty:              newQty,
-            baseQty:          newQty * selectedUnit.conversionQty,
+            baseQty:          newQty * unit.conversionQty,
             unitPrice:        newPrice,
             lineTotal:        newQty * newPrice,
             appliedRuleId:    newRule?.id    ?? item.appliedRuleId,
@@ -376,21 +403,62 @@ export default function Pos() {
       }
       return [...prev, {
         id: crypto.randomUUID(),
-        productId:    selectedProduct.id,
-        productName:  selectedProduct.productName,
-        variantName:  selectedProduct.variantName,
-        image:        selectedProduct.image,
-        unitId:       selectedUnit.id,
-        unitName:     selectedUnit.name,
-        qty:          addQty,
-        baseQty:          addQty * selectedUnit.conversionQty,
-        unitPrice,
-        lineTotal:        addQty * unitPrice,
-        appliedRuleId:    appliedRule.id,
-        appliedRuleLabel: appliedRule.label,
+        productId:    product.id,
+        productName:  product.productName,
+        variantName:  product.variantName,
+        image:        product.image,
+        unitId:       unit.id,
+        unitName:     unit.name,
+        qty:          latestAddQty,
+        baseQty:          latestAddQty * unit.conversionQty,
+        unitPrice:        rule.usd,
+        lineTotal:        latestAddQty * rule.usd,
+        appliedRuleId:    rule.id,
+        appliedRuleLabel: rule.label,
       }];
     });
+    return true;
+  }
+
+  function addToCart() {
+    if (!selectedProduct || !selectedUnit || !appliedRule) return;
+    addProductUnitToCart(selectedProduct, selectedUnit, qty);
     closeQuickAdd();
+  }
+
+  // Shared entry point for both scan methods (camera + hardware HID scanner) — see
+  // HardwareScannerInput and BarcodeCameraModal, both call this with the decoded code.
+  // Barcode lives on the UNIT (a bottle and its case have different printed barcodes), not on
+  // the variant — so a case scan adds 1 case's worth (its full conversion_qty), not 1 bottle.
+  async function handleBarcodeScanned(code) {
+    const trimmed = String(code || "").trim();
+    if (!trimmed) return;
+
+    for (const product of products) {
+      const unit = product.units.find((u) => u.barcode && u.barcode === trimmed);
+      if (unit) {
+        const ok = addProductUnitToCart(product, unit, 1);
+        const label = `${product.productName} ${product.variantName}`.trim();
+        if (ok) {
+          notify.success("បានបន្ថែមទំនិញ", `${label} (${unit.name})`);
+        } else {
+          notify.error("ទំនិញអស់ស្តុក", `${label} (${unit.name})`);
+        }
+        return;
+      }
+    }
+
+    try {
+      const res = await getProductVariantUnitByBarcodeApi(trimmed);
+      const variantUnit = res?.data ?? res;
+      if (variantUnit) {
+        notify.info("ត្រូវ Refresh", "ផលិតផលនេះទើបបន្ថែម សូម refresh ទំព័រ POS ជាមុនសិន");
+      } else {
+        notify.error("រកមិនឃើញផលិតផល", `គ្មានផលិតផលដែលមាន barcode "${trimmed}"`);
+      }
+    } catch {
+      notify.error("រកមិនឃើញផលិតផល", `គ្មានផលិតផលដែលមាន barcode "${trimmed}"`);
+    }
   }
 
   function updateQtyInCart(id, delta) {
@@ -630,6 +698,8 @@ export default function Pos() {
         </div>
       </div>
 
+      <HardwareScannerInput onScan={handleBarcodeScanned} />
+
       {/* ── Main content ── */}
       <div className="flex min-h-0 flex-1 gap-3">
         <ProductBrowser
@@ -640,6 +710,7 @@ export default function Pos() {
           setSearch={setSearch}
           filteredProducts={filteredProducts}
           onOpenQuickAdd={openQuickAdd}
+          onOpenBarcodeCamera={() => setShowBarcodeCameraModal(true)}
         />
 
         <div className="w-90 shrink-0">
@@ -734,6 +805,13 @@ export default function Pos() {
 
       {showReturns && (
         <SalesReturnsModal onClose={() => setShowReturns(false)} />
+      )}
+
+      {showBarcodeCameraModal && (
+        <BarcodeCameraModal
+          onScan={handleBarcodeScanned}
+          onClose={() => setShowBarcodeCameraModal(false)}
+        />
       )}
     </div>
   );

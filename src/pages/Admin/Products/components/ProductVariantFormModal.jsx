@@ -135,6 +135,7 @@ function makeUnit(isFirst = false) {
     local_key: makeLocalKey("unit"),
     unit_id: "",
     conversion_qty: 1,
+    barcode: "",
     is_base_unit: isFirst,
     is_default_sale_unit: isFirst,
     is_default_purchase_unit: false,
@@ -199,6 +200,7 @@ export default function VariantSetupFormModal({
       local_key: initialUnitKey,
       unit_id: "",
       conversion_qty: 1,
+      barcode: "",
       is_base_unit: true,
       is_default_sale_unit: true,
       is_default_purchase_unit: false,
@@ -405,6 +407,7 @@ export default function VariantSetupFormModal({
         local_key: u.local_key,
         unit_id: Number(u.unit_id),
         conversion_qty: Number(u.conversion_qty || 1),
+        barcode: u.barcode || "",
         is_base_unit: Boolean(u.is_base_unit),
         is_default_sale_unit: Boolean(u.is_default_sale_unit),
         is_default_purchase_unit: Boolean(u.is_default_purchase_unit),
@@ -688,7 +691,7 @@ export default function VariantSetupFormModal({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                     <SearchableDropdown label="ខ្នាតទំនិញ" required theme={theme} icon={<FiLayers />}
                       value={unit.unit_id}
                       onChange={(v) => updateUnit(unitIndex, "unit_id", v)}
@@ -704,6 +707,11 @@ export default function VariantSetupFormModal({
                       onChange={(v) => updateUnit(unitIndex, "conversion_qty", v)}
                       placeholder="1"
                       hint="ឧ. កេសមួយមាន 24 កំប៉ុង/ដប" />
+                    <FormInput label="បាកូដ (Barcode)" theme={theme} icon={<FiHash />}
+                      value={unit.barcode}
+                      onChange={(v) => updateUnit(unitIndex, "barcode", v)}
+                      placeholder="ស្កេន ឬវាយបញ្ចូលបាកូដ"
+                      hint="ស្រេចចិត្ត — ខ្នាតនីមួយៗអាចមាន barcode ខុសគ្នា" />
                   </div>
 
                   <p className={`mb-2 mt-3 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FiArrowDown, FiArrowUp, FiChevronDown, FiChevronRight, FiClock, FiDollarSign, FiLayers, FiPackage } from "react-icons/fi";
+import { FiArrowDown, FiArrowUp, FiChevronDown, FiChevronLeft, FiChevronRight, FiClock, FiDollarSign, FiLayers, FiPackage } from "react-icons/fi";
 import {
   ExpiryBadge,
   formatUsdTwoDigits,
@@ -11,6 +11,43 @@ import {
 } from "./InventoryCommon";
 import { formatMovementTypeKh, translateNote } from "./StockMovementTable";
 import { getExpiryInfo, getNearestExpiryInfo } from "../utils/inventoryExpiry";
+import { getPageNumbers } from "../utils/inventoryConstants";
+
+const BATCH_PAGE_SIZE = 20;
+
+function BatchTablePagination({ theme, currentPage, lastPage, onPageChange }) {
+  if (lastPage <= 1) return null;
+  const pageNumbers = getPageNumbers(currentPage, lastPage);
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-zinc-200 px-4 py-3 dark:border-white/10 md:flex-row md:items-center md:justify-between">
+      <p className={`text-xs ${theme.muted}`}>ទំព័រ {currentPage} នៃ {lastPage}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" disabled={currentPage <= 1}
+          onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+          className="inline-flex h-8 items-center gap-1 rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+          <FiChevronLeft /> មុន
+        </button>
+        {pageNumbers.map((p, i) => p === "..." ? (
+          <span key={`e-${i}`} className={`px-1.5 text-xs font-semibold ${theme.muted}`}>...</span>
+        ) : (
+          <button key={p} type="button" onClick={() => onPageChange(p)}
+            className={`h-8 min-w-8 rounded-lg px-2.5 text-xs font-bold transition ${
+              p === currentPage ? "bg-red-600 text-white" : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+            }`}>
+            {p}
+          </button>
+        ))}
+        <button type="button" disabled={currentPage >= lastPage}
+          onClick={() => onPageChange(Math.min(lastPage, currentPage + 1))}
+          className="inline-flex h-8 items-center gap-1 rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+          បន្ទាប់ <FiChevronRight />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function InventoryDetailModal({
     item,
     theme,
@@ -30,6 +67,8 @@ export default function InventoryDetailModal({
         ? `${item.variantName} ${variantType}`
         : item.variantName;
     const [showDepleted, setShowDepleted] = useState(false);
+    const [activeBatchPage, setActiveBatchPage] = useState(1);
+    const [depletedBatchPage, setDepletedBatchPage] = useState(1);
     const batches = Array.isArray(item.batches) ? item.batches : [];
     const movements = Array.isArray(item.movements) ? item.movements : [];
     const getBatchExpirySortValue = (batch) => {
@@ -45,6 +84,18 @@ export default function InventoryDetailModal({
       );
     const activeBatches = sortBatchesByFifo(batches.filter((b) => Number(b.qtyRemainingBase) > 0));
     const depletedBatches = sortBatchesByFifo(batches.filter((b) => Number(b.qtyRemainingBase) <= 0));
+    const activeBatchLastPage = Math.max(1, Math.ceil(activeBatches.length / BATCH_PAGE_SIZE));
+    const activeBatchPageSafe = Math.min(activeBatchPage, activeBatchLastPage);
+    const activeBatchesPage = activeBatches.slice(
+      (activeBatchPageSafe - 1) * BATCH_PAGE_SIZE,
+      activeBatchPageSafe * BATCH_PAGE_SIZE
+    );
+    const depletedBatchLastPage = Math.max(1, Math.ceil(depletedBatches.length / BATCH_PAGE_SIZE));
+    const depletedBatchPageSafe = Math.min(depletedBatchPage, depletedBatchLastPage);
+    const depletedBatchesPage = depletedBatches.slice(
+      (depletedBatchPageSafe - 1) * BATCH_PAGE_SIZE,
+      depletedBatchPageSafe * BATCH_PAGE_SIZE
+    );
     const nearestExpiry = getNearestExpiryInfo(activeBatches);
     const nearestExpiryBatch = nearestExpiry?.batch || activeBatches[0] || batches[0];
     const totalRemaining = batches.reduce(
@@ -202,7 +253,7 @@ export default function InventoryDetailModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {activeBatches.length > 0 ? activeBatches.map((batch) => (
+                    {activeBatchesPage.length > 0 ? activeBatchesPage.map((batch) => (
                       <tr key={batch.id || batch.batchNo} className="border-t border-zinc-200 dark:border-white/10">
                         <td className="px-4 py-4">
                           <p className="font-semibold" title={batch.batchNo}>{truncateBatchNo(batch.batchNo)}</p>
@@ -233,6 +284,12 @@ export default function InventoryDetailModal({
                     )}
                   </tbody>
                 </table>
+                <BatchTablePagination
+                  theme={theme}
+                  currentPage={activeBatchPageSafe}
+                  lastPage={activeBatchLastPage}
+                  onPageChange={setActiveBatchPage}
+                />
               </div>
 
               {/* Depleted Batches — collapsed by default */}
@@ -265,7 +322,7 @@ export default function InventoryDetailModal({
                         </tr>
                       </thead>
                       <tbody>
-                        {depletedBatches.map((batch) => (
+                        {depletedBatchesPage.map((batch) => (
                           <tr key={batch.id || batch.batchNo} className={`border-t border-zinc-200 opacity-60 dark:border-white/10`}>
                             <td className="px-4 py-4">
                               <p className="font-semibold" title={batch.batchNo}>{truncateBatchNo(batch.batchNo)}</p>
@@ -287,6 +344,14 @@ export default function InventoryDetailModal({
                         ))}
                       </tbody>
                     </table>
+                  )}
+                  {showDepleted && (
+                    <BatchTablePagination
+                      theme={theme}
+                      currentPage={depletedBatchPageSafe}
+                      lastPage={depletedBatchLastPage}
+                      onPageChange={setDepletedBatchPage}
+                    />
                   )}
                 </div>
               )}

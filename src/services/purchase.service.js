@@ -43,6 +43,28 @@ export const getPurchasesApi = async (params = {}) => {
   return response.data;
 };
 
+// Loops through every page instead of trusting a single large per_page (some list/export
+// screens need the *entire* filtered set, not just the first N) — bounded by maxPages so a
+// runaway last_page (bad data / future backend change) can't spin this into an infinite loop.
+const fetchAllPages = async (fetchPage, params = {}, { pageSize = 200, maxPages = 100 } = {}) => {
+  let page = 1;
+  let all = [];
+
+  while (page <= maxPages) {
+    const response = await fetchPage({ ...params, per_page: pageSize, page });
+    const items = Array.isArray(response?.data) ? response.data : [];
+    all = all.concat(items);
+
+    const lastPage = Number(response?.meta?.last_page || 1);
+    if (page >= lastPage || items.length === 0) break;
+    page += 1;
+  }
+
+  return all;
+};
+
+export const getAllPurchasesApi = (params = {}) => fetchAllPages(getPurchasesApi, params);
+
 export const getPurchaseStatsApi = async () => {
   try {
     const response = await api.get("/purchases/stats");
@@ -113,6 +135,8 @@ export const getPurchaseReturnsApi = async (params = {}) => {
   const response = await api.get("/purchase-returns", { params });
   return response.data;
 };
+
+export const getAllPurchaseReturnsApi = (params = {}) => fetchAllPages(getPurchaseReturnsApi, params);
 
 export const createPurchaseReturnApi = async (payload) => {
   const response = await api.post("/purchase-returns", payload);

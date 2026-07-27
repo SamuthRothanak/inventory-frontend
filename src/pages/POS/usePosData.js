@@ -82,7 +82,13 @@ function assemblePosProducts(products, categories, variants, pvus, priceRules, s
                 : "ទាំងអស់"
               } · ${unitName}`,
             }));
-          return { id: pvu.id, name: unitName, conversionQty: Number(pvu.conversion_qty) || 1, priceRules: rules };
+          return {
+            id: pvu.id,
+            name: unitName,
+            conversionQty: Number(pvu.conversion_qty) || 1,
+            barcode: pvu.barcode || "",
+            priceRules: rules,
+          };
         })
         .filter((u) => u.priceRules.length > 0);
 

@@ -9,6 +9,7 @@ import {
   FiPackage,
   FiPlus,
   FiSave,
+  FiSettings,
   FiTag,
   FiTrash2,
   FiXCircle,
@@ -17,6 +18,7 @@ import {
 import ModalShell from "./ModalShell";
 import SearchableDropdown from "./SearchableDropdown";
 import { CreatableOptionSelect, SizeUnitSelect } from "./SizeUnitSelect";
+import { QuickCreateUnitBox } from "./ProductSetupFormModal";
 
 const DEFAULT_EXCHANGE_RATE = 0;
 const makeLocalKey = (prefix) => `${prefix}_${Date.now()}_${Math.random()}`;
@@ -134,6 +136,7 @@ function makeUnit(isFirst = false) {
     local_key: makeLocalKey("unit"),
     unit_id: "",
     conversion_qty: isFirst ? 1 : "",
+    barcode: "",
     is_base_unit: isFirst,
     is_default_sale_unit: isFirst,
     is_default_purchase_unit: !isFirst,
@@ -161,10 +164,20 @@ export default function VariantSetupFormModal({
   activeExchangeRate = DEFAULT_EXCHANGE_RATE,
   activeKhrRounding = "ceil",
   isSaving = false,
+  isCreatingUnit = false,
+  isUpdatingUnit = false,
+  isDeletingUnit = false,
+  onCreateUnit,
+  onUpdateUnit,
+  onDeleteUnit,
   onClose,
   onSave,
 }) {
   const initialUnitKey = React.useMemo(() => makeLocalKey("unit"), []);
+  const [quickUnitOpen, setQuickUnitOpen] = useState(false);
+  const [quickUnit, setQuickUnit] = useState({
+    unit_code: "", unit_name: "", unit_type: "piece", allow_decimal: false, status: "active",
+  });
 
   const [variantForm, setVariantForm] = useState({
     product_id: product?.id || "",
@@ -385,6 +398,7 @@ export default function VariantSetupFormModal({
         local_key: u.local_key,
         unit_id: Number(u.unit_id),
         conversion_qty: Number(u.conversion_qty || 1),
+        barcode: u.barcode || "",
         is_base_unit: Boolean(u.is_base_unit),
         is_default_sale_unit: Boolean(u.is_default_sale_unit),
         is_default_purchase_unit: Boolean(u.is_default_purchase_unit),
@@ -555,13 +569,38 @@ export default function VariantSetupFormModal({
         </Section>
 
         <Section theme={theme} icon={<FiLayers />} title="២. ខ្នាតទំនិញ & តម្លៃ">
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={() => setQuickUnitOpen(true)}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-500 px-4 text-sm font-semibold text-white hover:bg-zinc-600">
+              <FiSettings />
+              ប្រភេទខ្នាតទំនិញ
+            </button>
             <button type="button" onClick={addUnit}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600">
               <FiPlus />
               បន្ថែមខ្នាតទំនិញ
             </button>
           </div>
+
+          {quickUnitOpen && (
+            <QuickCreateUnitBox
+              theme={theme}
+              units={units}
+              quickUnit={quickUnit}
+              setQuickUnit={setQuickUnit}
+              isCreatingUnit={isCreatingUnit}
+              isUpdatingUnit={isUpdatingUnit}
+              isDeletingUnit={isDeletingUnit}
+              onCreateUnit={onCreateUnit}
+              onUpdateUnit={onUpdateUnit}
+              onDeleteUnit={onDeleteUnit}
+              onClose={() => setQuickUnitOpen(false)}
+              onCreated={() => {
+                setQuickUnit({ unit_code: "", unit_name: "", unit_type: "piece", allow_decimal: false, status: "active" });
+                setQuickUnitOpen(false);
+              }}
+            />
+          )}
 
           <div className="space-y-4">
             {unitRows.map((unit, unitIndex) => {
@@ -600,7 +639,7 @@ export default function VariantSetupFormModal({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                     <FormSelect label="ខ្នាតទំនិញ" required theme={theme} icon={<FiLayers />}
                       value={unit.unit_id}
                       onChange={(v) => updateUnit(unitIndex, "unit_id", v)}
@@ -616,6 +655,11 @@ export default function VariantSetupFormModal({
                       onChange={(v) => updateUnit(unitIndex, "conversion_qty", v)}
                       placeholder="1"
                       hint="ឧ. កេសមួយមាន 24 កំប៉ុង/ដប" />
+                    <FormInput label="បាកូដ (Barcode)" theme={theme} icon={<FiHash />}
+                      value={unit.barcode}
+                      onChange={(v) => updateUnit(unitIndex, "barcode", v)}
+                      placeholder="ស្កេន ឬវាយបញ្ចូលបាកូដ"
+                      hint="ស្រេចចិត្ត — ខ្នាតនីមួយៗអាចមាន barcode ខុសគ្នា" />
                   </div>
 
                   <p className={`mb-2 mt-3 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
