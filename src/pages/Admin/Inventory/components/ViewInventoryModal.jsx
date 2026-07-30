@@ -20,7 +20,7 @@ export default function ViewInventoryModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className={`table-icon-3d h-11 rounded-xl border px-5 text-sm font-semibold transition hover:-translate-y-0.5 ${theme.isDark ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10 hover:text-white" : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"}`}
           >
             បិទ
           </button>
@@ -117,7 +117,7 @@ export default function ViewInventoryModal({
                 theme={theme}
               />
 
-              <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
+              <div className={`mt-4 overflow-x-auto rounded-xl border ${theme.isDark ? "border-white/10 bg-[#18181b]" : "border-zinc-200 bg-white"}`}>
                 <table className="w-full min-w-[720px] text-sm">
                   <thead className="bg-red-600 text-white">
                     <tr>
@@ -135,7 +135,7 @@ export default function ViewInventoryModal({
                       item.batches.map((batch) => (
                         <tr
                           key={batch.id || batch.batchNo}
-                          className="border-t border-zinc-200 dark:border-white/10"
+                          className={`border-t ${theme.isDark ? "border-white/10 bg-[#18181b] text-zinc-100" : "border-zinc-200 bg-white text-zinc-800"}`}
                         >
                           <td className="px-3 py-3">{batch.batchNo}</td>
                           <td className="px-3 py-3">{batch.lotNo || "-"}</td>
@@ -179,7 +179,7 @@ export default function ViewInventoryModal({
                       className={`flex items-start justify-between gap-4 rounded-xl border p-3 ${theme.softCard}`}
                     >
                       <div className="flex gap-3">
-                        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+                        <div className="table-icon-3d mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
                           <FiClock />
                         </div>
 

@@ -7,7 +7,7 @@ export default function UserStats({
   theme,
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
       <SummaryCard
         theme={theme}
         title="អ្នកប្រើប្រាស់សរុប"
@@ -40,7 +40,7 @@ function SummaryCard({ theme, icon, iconBg, title, value }) {
     <div className={`rounded-2xl border px-6 py-5 shadow-sm ${theme.card}`}>
       <div className="flex items-center gap-5">
         <div
-          className={`flex h-16 w-16 items-center justify-center rounded-2xl ${iconBg}`}
+          className={`summary-icon-3d flex h-16 w-16 items-center justify-center rounded-2xl ${iconBg}`}
         >
           {icon}
         </div>

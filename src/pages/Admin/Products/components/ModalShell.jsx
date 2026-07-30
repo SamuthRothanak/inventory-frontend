@@ -9,15 +9,20 @@ export default function ModalShell({
   children,
   footer,
   width = "max-w-6xl",
+  mobileFullScreen = false,
 }) {
   return (
     <div
       onMouseDown={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:px-4 sm:py-6"
     >
       <div
         onMouseDown={(event) => event.stopPropagation()}
-        className={`flex h-auto max-h-[90dvh] w-full ${width} flex-col overflow-hidden rounded-3xl border shadow-2xl ${theme.modal}`}
+        className={`flex w-full ${width} flex-col overflow-hidden shadow-2xl sm:h-auto sm:max-h-[90dvh] sm:rounded-3xl sm:border ${
+          mobileFullScreen
+            ? "h-dvh max-h-dvh border-0"
+            : "h-auto max-h-[88dvh] rounded-t-3xl border"
+        } ${theme.modal}`}
       >
         <div className={`shrink-0 border-b px-6 py-5 ${theme.modalHeader}`}>
           <div className="flex items-start justify-between gap-4">
@@ -35,7 +40,7 @@ export default function ModalShell({
               type="button"
               onClick={onClose}
               aria-label="Close modal"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
+              className="table-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <FiX className="text-lg" />
             </button>

@@ -100,7 +100,7 @@ export function ViewPurchaseModal({
     replacement: "ជំនួសទំនិញថ្មី",
     refund: "សងលុយ",
     credit_note: "កាត់លុយលើកក្រោយ",
-    none: "មិនដោះស្រាយ",
+    none: "លះបង់ការទាមទារ",
   };
   const getItemClaimResolution = (item = {}) => {
     // Don't gate this on claimQty > 0: once a refund/credit_note claim resolves, claim_qty
@@ -303,7 +303,7 @@ export function ViewPurchaseModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បិទ
           </button>

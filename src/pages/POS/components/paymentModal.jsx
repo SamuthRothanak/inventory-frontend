@@ -275,14 +275,14 @@ function ReceiptView({ receiptData, onClose, onNewSale, onPrint }) {
         <button
           type="button"
           onClick={onPrint}
-          className="flex flex-1 h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-100"
+          className="table-icon-3d flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-bold text-emerald-700 transition hover:-translate-y-0.5 hover:bg-emerald-100"
         >
           <Printer className="h-4 w-4" /> បោះពុម្ព
         </button>
         <button
           type="button"
           onClick={onNewSale}
-          className="flex flex-1 h-11 items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white shadow-sm hover:bg-red-600"
+          className="quick-action-icon-3d flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0"
         >
           <ShoppingCart className="h-4 w-4" /> ចាប់ផ្តើមការលក់ថ្មី
         </button>
@@ -798,7 +798,7 @@ export default function PaymentModal({
                   type="button"
                   disabled={!canCompleteCash || isSubmitting}
                   onClick={handleComplete}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="quick-action-icon-3d flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSubmitting
                     ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -958,7 +958,7 @@ export default function PaymentModal({
                   type="button"
                   disabled={!canCompleteTransfer || isSubmitting}
                   onClick={handleComplete}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="quick-action-icon-3d flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSubmitting
                     ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -1161,7 +1161,7 @@ export default function PaymentModal({
                   type="button"
                   disabled={!canCompleteSplit || isSubmitting}
                   onClick={handleComplete}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="quick-action-icon-3d flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSubmitting
                     ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -1206,7 +1206,7 @@ export default function PaymentModal({
                   type="button"
                   disabled={isSubmitting}
                   onClick={handleCreditComplete}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="quick-action-icon-3d flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-blue-700 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSubmitting
                     ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />

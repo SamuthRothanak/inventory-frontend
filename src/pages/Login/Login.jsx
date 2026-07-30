@@ -143,7 +143,7 @@ const Login = () => {
 
             <div className="relative">
               <div className="inline-flex items-center gap-3 rounded-2xl bg-white/15 px-3.5 py-3 ring-1 ring-white/20 backdrop-blur">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-red-600 shadow-lg">
+                <div className="login-icon-3d flex h-11 w-11 items-center justify-center rounded-xl bg-white text-red-600">
                   <span className="text-sm font-extrabold">{getShopInitials(shopInfo.name)}</span>
                 </div>
                 <div className="leading-tight">
@@ -192,7 +192,7 @@ const Login = () => {
             <div className="w-full max-w-sm">
               {/* Mobile brand */}
               <div className="mb-6 flex items-center gap-3 lg:hidden">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-600 text-white shadow-lg">
+                <div className="login-icon-3d flex h-12 w-12 items-center justify-center rounded-xl bg-red-600 text-white">
                   <span className="text-base font-extrabold">{getShopInitials(shopInfo.name)}</span>
                 </div>
                 <div className="leading-tight">
@@ -206,7 +206,7 @@ const Login = () => {
               </div>
 
               <div className="mb-6">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg shadow-red-200">
+                <div className="login-icon-3d mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white">
                   <FiShield className="text-xl" />
                 </div>
                 <h2 className="text-2xl font-bold text-slate-900">ចូលប្រើប្រាស់</h2>
@@ -290,7 +290,7 @@ const Login = () => {
                 <button
                   type="submit"
                   disabled={mutation.isPending}
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 px-4 text-sm font-semibold text-white shadow-lg shadow-red-200 transition hover:from-red-600 hover:to-rose-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-400/40 bg-gradient-to-r from-red-500 to-rose-600 px-4 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_3px_0_#be123c,0_8px_14px_rgba(225,29,72,0.22)] transition hover:-translate-y-0.5 hover:from-red-600 hover:to-rose-700 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.34),0_4px_0_#9f1239,0_10px_17px_rgba(225,29,72,0.26)] active:translate-y-0.5 active:scale-[0.99] active:shadow-[inset_0_2px_4px_rgba(127,29,29,0.18),0_1px_0_#9f1239,0_3px_7px_rgba(225,29,72,0.2)] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {mutation.isPending ? (
                     <>
@@ -304,7 +304,7 @@ const Login = () => {
               </form>
 
               <div className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs leading-6 text-slate-500">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200">
+                <span className="table-icon-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200">
                   <FiUsers size={15} />
                 </span>
                 <span className="min-w-0 flex-1">
@@ -326,7 +326,7 @@ const Login = () => {
 
 const Feature = ({ icon, title, desc }) => (
   <div className="flex items-start gap-3 rounded-xl bg-white/10 p-3 ring-1 ring-white/10 backdrop-blur-sm transition hover:bg-white/15">
-    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15">
+    <div className="quick-action-icon-3d mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15">
       {icon}
     </div>
     <div>

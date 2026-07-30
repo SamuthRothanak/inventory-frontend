@@ -14,7 +14,7 @@ export default function NotificationDropdown({
   return (
     <div
       className={[
-        "absolute right-0 top-[calc(100%+0.75rem)] isolate z-[9999] w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-2xl border shadow-2xl",
+        "fixed inset-x-2 top-[4.75rem] isolate z-[9999] w-auto overflow-hidden rounded-2xl border shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+0.75rem)] sm:w-[min(420px,calc(100vw-2rem))]",
         isDark
           ? "border-white/10 bg-zinc-900 text-white shadow-black/40"
           : "border-zinc-200 bg-white text-zinc-900 shadow-black/15",
@@ -41,7 +41,7 @@ export default function NotificationDropdown({
         </button>
       </div>
 
-      <div className="max-h-80 overflow-y-auto p-3">
+      <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain p-3 sm:max-h-80">
         {isLoading && (
           <div className="space-y-2">
             {[0, 1, 2].map((item) => (

@@ -3,7 +3,7 @@
   const bg = typeof act.bg === "function" ? act.bg(isDark) : act.bg;
   return (
     <div className="flex items-start gap-3">
-      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${bg} ${act.color}`}>
+      <div className={`table-icon-3d flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${bg} ${act.color}`}>
         <Icon />
       </div>
       <div className="min-w-0 flex-1">

@@ -179,22 +179,22 @@ export default function StockMovementTable({
         <div className="flex items-center gap-2">
           <button type="button" disabled={pagination.currentPage <= 1}
             onClick={() => onPageChange(pagination.currentPage - 1)}
-            className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+            className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
             <FiChevronLeft /> មុន
           </button>
           {pageNumbers.map((p) => (
             <button key={p} type="button" onClick={() => onPageChange(p)}
-              className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition ${
+              className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition hover:-translate-y-0.5 ${
                 p === pagination.currentPage
-                  ? "bg-red-600 text-white"
-                  : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                  ? "quick-action-icon-3d bg-red-600 text-white"
+                  : "table-icon-3d border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
               }`}>
               {p}
             </button>
           ))}
           <button type="button" disabled={pagination.currentPage >= pagination.lastPage}
             onClick={() => onPageChange(pagination.currentPage + 1)}
-            className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+            className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
             បន្ទាប់ <FiChevronRight />
           </button>
         </div>

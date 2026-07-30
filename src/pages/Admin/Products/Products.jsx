@@ -31,11 +31,11 @@ function ConfirmModal({ open, title, body, onConfirm, onCancel, theme }) {
         </div>
         <div className={`flex justify-end gap-3 border-t px-5 py-4 ${theme.modalHeader}`}>
           <button type="button" onClick={onCancel}
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+            className="table-icon-3d h-10 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
             បោះបង់
           </button>
           <button type="button" onClick={() => { onConfirm?.(); onCancel(); }}
-            className="h-10 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600">
+            className="quick-action-icon-3d h-10 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0">
             បញ្ជាក់
           </button>
         </div>
@@ -1269,8 +1269,8 @@ export default function Products() {
   };
 
   return (
-    <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <section className="space-y-4 sm:space-y-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         <SummaryCard
           theme={theme}
           icon={<FiBox className="text-[34px] text-red-500" />}
@@ -1378,7 +1378,7 @@ export default function Products() {
               disabled={!canExportProducts}
               aria-haspopup="menu"
               aria-expanded={exportMenuOpen}
-              className={`inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:border-red-400 hover:text-red-500`}
+              className={`table-icon-3d inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:border-red-400 hover:text-red-500`}
             >
               <FiDownload className="text-lg" />
               {isExportingProducts ? "កំពុង Export..." : "Export"}
@@ -1411,7 +1411,7 @@ export default function Products() {
             <button
               type="button"
               onClick={openAddProductForm}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+              className="quick-action-icon-3d inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 active:translate-y-0"
             >
               <FiPlusCircle className="text-lg" />
               បន្ថែមផលិតផល

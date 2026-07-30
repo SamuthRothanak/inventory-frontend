@@ -456,7 +456,7 @@ export default function Customer() {
 
   return (
     <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
         <SummaryCard
           theme={theme}
           title="អតិថិជនទាំងអស់"
@@ -482,7 +482,7 @@ export default function Customer() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,1fr)_220px_160px_auto] xl:items-center">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_220px_160px_auto] xl:items-center">
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -526,7 +526,7 @@ export default function Customer() {
               type="button"
               onClick={() => exportCustomers.length > 0 && setExportMenuOpen((open) => !open)}
               disabled={exportCustomers.length === 0}
-              className={`inline-flex h-12 min-w-[142px] items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${theme.badge} hover:border-red-400 hover:text-red-500`}
+              className={`table-icon-3d inline-flex h-12 min-w-[142px] items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${theme.badge} hover:border-red-400 hover:text-red-500`}
             >
               <FiDownload className="text-lg" />
               Export
@@ -558,7 +558,7 @@ export default function Customer() {
             <button
               type="button"
               onClick={openAddModal}
-              className="inline-flex h-12 min-w-[180px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+              className="quick-action-icon-3d inline-flex h-12 min-w-[180px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600"
             >
               <FiPlusCircle className="text-lg" />
               បន្ថែមអតិថិជន

@@ -1,6 +1,5 @@
 import {
   FiAlertTriangle,
-  FiChevronDown,
   FiClock,
   FiDollarSign,
   FiFileText,
@@ -48,6 +47,7 @@ export function ReturnSaleModal({
 
   return (
     <ModalShell
+      mobileFullScreen
       title="ត្រឡប់ / សងប្រាក់"
       subtitle={`${sale.saleNo} · ${sale.customerName} · សរុប $${Number(sale.grandTotal).toFixed(2)}`}
       theme={theme}
@@ -59,7 +59,7 @@ export function ReturnSaleModal({
             type="button"
             onClick={onClose}
             disabled={isSaving}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បោះបង់
           </button>
@@ -68,10 +68,16 @@ export function ReturnSaleModal({
             type="button"
             onClick={onSave}
             disabled={isSaving || selectedCount === 0}
-            className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-red-600 ${isSaving || selectedCount === 0 ? "opacity-60 pointer-events-none" : ""}`}
+            className={`quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 ${isSaving || selectedCount === 0 ? "opacity-60 pointer-events-none" : ""}`}
           >
             <FiSave className={isSaving ? "animate-spin" : ""} />
-            {isSaving ? "កំពុងរក្សាទុក..." : `រក្សាទុក (${selectedCount} ទំនិញ)`}
+            {isSaving
+              ? "កំពុងរក្សាទុក..."
+              : form.status === "completed"
+                ? `បញ្ចប់ការត្រឡប់ (${selectedCount} ទំនិញ)`
+                : form.status === "approved"
+                  ? `កត់ត្រា ចាំស្តុក (${selectedCount} ទំនិញ)`
+                  : `ដាក់ស្នើសំណើត្រឡប់ (${selectedCount} ទំនិញ)`}
           </button>
         </>
       }
@@ -80,7 +86,11 @@ export function ReturnSaleModal({
         <div className="flex items-start gap-2 rounded-xl bg-amber-500/10 p-4 text-sm text-amber-600 dark:text-amber-400">
           <FiAlertTriangle className="mt-0.5 shrink-0" />
           <span>
-            ការត្រឡប់ទំនិញ នឹងបង្កើតកំណត់ត្រាការត្រឡប់ ។ ទំនិញ​ល្អ​នឹង​ត្រូវ​ដាក់​ស្តុក​ត្រឡប់; ទំនិញ​ខូច​ឬ​មាន​បញ្ហា​នឹង​ត្រូវ​លុប​ចោល​ពី​ស្តុក ។
+            {form.status === "completed"
+              ? "ស្តុក និងការសងប្រាក់ នឹងប៉ះពាល់ភ្លាមៗពេលរក្សាទុក។ ជ្រើសរើសនេះលុះត្រាតែអ្នកមានសិទ្ធិអនុម័តដោយផ្ទាល់។"
+              : form.status === "approved"
+                ? 'ស្តុក និងការសងប្រាក់ មិនទាន់ប៉ះពាល់ទេ។ សំណើនេះនឹងចូលជា "ចាំទំនិញចូលស្តុក" — បញ្ចប់វានៅ tab "រង់ចាំអនុម័ត" នៅពេលទំនិញចូលស្តុករួច។'
+                : 'សំណើនេះនឹងចូលជា "រង់ចាំអនុម័ត" — ស្តុក និងការសងប្រាក់ មិនទាន់ប៉ះពាល់ទេ រហូតដល់អ្នកគ្រប់គ្រងអនុម័តពី tab "រង់ចាំអនុម័ត"។'}
           </span>
         </div>
 
@@ -105,8 +115,9 @@ export function ReturnSaleModal({
                   <input
                     type="checkbox"
                     checked={item.selected}
+                    disabled={item.maxQty <= 0}
                     onChange={(e) => onItemChange(item.id, "selected", e.target.checked)}
-                    className="mt-0.5 h-4 w-4 cursor-pointer accent-red-500"
+                    className="mt-0.5 h-4 w-4 cursor-pointer accent-red-500 disabled:cursor-not-allowed"
                   />
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold leading-tight">
@@ -114,6 +125,7 @@ export function ReturnSaleModal({
                     </p>
                     <p className={`mt-0.5 text-xs ${theme.muted}`}>
                       {item.productNameSnapshot} · {item.unitNameSnapshot} · ច្រើនបំផុត: {item.maxQty}
+                      {item.maxQty <= 0 && (item.isPendingClaimed ? " (កំពុងរង់ចាំអនុម័តរួចហើយ)" : " (ត្រឡប់អស់ហើយ)")}
                     </p>
                   </div>
                 </div>
@@ -142,19 +154,15 @@ export function ReturnSaleModal({
                     </div>
 
                     <div>
-                      <p className={`mb-1.5 text-xs font-semibold ${theme.muted}`}>ស្ថានភាព</p>
-                      <div className="relative">
-                        <select
-                          value={item.condition}
-                          onChange={(e) => onItemChange(item.id, "condition", e.target.value)}
-                          className={`h-10 w-full appearance-none rounded-xl border pl-3 pr-8 text-sm outline-none transition focus:ring-4 ${theme.select}`}
-                        >
-                          {CONDITION_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                        <FiChevronDown className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm ${theme.muted}`} />
-                      </div>
+                      <p className={`mb-1.5 text-xs font-semibold ${theme.muted}`}>មូលហេតុ</p>
+                      <FormSelect
+                        label=""
+                        value={item.condition}
+                        onChange={(value) => onItemChange(item.id, "condition", value)}
+                        options={CONDITION_OPTIONS}
+                        theme={theme}
+                        compact
+                      />
                     </div>
 
                     <div>
@@ -225,15 +233,17 @@ export function ReturnSaleModal({
 
             <FormSelect
               label="ស្ថានភាព"
+              required
               value={form.status}
               onChange={(value) => onChange("status", value)}
               theme={theme}
               icon={<FiClock />}
               options={[
                 { value: "pending_approval", label: "រង់ចាំការយល់ព្រម" },
-                { value: "approved",         label: "យល់ព្រមហើយ" },
-                { value: "completed",        label: "បញ្ចប់ហើយ" },
-                { value: "rejected",         label: "បដិសេធ" },
+                { value: "completed",        label: "បានដោះស្រាយរួច" },
+                ...(form.resolutionType === "replacement"
+                  ? [{ value: "approved", label: "ចាំទំនិញចូលស្តុក" }]
+                  : []),
               ]}
             />
           </div>

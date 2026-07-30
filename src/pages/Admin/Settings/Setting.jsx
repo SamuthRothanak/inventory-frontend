@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FiCheckCircle } from "react-icons/fi";
+import { FiCheckCircle, FiSettings } from "react-icons/fi";
 
 import SettingsSidebar from "./components/SettingsSidebar";
 import {
@@ -42,17 +42,18 @@ export default function Setting() {
   const [savedMessage, setSavedMessage]   = useState("");
   const [errorMessage, setErrorMessage]   = useState("");
 
-  const { data: meData } = useQuery({
+  const { data: meData, isLoading: isMeLoading } = useQuery({
     queryKey: ["me"],
     queryFn:  meApi,
   });
   const user = meData?.data ?? authUser;
 
-  const { data: rateData } = useQuery({
+  const { data: rateData, isLoading: isRateLoading } = useQuery({
     queryKey: ["exchange-rate-active"],
     queryFn:  getActiveExchangeRateApi,
   });
   const rate = rateData?.data ?? null;
+  const isLoading = isMeLoading || isRateLoading;
 
   useEffect(() => {
     if (user) {
@@ -126,7 +127,10 @@ export default function Setting() {
           onSectionChange={setActiveSection}
         />
 
-        <div className={`min-w-0 p-5 lg:p-6 ${theme.content}`}>
+        <div className={`min-w-0 p-3 sm:p-5 lg:p-6 ${theme.content}`}>
+          {isLoading ? (
+            <Settings3DLoading theme={theme} />
+          ) : (
           <div className="mx-auto max-w-7xl">
             {savedMessage && (
               <div className="mb-5 flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
@@ -200,8 +204,49 @@ export default function Setting() {
               />
             )}
           </div>
+          )}
         </div>
       </div>
     </section>
+  );
+}
+
+function Settings3DLoading({ theme }) {
+  return (
+    <div
+      className="flex min-h-[420px] flex-col items-center justify-center"
+      role="status"
+      aria-live="polite"
+    >
+      <div
+        className="relative flex h-32 w-32 items-center justify-center"
+        style={{ perspective: "700px" }}
+      >
+        <div className="absolute bottom-1 h-5 w-20 animate-pulse rounded-[50%] bg-red-500/25 blur-md" />
+
+        <div className="absolute inset-2 animate-spin rounded-full border border-dashed border-red-400/50 [animation-duration:3s]" />
+        <div className="absolute inset-5 animate-spin rounded-full border-2 border-transparent border-l-rose-400 border-r-red-500 [animation-direction:reverse] [animation-duration:1.8s]" />
+
+        <div
+          className="relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-white/40 bg-gradient-to-br from-rose-400 via-red-500 to-red-700 text-white"
+          style={{
+            transform: "rotateX(12deg) rotateY(-18deg) translateZ(18px)",
+            boxShadow:
+              "14px 18px 24px rgba(127, 29, 29, 0.28), inset 4px 4px 10px rgba(255,255,255,0.32), inset -5px -7px 12px rgba(127,29,29,0.28)",
+          }}
+        >
+          <div className="absolute inset-1 rounded-[16px] border border-white/20" />
+          <FiSettings className="relative animate-spin text-3xl drop-shadow-md [animation-duration:3s]" />
+          <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-emerald-400 shadow-lg shadow-emerald-400/40" />
+        </div>
+      </div>
+
+      <p className={`mt-3 text-sm font-bold ${theme.pageTitle}`}>
+        រង់ចាំបន្តិច...
+      </p>
+      <p className={`mt-1 text-xs ${theme.muted}`}>
+        កំពុងរៀបចំការកំណត់
+      </p>
+    </div>
   );
 }

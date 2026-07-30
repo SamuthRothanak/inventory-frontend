@@ -84,7 +84,7 @@ export default function StockAdjustmentTable({
                           type="button"
                           onClick={() => onView(adjustment)}
                           // title="មើលការកែតម្រូវ"
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-amber-400 to-orange-500 text-white shadow-md shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-amber-500 hover:to-orange-600 hover:shadow-lg hover:shadow-orange-500/25 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0"
+                          className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-orange-600 hover:shadow-orange-500/25 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0"
                         >
 
                           <FiEye size={16} />
@@ -95,7 +95,7 @@ export default function StockAdjustmentTable({
                             type="button"
                             onClick={() => onCancel(adjustment)}
                             title="លុបសេចក្ដីព្រាង"
-                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0"
+                            className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0"
                           >
                             <FiRotateCcw size={16} />
                           </button>
@@ -130,7 +130,7 @@ export default function StockAdjustmentTable({
               type="button"
               disabled={pagination.currentPage <= 1}
               onClick={() => onPageChange(pagination.currentPage - 1)}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              className="table-icon-3d inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
             >
               <FiChevronLeft />
               មុន
@@ -141,10 +141,10 @@ export default function StockAdjustmentTable({
                 key={pageNumber}
                 type="button"
                 onClick={() => onPageChange(pageNumber)}
-                className={`h-10 min-w-10 rounded-xl px-3 text-sm font-semibold transition ${
+                className={`h-10 min-w-10 rounded-xl px-3 text-sm font-semibold transition hover:-translate-y-0.5 ${
                   pageNumber === pagination.currentPage
-                    ? "bg-red-600 text-white"
-                    : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                    ? "quick-action-icon-3d bg-red-600 text-white"
+                    : "table-icon-3d border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
                 }`}
               >
                 {pageNumber}
@@ -155,7 +155,7 @@ export default function StockAdjustmentTable({
               type="button"
               disabled={pagination.currentPage >= pagination.lastPage}
               onClick={() => onPageChange(pagination.currentPage + 1)}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              className="table-icon-3d inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
             >
               បន្ទាប់
               <FiChevronRight />

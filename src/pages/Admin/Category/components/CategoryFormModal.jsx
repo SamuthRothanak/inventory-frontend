@@ -85,6 +85,7 @@ export default function CategoryFormModal({
 
   return (
     <ModalShell
+      mobileFullScreen
       title={title}
       subtitle="រូបភាពប្រភេទជា optional តែមានប្រយោជន៍សម្រាប់ POS។"
       theme={theme}
@@ -94,7 +95,7 @@ export default function CategoryFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បោះបង់
           </button>
@@ -103,7 +104,7 @@ export default function CategoryFormModal({
             type="submit"
             form="category-form"
             disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FiSave />
             {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកប្រភេទ"}
@@ -129,7 +130,7 @@ export default function CategoryFormModal({
           theme={theme}
         />
 
-        <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+        <div className={`rounded-2xl border p-4 shadow-sm sm:p-5 ${theme.section}`}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormInput
               label="ឈ្មោះប្រភេទ"
@@ -209,7 +210,7 @@ export default function CategoryFormModal({
           theme={theme}
         />
 
-        <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+        <div className={`rounded-2xl border p-4 shadow-sm sm:p-5 ${theme.section}`}>
           <div className="flex items-center gap-4">
             <CategoryImage
               image={imagePath}
@@ -246,7 +247,7 @@ export default function CategoryFormModal({
 function SectionTitle({ icon, title, subtitle, theme }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+      <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
         {icon}
       </div>
 
@@ -405,8 +406,8 @@ function FormImageInput({
             : "border-zinc-300 bg-white/0 hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500"
         }`}
       >
-        <div className="flex flex-col gap-4 md:flex-row md:items-center">
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="summary-icon-3d flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
             {preview ? (
               <img
                 src={preview}
@@ -421,7 +422,7 @@ function FormImageInput({
           <div className="min-w-0 flex-1">
             <label
               htmlFor={inputId}
-              className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+              className="quick-action-icon-3d inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-700"
             >
               <FiUploadCloud className="text-lg" />
               ជ្រើសរើសរូបភាព
@@ -453,7 +454,7 @@ function FormImageInput({
             <button
               type="button"
               onClick={onRemove}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+              className="table-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <FiX />
               លុបចេញ

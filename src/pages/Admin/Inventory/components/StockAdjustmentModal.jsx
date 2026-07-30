@@ -125,6 +125,7 @@ export default function StockAdjustmentModal({
 
     return (
       <ModalShell
+        mobileFullScreen
         title={title}
         subtitle={subtitle}
         theme={theme}
@@ -135,7 +136,7 @@ export default function StockAdjustmentModal({
             <button
               type="button"
               onClick={onClose}
-              className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+              className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
             >
               បោះបង់
             </button>
@@ -144,7 +145,7 @@ export default function StockAdjustmentModal({
               type="button"
               onClick={onSave}
               disabled={isSaving}
-              className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white shadow-sm ${
+              className={`quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 ${
                 isStockIn
                   ? "bg-blue-600 hover:bg-blue-700"
                   : "bg-red-500 hover:bg-red-600"

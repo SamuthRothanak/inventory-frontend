@@ -18,7 +18,7 @@ export default function SettingSummaryCard({
         </div>
 
         <div
-          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${iconBg}`}
+          className={`summary-icon-3d flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${iconBg}`}
         >
           {icon}
         </div>

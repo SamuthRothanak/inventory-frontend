@@ -6,7 +6,7 @@ export default function SummaryCard({ card, theme }) {
   return (
     <div className={`rounded-2xl border border-l-4 p-5 shadow-sm transition hover:shadow-md ${theme.card} ${card.accent} ${isZero ? "opacity-45" : ""}`}>
       <div className="flex items-start gap-3">
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ${card.iconBg}`}>
+        <div className={`summary-icon-3d flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ${card.iconBg}`}>
           <Icon />
         </div>
         <div className="min-w-0 flex-1">
@@ -29,5 +29,4 @@ export default function SummaryCard({ card, theme }) {
     </div>
   );
 }
-
 

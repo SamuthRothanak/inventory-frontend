@@ -31,8 +31,8 @@ export default function StockAdjustmentDetailModal({ adjustment, theme, onClose 
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm">
-      <div className={`flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border shadow-2xl ${theme.modal}`}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:px-4 sm:py-6">
+      <div className={`flex h-dvh max-h-dvh w-full max-w-5xl flex-col overflow-hidden border-0 shadow-2xl sm:h-auto sm:max-h-[92dvh] sm:rounded-2xl sm:border ${theme.modal}`}>
         <div className={`flex items-start justify-between gap-4 border-b p-6 ${theme.modalHeader}`}>
           <div>
             <h2 className="text-xl font-bold">
@@ -46,7 +46,7 @@ export default function StockAdjustmentDetailModal({ adjustment, theme, onClose 
           <button
             type="button"
             onClick={onClose}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-100"
+            className="table-icon-3d flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-300 bg-white text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
           >
             <FiX size={22} />
           </button>
@@ -56,7 +56,7 @@ export default function StockAdjustmentDetailModal({ adjustment, theme, onClose 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
               <div className="flex items-center gap-3">
-                <FiHash className="text-xl text-red-500" />
+                <span className="table-icon-3d flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500"><FiHash /></span>
                 <div>
                   <p className={`text-xs ${theme.muted}`}>ប្រភេទ</p>
                   <p className="text-sm font-semibold">
@@ -68,7 +68,7 @@ export default function StockAdjustmentDetailModal({ adjustment, theme, onClose 
 
             <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
               <div className="flex items-center gap-3">
-                <FiTag className="text-xl text-amber-500" />
+                <span className="table-icon-3d flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500"><FiTag /></span>
                 <div>
                   <p className={`text-xs ${theme.muted}`}>មូលហេតុ</p>
                   <p className="text-sm font-semibold">
@@ -80,7 +80,7 @@ export default function StockAdjustmentDetailModal({ adjustment, theme, onClose 
 
             <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
               <div className="flex items-center gap-3">
-                <FiBox className="text-xl text-blue-500" />
+                <span className="table-icon-3d flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500"><FiBox /></span>
                 <div>
                   <p className={`text-xs ${theme.muted}`}>ចំនួនមូលដ្ឋាន</p>
                   <p className="text-sm font-semibold">
@@ -92,7 +92,7 @@ export default function StockAdjustmentDetailModal({ adjustment, theme, onClose 
 
             <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
               <div className="flex items-center gap-3">
-                <FiDollarSign className="text-xl text-emerald-500" />
+                <span className="table-icon-3d flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500"><FiDollarSign /></span>
                 <div>
                   <p className={`text-xs ${theme.muted}`}>តម្លៃសរុបបន្ទាត់</p>
                   <p className="text-sm font-semibold">
@@ -200,7 +200,7 @@ export default function StockAdjustmentDetailModal({ adjustment, theme, onClose 
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl bg-white px-6 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-6 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
           >
             បិទ
           </button>

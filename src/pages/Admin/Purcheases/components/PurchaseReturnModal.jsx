@@ -30,7 +30,7 @@ const itemResolutionOptions = [
   { value: "replacement", label: "ជំនួសទំនិញថ្មី" },
   { value: "refund", label: "សងលុយ" },
   { value: "credit_note", label: "កាត់លុយលើវិក្កយបត្រក្រោយ" },
-  { value: "none", label: "មិនដោះស្រាយ" },
+  { value: "none", label: "លះបង់ការទាមទារ" },
 ];
 
 const itemStatusOptions = [
@@ -54,7 +54,7 @@ function getResolutionDetail(item) {
     return `អ្នកផ្គត់ផ្គង់ ឲ កាត់លុយលើកក្រោយ ${formatCurrencyPair(settlementUsd, settlementKhr)}`;
   }
   if (resolutionType === "none") {
-    return "មិនដោះស្រាយ";
+    return "លះបង់ការទាមទារ";
   }
   return `អ្នកផ្គត់ផ្គង់ ជំនួស ${item.replacementQty || item.qtyReturned || 0} ${item.unitName}`;
 }
@@ -232,6 +232,7 @@ export function PurchaseReturnModal({
 
   return (
     <ModalShell
+      mobileFullScreen
       title="ការទាមទារ អ្នកផ្គត់ផ្គង់ / ត្រឡប់ទំនិញ"
       subtitle={`បង្កើតដំណោះស្រាយ អ្នកផ្គត់ផ្គង់ សម្រាប់ទំនិញខូចពី ${purchase.purchaseNo}។`}
       theme={theme}
@@ -242,14 +243,14 @@ export function PurchaseReturnModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បោះបង់
           </button>
           <button
             type="button"
             onClick={onSave}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700"
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-purple-700"
           >
             <FiSave /> រក្សាទុកការទាមទារ
           </button>
@@ -452,7 +453,7 @@ export function PurchaseReturnModal({
                       </td>
                       <td className="px-3 py-3">{item.qtyReturned} {item.unitName}</td>
                       <td className="px-3 py-3">{item.baseQtyReturned} {item.baseUnit}</td>
-                      <td className="px-3 py-3 min-w-32">
+                      <td className="min-w-32 px-3 py-3 align-middle">
                         {editingConditionIndex === index ? (
                           <div className="flex items-center gap-1.5">
                             <CompactSelect
@@ -477,7 +478,7 @@ export function PurchaseReturnModal({
                             <button
                               type="button"
                               onClick={() => setEditingConditionIndex(index)}
-                              className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg border transition hover:bg-purple-500/10 hover:text-purple-600 ${theme.input}`}
+                              className={`table-icon-3d shrink-0 flex h-7 w-7 items-center justify-center rounded-lg border transition hover:-translate-y-0.5 hover:bg-purple-500/10 hover:text-purple-600 ${theme.input}`}
                               title="កែសម្រួល"
                             >
                               <FiEdit2 size={13} />
@@ -485,7 +486,7 @@ export function PurchaseReturnModal({
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-3 min-w-64">
+                      <td className="min-w-64 px-3 py-3 align-middle">
                         {editingResolutionIndex === index ? (
                           // Editing this one row only — side-by-side (not stacked) so the row's
                           // height barely changes from its collapsed state; a small icon-only
@@ -515,7 +516,7 @@ export function PurchaseReturnModal({
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-sm font-semibold">
                                 {getOptionLabel(itemResolutionOptions, item.resolutionType === "credit" ? "credit_note" : item.resolutionType || "replacement", "ជំនួសទំនិញថ្មី")}
@@ -533,7 +534,7 @@ export function PurchaseReturnModal({
                             <button
                               type="button"
                               onClick={() => setEditingResolutionIndex(index)}
-                              className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg border transition hover:bg-purple-500/10 hover:text-purple-600 ${theme.input}`}
+                              className={`table-icon-3d shrink-0 flex h-7 w-7 items-center justify-center rounded-lg border transition hover:-translate-y-0.5 hover:bg-purple-500/10 hover:text-purple-600 ${theme.input}`}
                               title="កែសម្រួល"
                             >
                               <FiEdit2 size={13} />
@@ -543,7 +544,7 @@ export function PurchaseReturnModal({
                       </td>
                       <td className="px-3 py-3 font-semibold">{formatCurrencyPair(item.lineTotalUsd ?? item.lineTotal, item.lineTotalKhr)}</td>
                       <td className="px-3 py-3 text-center">
-                        <button type="button" onClick={() => onRemoveItem(index)} className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-red-500 px-2 text-xs font-semibold text-white hover:bg-red-600">
+                        <button type="button" onClick={() => onRemoveItem(index)} className="quick-action-icon-3d inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-red-500 px-2 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">
                           <FiTrash size={15} /> លុប
                         </button>
                       </td>

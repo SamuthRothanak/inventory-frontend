@@ -104,7 +104,7 @@ export default function ProductDetailModal({
           <button
             type="button"
             onClick={() => onManageProduct?.(product)}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700"
           >
             <FiEdit2 />
             គ្រប់គ្រងផលិតផល
@@ -113,7 +113,7 @@ export default function ProductDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បិទ
           </button>
@@ -122,7 +122,7 @@ export default function ProductDetailModal({
     >
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">
         <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
-          <div className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-red-500/10">
+          <div className="summary-icon-3d flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-red-500/10">
             {product.imagePath ? (
               <img
                 src={product.imagePath}

@@ -130,6 +130,9 @@ function NewReturn({ onSuccess }) {
   const [verificationType, setVerificationType] = useState("receipt");
   const [resolutionType,   setResolutionType]   = useState("refund");
   const [reason,           setReason]           = useState("");
+  // Default to pending — sometimes the person at the register IS the boss and can flip this
+  // to "resolved already" to skip the approval queue, per the shop's actual policy.
+  const [returnStatus,     setReturnStatus]     = useState("pending_approval");
 
   const mutation = useMutation({
     mutationFn: createSalesReturnApi,
@@ -159,14 +162,34 @@ function NewReturn({ onSuccess }) {
       const sale = detailRes?.data ?? detailRes;
       setFoundSale(sale);
 
+      // Qty already claimed by a return still pending_approval/approved for this sale — without
+      // this, a duplicate return request for the same item would be offered again here and only
+      // get rejected after the whole form is filled out and submitted.
+      const pendingReturnsRes = await getSalesReturnsApi({
+        sale_id: match.id,
+        status: ["pending_approval", "approved"],
+        per_page: 50,
+      });
+      const pendingReturns = extractArray(pendingReturnsRes);
+      const pendingClaimedBySaleItemId = {};
+      pendingReturns.forEach((ret) => {
+        (ret.items || []).forEach((item) => {
+          pendingClaimedBySaleItemId[item.sale_item_id] =
+            (pendingClaimedBySaleItemId[item.sale_item_id] || 0) + Number(item.base_qty || 0);
+        });
+      });
+
       const saleItems = Array.isArray(sale.items) ? sale.items : [];
       setReturnItems(
         saleItems.map((item) => {
-          const convQty        = Number(item.conversion_qty_snapshot) || 1;
-          const origBase       = Number(item.base_qty)                || 0;
-          const returnedBase   = Number(item.returned_qty_base)       || 0;
-          const remainingBase  = Math.max(0, origBase - returnedBase);
+          const convQty         = Number(item.conversion_qty_snapshot) || 1;
+          const origBase        = Number(item.base_qty)                || 0;
+          const returnedBase    = Number(item.returned_qty_base)       || 0;
+          const pendingClaimed  = Number(pendingClaimedBySaleItemId[item.id] || 0);
+          const remainingAfterCompleted = Math.max(0, origBase - returnedBase);
+          const remainingBase  = Math.max(0, remainingAfterCompleted - pendingClaimed);
           const maxQty         = Math.round((remainingBase / convQty) * 1000) / 1000;
+          const isPendingClaimed = remainingAfterCompleted > 0 && remainingBase <= 0;
           return {
             saleItemId:           item.id,
             productVariantUnitId: item.product_variant_unit_id,
@@ -175,6 +198,7 @@ function NewReturn({ onSuccess }) {
             unitName:             item.unit_name_snapshot    || "",
             conversionQty:        convQty,
             maxQty,
+            isPendingClaimed,
             checked:       false,
             qty:           String(maxQty),
             itemCondition: "good",
@@ -219,7 +243,7 @@ function NewReturn({ onSuccess }) {
       return_type:       isFullReturn ? "full" : "partial",
       resolution_type:   resolutionType,
       reason:            reason || null,
-      status:            "completed",
+      status:            returnStatus,
       items: selectedItems.map((item) => {
         const returnQty = Number(item.qty || 0);
         const baseQty = Math.round(returnQty * item.conversionQty * 1000) / 1000;
@@ -343,7 +367,7 @@ function NewReturn({ onSuccess }) {
                     <p className="text-[10px] text-slate-500">
                       {item.unitName} · អតិបរមា:{" "}
                       <span className="font-semibold text-slate-700">{item.maxQty}</span>
-                      {item.maxQty <= 0 && " (ត្រឡប់ហើយ)"}
+                      {item.maxQty <= 0 && (item.isPendingClaimed ? " (កំពុងរង់ចាំអនុម័តរួចហើយ)" : " (ត្រឡប់ហើយ)")}
                     </p>
 
                     {item.checked && (
@@ -361,7 +385,7 @@ function NewReturn({ onSuccess }) {
                           />
                         </div>
                         <div>
-                          <p className="mb-1 text-[10px] font-bold text-slate-500">ស្ថានភាព</p>
+                          <p className="mb-1 text-[10px] font-bold text-slate-500">មូលហេតុ</p>
                           <select
                             value={item.itemCondition}
                             onChange={(e) => updateItem(i, "itemCondition", e.target.value)}
@@ -415,7 +439,13 @@ function NewReturn({ onSuccess }) {
                   <p className="mb-1 text-[10px] font-bold text-slate-500">ដំណោះស្រាយ</p>
                   <select
                     value={resolutionType}
-                    onChange={(e) => setResolutionType(e.target.value)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setResolutionType(nextValue);
+                      if (nextValue !== "replacement" && returnStatus === "approved") {
+                        setReturnStatus("pending_approval");
+                      }
+                    }}
                     className="h-7 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-red-300"
                   >
                     <option value="refund">សងប្រាក់</option>
@@ -423,6 +453,21 @@ function NewReturn({ onSuccess }) {
                     <option value="store_credit">Credit ហាង</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <p className="mb-1 text-[10px] font-bold text-slate-500">ស្ថានភាព</p>
+                <select
+                  value={returnStatus}
+                  onChange={(e) => setReturnStatus(e.target.value)}
+                  className="h-7 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-red-300"
+                >
+                  <option value="pending_approval">រង់ចាំការយល់ព្រម</option>
+                  <option value="completed">បានដោះស្រាយរួច</option>
+                  {resolutionType === "replacement" && (
+                    <option value="approved">ចាំទំនិញចូលស្តុក</option>
+                  )}
+                </select>
               </div>
 
               <div>
@@ -436,17 +481,29 @@ function NewReturn({ onSuccess }) {
                 />
               </div>
 
+              <p className="text-[10px] text-slate-400">
+                {returnStatus === "completed"
+                  ? "ស្តុក/ការសងប្រាក់ នឹងប៉ះពាល់ភ្លាមៗពេលដាក់ស្នើ — ជ្រើសរើសនេះលុះត្រាតែមានសិទ្ធិអនុម័តដោយផ្ទាល់។"
+                  : returnStatus === "approved"
+                    ? "ស្តុក/ការសងប្រាក់ មិនទាន់ប៉ះពាល់ទេ — កត់ត្រាថាចាំទំនិញចូលស្តុក, បញ្ចប់វានៅ tab \"រង់ចាំអនុម័ត\" ពេលទំនិញចូល។"
+                    : "សំណើនេះនឹងរង់ចាំការអនុម័តពីអ្នកគ្រប់គ្រង — ស្តុក/ការសងប្រាក់ មិនទាន់ប៉ះពាល់រហូតដល់អនុម័ត។"}
+              </p>
+
               <button
                 type="button"
                 onClick={handleSubmit}
                 disabled={mutation.isPending || mutation.isSuccess}
-                className="flex h-8 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-xs font-bold text-white shadow-sm transition hover:bg-red-600 disabled:opacity-50"
+                className="quick-action-icon-3d flex h-8 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:opacity-50"
               >
                 {mutation.isPending
                   ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   : <RotateCcw className="h-3.5 w-3.5" />
                 }
-                ដាក់ស្នើការត្រឡប់ ({selectedCount} មុខ)
+                {returnStatus === "completed"
+                  ? `បញ្ចប់ការត្រឡប់ (${selectedCount} មុខ)`
+                  : returnStatus === "approved"
+                    ? `កត់ត្រា ចាំស្តុក (${selectedCount} មុខ)`
+                    : `ដាក់ស្នើការត្រឡប់ (${selectedCount} មុខ)`}
               </button>
             </div>
           )}

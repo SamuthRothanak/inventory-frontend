@@ -124,6 +124,8 @@ export default function Roles() {
     head:     "bg-red-600 text-white",
     row:      isDark ? "border-zinc-800 text-zinc-200"     : "border-zinc-200 text-zinc-700",
     empty:    isDark ? "text-zinc-400"                     : "text-zinc-500",
+    title:    isDark ? "text-zinc-200"                     : "text-zinc-700",
+    softCard: isDark ? "border-white/10 bg-white/[0.04]"   : "border-zinc-200 bg-zinc-50",
     card:     isDark ? "border-white/10 bg-zinc-900"       : "border-zinc-200 bg-white",
     input:    isDark ? "border-white/10 bg-zinc-800 text-white placeholder:text-zinc-500" : "border-zinc-300 bg-white text-zinc-900 placeholder:text-zinc-400",
     muted:    isDark ? "text-zinc-400"                     : "text-zinc-500",
@@ -220,10 +222,10 @@ export default function Roles() {
     <section className="space-y-5">
 
       {/* ── Header ── */}
-      <div className="flex justify-end">
+      <div className="flex justify-stretch sm:justify-end">
         <button
           onClick={() => { setNewName(""); setAddOpen(true); }}
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+          className="quick-action-icon-3d inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 sm:h-10 sm:w-auto"
         >
           <FiPlusCircle />
           បន្ថែមតួនាទី
@@ -233,7 +235,7 @@ export default function Roles() {
       {/* ── Table ── */}
       <div className={`overflow-hidden rounded-2xl border shadow-sm ${theme.wrap}`}>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px]">
+          <table className="responsive-card-table w-full min-w-[600px]">
             <thead className={theme.head}>
               <tr>
                 <th className="w-20 px-6 py-4 text-left text-sm font-semibold">ID</th>
@@ -244,25 +246,30 @@ export default function Roles() {
             </thead>
             <tbody>
               {isLoading ? (
-                [1,2,3].map((i) => (
-                  <tr key={i} className={`border-t ${theme.row}`}>
-                    {[1,2,3,4].map((j) => (
-                      <td key={j} className="px-6 py-5">
-                        <div className={`h-4 animate-pulse rounded ${isDark ? "bg-white/10" : "bg-zinc-200"}`} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
+                <Roles3DLoading
+                  theme={theme}
+                  colSpan={4}
+                />
               ) : roles.length === 0 ? (
                 <tr className={`border-t ${theme.row}`}>
-                  <td colSpan="4" className={`px-6 py-8 text-center text-sm ${theme.empty}`}>
-                    គ្មានតួនាទី
+                  <td colSpan="4" className="px-6 py-14 text-center">
+                    <div className="flex flex-col items-center justify-center">
+                      <span className={`summary-icon-3d flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}>
+                        <FiShield className={`text-3xl ${theme.muted}`} />
+                      </span>
+                      <p className={`mt-4 text-sm font-semibold ${theme.title}`}>
+                        គ្មានតួនាទី
+                      </p>
+                      <p className={`mt-1 text-xs ${theme.muted}`}>
+                        សូមបន្ថែមតួនាទីថ្មីសម្រាប់អ្នកប្រើប្រាស់។
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : roles.map((item) => (
                 <tr key={item.id} className={`border-t ${theme.row}`}>
-                  <td className="px-6 py-4 text-sm">{item.id}</td>
-                  <td className="px-6 py-4 text-sm font-semibold">
+                  <td data-label="ID" className="px-6 py-4 text-sm">{item.id}</td>
+                  <td data-label="តួនាទី" className="px-6 py-4 text-sm font-semibold">
                     <div className="flex items-center gap-2">
                       {getRoleLabel(item.name)}
                       {isProtected(item.name) && (
@@ -272,13 +279,13 @@ export default function Roles() {
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm">{item.guard_name}</td>
-                  <td className="px-6 py-4">
+                  <td data-label="ប្រភេទការពារ" className="px-6 py-4 text-sm">{item.guard_name}</td>
+                  <td data-label="សកម្មភាព" className="px-6 py-4">
                     <div className="flex items-center justify-center gap-2">
                       <Tooltip label={"កែសិទ្ធិប្រើប្រាស់"}>
                         <button
                         onClick={() => openPerms(item)}
-                        className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 text-[0] text-white shadow-md shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-blue-600 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0"
+                        className="quick-action-icon-3d flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-blue-600 text-[0] text-white shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0"
                       >
                         <FiSettings size={16} />
                         {/* សិទ្ធិប្រើប្រាស់ */}
@@ -291,7 +298,7 @@ export default function Roles() {
                             deleteMutation.mutate(item.id);
                         }}
                         disabled={isProtected(item.name)}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-30"
+                        className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-30"
                         title={isProtected(item.name) ? "មិនអាចលុបតួនាទីលំនាំដើមបានទេ" : "លុប"}
                       >
                         <FiTrash2 size={14} />
@@ -308,19 +315,19 @@ export default function Roles() {
 
       {/* ── Add Role Modal ── */}
       {addOpen && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${theme.overlay}`}>
-          <div className={`flex w-full max-w-2xl flex-col rounded-2xl border shadow-2xl ${theme.card}`} style={{ maxHeight: "90vh" }}>
+        <div className={`fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 ${theme.overlay}`}>
+          <div className={`flex w-full max-w-2xl flex-col rounded-t-2xl border shadow-2xl sm:rounded-2xl ${theme.card}`} style={{ maxHeight: "96dvh" }}>
             {/* Header */}
-            <div className="flex shrink-0 items-center justify-between border-b px-6 py-4" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
+            <div className="flex shrink-0 items-center justify-between border-b px-4 py-4 sm:px-6" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
               <div className="flex items-center gap-2">
-                <FiShield className="text-emerald-500" />
+                <span className="summary-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500"><FiShield /></span>
                  <h2 className={`text-base font-bold ${theme.pageTitle}`}>បន្ថែមតួនាទីថ្មី</h2>
               </div>
-              <button onClick={() => { setAddOpen(false); setAddSelected([]); }} className={`rounded-lg p-1.5 ${theme.badge}`}><FiX /></button>
+              <button onClick={() => { setAddOpen(false); setAddSelected([]); }} className={`table-icon-3d rounded-lg p-1.5 transition hover:-translate-y-0.5 ${theme.badge}`}><FiX /></button>
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
               <input
                 type="text"
                 value={newName}
@@ -363,16 +370,16 @@ export default function Roles() {
             </div>
 
             {/* Footer */}
-            <div className="flex shrink-0 items-center justify-between border-t px-6 py-4" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
               <span className={`text-xs ${theme.muted}`}>បានជ្រើស {addSelected.length} សិទ្ធិ</span>
               <div className="flex gap-2">
-                <button onClick={() => { setAddOpen(false); setAddSelected([]); }} className={`h-9 rounded-xl border px-4 text-sm font-semibold ${theme.badge}`}>
+                <button onClick={() => { setAddOpen(false); setAddSelected([]); }} className={`table-icon-3d h-9 rounded-xl border px-4 text-sm font-semibold transition hover:-translate-y-0.5 ${theme.badge}`}>
                   បោះបង់
                 </button>
                 <button
                   disabled={!newName.trim() || createMutation.isPending}
                   onClick={() => createMutation.mutate({ name: newName.trim() })}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                  className="quick-action-icon-3d inline-flex h-9 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:opacity-60"
                 >
                   <FiSave size={13} />
                   {createMutation.isPending ? "កំពុងរក្សា..." : "រក្សាទុក"}
@@ -385,21 +392,21 @@ export default function Roles() {
 
       {/* ── Permissions Modal ── */}
       {permRole && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${theme.overlay}`}>
-          <div className={`flex w-full max-w-2xl flex-col rounded-2xl border shadow-2xl ${theme.card}`} style={{ maxHeight: "90vh" }}>
+        <div className={`fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 ${theme.overlay}`}>
+          <div className={`flex w-full max-w-2xl flex-col rounded-t-2xl border shadow-2xl sm:rounded-2xl ${theme.card}`} style={{ maxHeight: "96dvh" }}>
             {/* Header */}
-            <div className="flex shrink-0 items-center justify-between border-b px-6 py-4" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
+            <div className="flex shrink-0 items-center justify-between border-b px-4 py-4 sm:px-6" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
               <div className="flex items-center gap-2">
-                <FiShield className="text-red-500" />
+                <span className="summary-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-500/10 text-red-500"><FiShield /></span>
                 <h2 className={`text-base font-bold ${theme.pageTitle}`}>
                    សិទ្ធិប្រើប្រាស់៖ <span className="text-red-500">{getRoleLabel(permRole.name)}</span>
                 </h2>
               </div>
-              <button onClick={() => setPermRole(null)} className={`rounded-lg p-1.5 ${theme.badge}`}><FiX /></button>
+              <button onClick={() => setPermRole(null)} className={`table-icon-3d rounded-lg p-1.5 transition hover:-translate-y-0.5 ${theme.badge}`}><FiX /></button>
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {groupedPerms.length === 0 ? (
                 <div className={`py-8 text-center text-sm ${theme.muted}`}>កំពុងផ្ទុក...</div>
               ) : (
@@ -429,7 +436,7 @@ export default function Roles() {
             </div>
 
             {/* Footer */}
-            <div className="flex shrink-0 items-center justify-between gap-2 border-t px-6 py-4" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e4e4e7" }}>
               <span className={`text-xs ${theme.muted}`}>បានជ្រើស {selected.length} សិទ្ធិ</span>
               <div className="flex gap-2">
                 {DEFAULT_ROLE_PERMISSIONS[permRole?.name] !== undefined && (
@@ -438,19 +445,19 @@ export default function Roles() {
                       const defaults = DEFAULT_ROLE_PERMISSIONS[permRole.name];
                       setSelected(defaults === null ? allPerms.map((p) => p.name) : defaults);
                     }}
-                    className={`inline-flex h-9 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition ${isDark ? "border-white/10 text-zinc-300 hover:bg-white/10" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
+                    className={`table-icon-3d inline-flex h-9 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition hover:-translate-y-0.5 ${isDark ? "border-white/10 text-zinc-300 hover:bg-white/10" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
                   >
                     <FiRefreshCw size={13} />
                     កំណត់តាមលំនាំដើមវិញ
                   </button>
                 )}
-                <button onClick={() => setPermRole(null)} className={`h-9 rounded-xl border px-4 text-sm font-semibold ${theme.badge}`}>
+                <button onClick={() => setPermRole(null)} className={`table-icon-3d h-9 rounded-xl border px-4 text-sm font-semibold transition hover:-translate-y-0.5 ${theme.badge}`}>
                   បោះបង់
                 </button>
                 <button
                   onClick={() => syncMutation.mutate({ id: permRole.id, permissions: selected })}
                   disabled={syncMutation.isPending}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-red-500 px-4 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-60"
+                  className="quick-action-icon-3d inline-flex h-9 items-center gap-2 rounded-xl bg-red-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600 disabled:opacity-60"
                 >
                   <FiSave size={13} />
                   {syncMutation.isPending ? "កំពុងរក្សា..." : "រក្សាទុក"}
@@ -464,6 +471,53 @@ export default function Roles() {
     </section>
   );
 }
+
+function Roles3DLoading({ theme, colSpan }) {
+  return (
+    <tr className={`border-t ${theme.row}`}>
+      <td colSpan={colSpan} className="px-4 py-16 text-center">
+        <div
+          className="flex min-h-[230px] flex-col items-center justify-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="relative flex h-32 w-32 items-center justify-center"
+            style={{ perspective: "700px" }}
+          >
+            <div className="absolute bottom-1 h-5 w-20 animate-pulse rounded-[50%] bg-blue-500/25 blur-md" />
+
+            <div className="absolute inset-2 animate-spin rounded-full border border-dashed border-blue-400/50 [animation-duration:3s]" />
+            <div className="absolute inset-5 animate-spin rounded-full border-2 border-transparent border-l-sky-300 border-r-blue-600 [animation-direction:reverse] [animation-duration:1.8s]" />
+
+            <div
+              className="relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-white/40 bg-gradient-to-br from-sky-300 via-blue-500 to-indigo-700 text-white"
+              style={{
+                transform: "rotateX(12deg) rotateY(-18deg) translateZ(18px)",
+                boxShadow:
+                  "14px 18px 24px rgba(30, 58, 138, 0.3), inset 4px 4px 10px rgba(255,255,255,0.35), inset -5px -7px 12px rgba(49,46,129,0.3)",
+              }}
+            >
+              <div className="absolute inset-1 rounded-[16px] border border-white/20" />
+              <FiShield className="relative text-3xl drop-shadow-md" />
+              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-red-500 text-[11px] font-black text-white shadow-lg shadow-red-500/40">
+                ✓
+              </span>
+            </div>
+          </div>
+
+          <p className={`mt-3 text-sm font-bold ${theme.title}`}>
+            រង់ចាំបន្តិច...
+          </p>
+          <p className={`mt-1 text-xs ${theme.muted}`}>
+            កំពុងរៀបចំតួនាទី និងសិទ្ធិ
+          </p>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function Tooltip({ label, children }) {
   return (
     <div className="relative inline-flex group">

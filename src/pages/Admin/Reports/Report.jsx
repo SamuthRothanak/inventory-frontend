@@ -31,6 +31,7 @@ import {
   FiDollarSign,
   FiDownload,
   FiFileText,
+  FiFilter,
   FiGrid,
   FiPackage,
   FiRotateCcw,
@@ -57,6 +58,9 @@ import { exportReportExcel } from "./utils/reportExcelExport";
 import { exportReportPdf } from "./utils/reportPdfExport";
 import { getReportSummaryApi } from "../../../services/report.service";
 import { getStoredShopInfo } from "../../../utils/shopInfo";
+import { formatCondition, formatResolutionType } from "../Purcheases/utils/purchaseUtils";
+import { adjustmentReasons } from "../Inventory/utils/inventoryConstants";
+import { InventoryDropdown } from "../Inventory/components/InventoryCommon";
 
 const METHOD_LABEL = {
   cash: "សាច់ប្រាក់",
@@ -84,9 +88,32 @@ const STATUS_LABEL = {
   completed: "បានបញ្ចប់",
   cancelled: "បានបោះបង់",
   expired: "ផុតកំណត់",
+  // Purchase status (Purchases module's own STATUS_LABEL, same Khmer wording)
+  draft: "ព្រាង",
+  pending_receive: "រង់ចាំទទួលទំនិញ",
+  pending_stock_in: "រង់ចាំបញ្ចូលក្នុងស្តុក",
+  pending_claim: "រង់ចាំការទាមទារ",
+  // Purchase return resolution_status (Purchases module's own RETURN_STATUS_LABEL)
+  submitted: "រង់ចាំដំណោះស្រាយ",
+  approved: "កំពុងដោះស្រាយ",
+  waiting_replacement: "រង់ចាំជំនួស",
+  rejected: "បានបដិសេធ",
+  resolved: "ដោះស្រាយរួច",
 };
 
 const statusLabel = (value) => STATUS_LABEL[String(value || "").toLowerCase()] ?? value ?? "";
+
+// Same Khmer wording as Inventory module's own adjustment-type filter options.
+const ADJUSTMENT_TYPE_LABEL = { increase: "បន្ថែម", decrease: "កាត់" };
+const adjustmentTypeLabel = (value) => ADJUSTMENT_TYPE_LABEL[String(value || "").toLowerCase()] ?? value ?? "";
+
+// Reuses Inventory module's canonical `adjustmentReasons` list (utils/inventoryConstants.js)
+// rather than inventing a second Khmer wording for the same reason codes.
+const ADJUSTMENT_REASON_LABEL = Object.fromEntries(adjustmentReasons.map((r) => [r.value, r.label]));
+const adjustmentReasonLabel = (value) => ADJUSTMENT_REASON_LABEL[String(value || "").toLowerCase()] ?? value ?? "";
+
+const STOCK_SOURCE_LABEL = { purchase: "ការទិញចូល", sales_return: "ត្រឡប់ការលក់" };
+const stockSourceLabel = (value) => STOCK_SOURCE_LABEL[String(value || "").toLowerCase()] ?? value ?? "";
 
 const BANK_PROVIDER_META = {
   aba: { name: "ABA", subLabel: "ទូទាត់តាម ABA", order: 1 },
@@ -462,12 +489,12 @@ export default function Report() {
     return [...grouped.values()].sort((a, b) => (a.order - b.order) || a.name.localeCompare(b.name));
   }, [payBreakdown]);
 
-  const realSalesUsd = Number(paymentSummary.cashUsd || 0)
-    + Number(paymentSummary.electronicUsd || 0)
-    - Number(paymentSummary.refundUsd || 0);
-  const realSalesKhr = Number(paymentSummary.cashKhr || 0)
-    + Number(paymentSummary.electronicKhr || 0)
-    - Number(paymentSummary.refundKhr || 0);
+  // netEquivalentUsd/Khr (not cashUsd+electronicUsd-refundUsd) — those sum only payments
+  // literally received in that one currency, so a period where everyone happened to pay in
+  // USD would show ៛0 "real received" despite a correct non-zero $ figure, and vice versa.
+  // netEquivalent* converts every payment via its own exchange_rate_used first.
+  const realSalesUsd = Number(paymentSummary.netEquivalentUsd || 0);
+  const realSalesKhr = Number(paymentSummary.netEquivalentKhr || 0);
 
   const renderPaymentLedger = (item, compact = false) => (
     <div className={compact ? "space-y-1.5" : "mt-3 space-y-2"}>
@@ -602,7 +629,7 @@ export default function Report() {
     {
       title:    "លុយអតិថិជនមិនទាន់បង់",
       value:    fmtUsd(stats.outstanding_balance_usd),
-      subtitle: `${stats.outstanding_balance_count ?? 0} វិក្កយបត្រ`,
+      subtitle: `${stats.outstanding_balance_count ?? 0} វិក្កយបត្រ · សមតុល្យបច្ចុប្បន្ន`,
       icon:     <FiAlertCircle />,
       iconBg:   "bg-red-500/10 text-red-500",
       accent:   "border-l-red-500",
@@ -612,7 +639,7 @@ export default function Report() {
     {
       title:    "មិនទាន់បង់អ្នកផ្គត់ផ្គង់",
       value:    fmtUsd(purchaseMoney.outstandingUsd),
-      subtitle: `${(purchaseMoney.suppliers ?? []).length} អ្នកផ្គត់ផ្គង់`,
+      subtitle: `${(purchaseMoney.suppliers ?? []).length} អ្នកផ្គត់ផ្គង់ · សមតុល្យបច្ចុប្បន្ន`,
       icon:     <FiCreditCard />,
       iconBg:   "bg-amber-500/10 text-amber-500",
       accent:   "border-l-amber-500",
@@ -1358,7 +1385,7 @@ export default function Report() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-zinc-200/70 text-sm dark:divide-white/10">
+          <table className="responsive-card-table min-w-full divide-y divide-zinc-200/70 text-sm dark:divide-white/10">
             <thead className={isDark ? "bg-white/[0.03]" : "bg-zinc-50"}>
               <tr>
                 {columns.map((column) => (
@@ -1378,7 +1405,7 @@ export default function Report() {
               ) : visibleRows.map((row, index) => (
                 <tr key={row.id ?? `${title}-${index}`} className={`border-t ${theme.row}`}>
                   {columns.map((column) => (
-                    <td key={column.key} className={`whitespace-nowrap px-4 py-3 ${column.className ?? ""}`}>
+                    <td data-label={column.label} key={column.key} className={`whitespace-nowrap px-4 py-3 ${column.className ?? ""}`}>
                       {column.render ? column.render(row) : (row[column.key] ?? "—")}
                     </td>
                   ))}
@@ -1397,7 +1424,7 @@ export default function Report() {
                 type="button"
                 disabled={currentPage <= 1}
                 onClick={() => setTablePages((prev) => ({ ...prev, [tableKey]: currentPage - 1 }))}
-                className={`inline-flex h-9 items-center gap-1 rounded-xl border px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:bg-red-500/10 hover:text-red-500`}
+                className={`table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border px-3 text-xs font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:bg-red-500/10 hover:text-red-500`}
               >
                 <FiChevronLeft />
                 មុន
@@ -1413,10 +1440,10 @@ export default function Report() {
                     key={`${tableKey}-${item}`}
                     type="button"
                     onClick={() => setTablePages((prev) => ({ ...prev, [tableKey]: item }))}
-                    className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition ${
+                    className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition hover:-translate-y-0.5 ${
                       item === currentPage
-                        ? "bg-red-600 text-white shadow-sm"
-                        : `${theme.badge} border hover:bg-red-500/10 hover:text-red-500`
+                        ? "quick-action-icon-3d bg-red-600 text-white"
+                        : `table-icon-3d ${theme.badge} border hover:bg-red-500/10 hover:text-red-500`
                     }`}
                   >
                     {item}
@@ -1428,7 +1455,7 @@ export default function Report() {
               type="button"
               disabled={currentPage >= totalPages}
               onClick={() => setTablePages((prev) => ({ ...prev, [tableKey]: currentPage + 1 }))}
-              className={`inline-flex h-9 items-center gap-1 rounded-xl border px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:bg-red-500/10 hover:text-red-500`}
+              className={`table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border px-3 text-xs font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:bg-red-500/10 hover:text-red-500`}
             >
               បន្ទាប់
               <FiChevronRight />
@@ -1470,7 +1497,7 @@ export default function Report() {
   };
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-4 sm:space-y-6">
 
       {/* â"€â"€ Filters + Actions â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       <div className={`relative rounded-2xl border p-4 shadow-sm ${theme.card} ${exportMenuOpen ? "mb-14" : ""}`}>
@@ -1631,10 +1658,34 @@ export default function Report() {
       )}
 
       {isLoading && (
-        <div className={`flex min-h-[240px] flex-col items-center justify-center rounded-2xl border shadow-sm ${theme.card}`} role="status">
-          <FiRotateCcw className="animate-spin text-4xl text-red-500" />
-          <p className={`mt-4 text-sm font-bold ${theme.pageTitle}`}>កំពុងរៀបចំរបាយការណ៍...</p>
-          <p className={`mt-1 text-xs ${theme.muted}`}>សូមរង់ចាំបន្តិច</p>
+        <div className={`flex min-h-[300px] flex-col items-center justify-center rounded-2xl border shadow-sm ${theme.card}`} role="status" aria-live="polite">
+          <div
+            className="relative flex h-32 w-32 items-center justify-center"
+            style={{ perspective: "700px" }}
+          >
+            <div className="absolute bottom-1 h-5 w-20 animate-pulse rounded-[50%] bg-fuchsia-500/25 blur-md" />
+
+            <div className="absolute inset-2 animate-spin rounded-full border border-dashed border-fuchsia-400/50 [animation-duration:3s]" />
+            <div className="absolute inset-5 animate-spin rounded-full border-2 border-transparent border-l-pink-300 border-r-violet-600 [animation-direction:reverse] [animation-duration:1.8s]" />
+
+            <div
+              className="relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-white/40 bg-gradient-to-br from-pink-300 via-fuchsia-500 to-violet-700 text-white"
+              style={{
+                transform: "rotateX(12deg) rotateY(-18deg) translateZ(18px)",
+                boxShadow:
+                  "14px 18px 24px rgba(107, 33, 168, 0.3), inset 4px 4px 10px rgba(255,255,255,0.35), inset -5px -7px 12px rgba(88,28,135,0.3)",
+              }}
+            >
+              <div className="absolute inset-1 rounded-[16px] border border-white/20" />
+              <FiFileText className="relative text-3xl drop-shadow-md" />
+              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-400 text-[10px] font-black text-emerald-950 shadow-lg shadow-emerald-400/40">
+                ↗
+              </span>
+            </div>
+          </div>
+
+          <p className={`mt-3 text-sm font-bold ${theme.pageTitle}`}>រង់ចាំបន្តិច...</p>
+          <p className={`mt-1 text-xs ${theme.muted}`}>កំពុងរៀបចំទិន្នន័យរបាយការណ៍</p>
         </div>
       )}
 
@@ -1671,15 +1722,17 @@ export default function Report() {
               <p className={`text-sm font-extrabold ${theme.pageTitle}`}>ប្រភេទរបាយការណ៍</p>
               <p className={`mt-0.5 text-xs ${theme.muted}`}>ជ្រើសរើសទិន្ន័យដែលចង់ពិនិត្យក្នុងផ្នែកនេះ</p>
             </div>
-            <select
-              value={activeReportType}
-              onChange={(e) => setReportType((prev) => ({ ...prev, [reportTab]: e.target.value }))}
-              className={`h-11 w-full rounded-xl border px-4 text-sm font-bold outline-none transition focus:ring-4 sm:w-72 ${theme.select}`}
-            >
-              {reportTypeOptions.map((option) => (
-                <option key={option.key} value={option.key}>{option.label}</option>
-              ))}
-            </select>
+            <div className="w-full sm:w-72">
+              <InventoryDropdown
+                value={activeReportType}
+                onChange={(value) => setReportType((prev) => ({ ...prev, [reportTab]: value }))}
+                theme={theme}
+                icon={<FiFilter />}
+                options={reportTypeOptions.map((option) => ({ value: option.key, label: option.label }))}
+                heightClass="h-11"
+                fontClass="font-bold"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -1687,7 +1740,7 @@ export default function Report() {
       {/* â"€â"€ Summary Cards â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       <div className={suppressReport || reportTab !== "overview" ? "hidden" : ""}>
         <p className={`mb-3 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>សង្ខេបរយៈពេល</p>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
           {SUMMARY_CARDS.map((card) => (
             <SummaryCard key={card.title} theme={theme} {...card} />
           ))}
@@ -1769,6 +1822,29 @@ export default function Report() {
 
       {!suppressReport && reportTab === "overview" && renderOverviewComparisonPanel()}
 
+      {!suppressReport && reportTab === "sales" && showAnyReportType(["summary", "profit"]) && (
+        <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+          <div className="mb-4">
+            <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>សង្ខេបការលក់</h2>
+            <p className={`mt-1 text-sm ${theme.muted}`}>លក់បានសរុប ប្រាក់លក់បានពិត និងការត្រឡប់/សងទឹកប្រាក់</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[
+              ["លក់បានសរុប", fmtUsd(stats.total_sales_usd), formatKhr(stats.total_sales_khr), "text-emerald-600", "តម្លៃវិក្កយបត្រលក់ទាំងអស់ក្នុងរយៈពេលនេះ"],
+              ["ប្រាក់លក់បានពិត", fmtUsd(realSalesUsd), formatKhr(realSalesKhr), "text-blue-600", "លុយបានទទួលជាក់ស្តែង (ក្រោយដកសងវិញរួច)"],
+              ["ត្រឡប់/សងទឹកប្រាក់", fmtUsd(stats.sales_returns_usd), formatKhr(stats.sales_returns_khr), "text-amber-600", "ការទាមទារត្រឡប់សរុប (មិនទាន់ដកចេញពីលុយទទួល)"],
+            ].map(([label, value, khrValue, valueClass, hint]) => (
+              <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
+                <p className={`mt-1 truncate text-xl font-extrabold tabular-nums ${valueClass}`}>{value}</p>
+                <p className={`mt-0.5 truncate text-xs ${theme.muted}`}>{khrValue}</p>
+                <p className={`mt-1.5 text-[11px] leading-snug ${theme.muted}`}>{hint}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {!suppressReport && reportTab === "sales" && showReportType("summary") && renderCustomerDebtPanel()}
 
       {!suppressReport && reportTab === "sales" && showReportType("summary") && renderDonutVisual({
@@ -1818,6 +1894,29 @@ export default function Report() {
       )}
 
       {!suppressReport && reportTab === "sales" && showReportType("cashier") && renderCashierPerformance()}
+
+      {!suppressReport && reportTab === "purchases" && showReportType("summary") && (
+        <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+          <div className="mb-4">
+            <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>សង្ខេបការទិញ</h2>
+            <p className={`mt-1 text-sm ${theme.muted}`}>ទិញបានសរុប ចំណាយបានពិត និងការទាមទារត្រឡប់</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[
+              ["ទិញបានសរុប", fmtUsd(stats.total_purchases_usd), formatKhr(stats.total_purchases_khr), "text-blue-600", "តម្លៃវិក្កយបត្រទាំងអស់ក្នុងរយៈពេលនេះ"],
+              ["ចំណាយទិញបានពិត", fmtUsd(purchaseMoney.netCostUsd), formatKhr(purchaseMoney.netCostKhr), "text-pink-600", "លុយចេញជាក់ស្តែង (ក្រោយដកសងវិញរួច)"],
+              ["ត្រឡប់ការទិញ", fmtUsd(stats.purchase_returns_usd), formatKhr(stats.purchase_returns_khr), "text-amber-600", "ការទាមទារខូចខាត/ត្រឡប់សរុប (មិនទាន់ដកចេញពីចំណាយ)"],
+            ].map(([label, value, khrValue, valueClass, hint]) => (
+              <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
+                <p className={`mt-1 truncate text-xl font-extrabold tabular-nums ${valueClass}`}>{value}</p>
+                <p className={`mt-0.5 truncate text-xs ${theme.muted}`}>{khrValue}</p>
+                <p className={`mt-1.5 text-[11px] leading-snug ${theme.muted}`}>{hint}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {!suppressReport && reportTab === "purchases" && showReportType("supplier") && renderBarVisual({
         title: "ក្រាបទិញតាមអ្នកផ្គត់ផ្គង់",
@@ -1928,8 +2027,8 @@ export default function Report() {
           { key: "date", label: "ថ្ងៃ/ម៉ោង" },
           { key: "purchaseNo", label: "លេខទិញ" },
           { key: "supplierName", label: "អ្នកផ្គត់ផ្គង់" },
-          { key: "reason", label: "មូលហេតុ" },
-          { key: "resolutionType", label: "ដំណោះស្រាយ" },
+          { key: "reason", label: "មូលហេតុ", render: (row) => formatCondition(row.reason) },
+          { key: "resolutionType", label: "ដំណោះស្រាយ", render: (row) => formatResolutionType(row.resolutionType) },
           { key: "totalUsd", label: "សរុប", render: (row) => fmtUsd(row.totalUsd), className: "font-bold text-amber-600" },
           { key: "resolutionStatus", label: "ស្ថានភាព", render: (row) => statusLabel(row.resolutionStatus) },
         ],
@@ -2031,12 +2130,12 @@ export default function Report() {
 
       {!suppressReport && reportTab === "inventory" && showReportType("adjustment") && renderReportTable(
         "កែតម្រូវស្តុក",
-        "Stock adjustment ក្នុងរយៈពេលដែលបានជ្រើស",
+        "ការកែតម្រូវស្តុកក្នុងរយៈពេលដែលបានជ្រើស",
         [
           { key: "adjustmentNo", label: "លេខកែតម្រូវ" },
           { key: "date", label: "ថ្ងៃ/ម៉ោង" },
-          { key: "type", label: "ប្រភេទ" },
-          { key: "reason", label: "មូលហេតុ" },
+          { key: "type", label: "ប្រភេទ", render: (row) => adjustmentTypeLabel(row.type) },
+          { key: "reason", label: "មូលហេតុ", render: (row) => adjustmentReasonLabel(row.reason) },
           { key: "itemCount", label: "មុខទំនិញ" },
           { key: "qty", label: "ចំនួន", render: (row) => Number(row.qty || 0).toLocaleString("en-US") },
           { key: "cost", label: "តម្លៃ", render: (row) => fmtUsd(row.cost), className: "font-bold text-emerald-600" },
@@ -2049,7 +2148,7 @@ export default function Report() {
         "ស្តុកខូច",
         "ទំនិញខូចពីការទិញចូល និងការត្រឡប់ពីអតិថិជន",
         [
-          { key: "source", label: "ប្រភព" },
+          { key: "source", label: "ប្រភព", render: (row) => stockSourceLabel(row.source) },
           { key: "referenceNo", label: "ឯកសារ" },
           { key: "partyName", label: "ភាគី" },
           { key: "name", label: "ទំនិញ" },
@@ -2086,46 +2185,99 @@ export default function Report() {
             <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>សង្ខេបហិរញ្ញវត្ថុ</h2>
             <p className={`mt-1 text-sm ${theme.muted}`}>ប្រាក់ចំណេញពិត លុយចូល លុយចេញ និងលុយមិនទាន់ទូទាត់</p>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              ["ចំណេញពីការលក់", fmtUsd(grossProfitUsd), "text-emerald-600"],
-              ["លុយទទួលបានពិត USD", fmtUsd(realSalesUsd), "text-emerald-600"],
-              ["លុយទទួលបានពិត KHR", formatKhr(realSalesKhr), "text-emerald-600"],
-              ["ចំណាយទិញ USD", fmtUsd(purchaseMoney.paidUsd), "text-blue-600"],
-              ["អតិថិជនមិនទាន់ទូទាត់", fmtUsd(outstanding.totalUsd), "text-red-500"],
-              ["មិនទាន់បង់អ្នកផ្គត់ផ្គង់", fmtUsd(purchaseMoney.outstandingUsd), "text-amber-600"],
-              ["ត្រឡប់ការលក់", fmtUsd(stats.sales_returns_usd), "text-amber-600"],
-              ["ត្រឡប់ការទិញ", fmtUsd(stats.purchase_returns_usd), "text-pink-600"],
-            ].map(([label, value, valueClass]) => (
-              <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
-                <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
-                <p className={`mt-1 truncate text-xl font-extrabold tabular-nums ${valueClass}`}>{value}</p>
+
+          <div className="space-y-5">
+            <div>
+              <p className={`mb-2 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>ប្រាក់ចំណេញ</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>ចំណេញពីការលក់</p>
+                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-emerald-600">{fmtUsd(grossProfitUsd)}</p>
+                  <p className={`mt-1.5 text-[11px] leading-snug ${theme.muted}`}>ចំណូលលក់ ដកថ្លៃដើមទំនិញលក់</p>
+                </div>
               </div>
-            ))}
+            </div>
+
+            <div>
+              <p className={`mb-2 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>សាច់ប្រាក់ក្នុងរយៈពេលនេះ</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>លុយទទួលបានពិត</p>
+                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-emerald-600">{fmtUsd(realSalesUsd)}</p>
+                  <p className={`mt-0.5 truncate text-xs ${theme.muted}`}>{formatKhr(realSalesKhr)}</p>
+                  <p className={`mt-1.5 text-[11px] leading-snug ${theme.muted}`}>លុយបានទទួលពីអតិថិជនជាក់ស្តែង (ក្រោយដកសងវិញ)</p>
+                </div>
+                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>ចំណាយទិញបានពិត</p>
+                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-blue-600">{fmtUsd(purchaseMoney.netCostUsd ?? purchaseMoney.paidUsd)}</p>
+                  <p className={`mt-1.5 text-[11px] leading-snug ${theme.muted}`}>លុយបានចេញទៅអ្នកផ្គត់ផ្គង់ជាក់ស្តែង (ក្រោយដកសងវិញ)</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <p className={`mb-2 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>មិនទាន់ទូទាត់ (សមតុល្យបច្ចុប្បន្ន — មិនប្តូរតាមកាលបរិច្ឆេទ)</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>អតិថិជនមិនទាន់ទូទាត់</p>
+                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-red-500">{fmtUsd(outstanding.totalUsd)}</p>
+                </div>
+                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>មិនទាន់បង់អ្នកផ្គត់ផ្គង់</p>
+                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-amber-600">{fmtUsd(purchaseMoney.outstandingUsd)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <p className={`mb-2 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>ការទាមទារត្រឡប់ (មិនទាន់ដកចេញពីខាងលើ)</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>ត្រឡប់ការលក់</p>
+                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-amber-600">{fmtUsd(stats.sales_returns_usd)}</p>
+                </div>
+                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>ត្រឡប់ការទិញ</p>
+                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-pink-600">{fmtUsd(stats.purchase_returns_usd)}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {!suppressReport && reportTab === "financial" && showReportType("cash_flow") && (
+      {!suppressReport && reportTab === "financial" && showReportType("cash_flow") && (() => {
+        const cashIn = Number(paymentSummary.netEquivalentUsd || 0);
+        const cashOut = Number(purchaseMoney.paidEquivalentUsd ?? purchaseMoney.paidUsd ?? 0);
+        const net = cashIn - cashOut;
+        const netClass = net > 0 ? "text-emerald-600" : net < 0 ? "text-red-500" : "text-violet-600";
+        const netHint = net > 0
+          ? "លុយចូលច្រើនជាងលុយចេញ ក្នុងរយៈពេលនេះ"
+          : net < 0
+            ? "លុយចេញច្រើនជាងលុយចូល ក្នុងរយៈពេលនេះ"
+            : "លុយចូល និងលុយចេញស្មើគ្នា";
+        return (
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
           <div className="mb-4">
             <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>លុយចូល / លុយចេញ</h2>
-            <p className={`mt-1 text-sm ${theme.muted}`}>សង្ខេប cash flow តាមការទូទាត់ដែលបានកត់ត្រា</p>
+            <p className={`mt-1 text-sm ${theme.muted}`}>សង្ខេប cash flow សរុប (មិនទាន់ដកសងវិញ ខុសពី "ចំណាយទិញបានពិត" ខាងលើ)</p>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[
-              ["លុយចូល", fmtUsd(paymentSummary.netEquivalentUsd), "text-emerald-600"],
-              ["លុយចេញ", fmtUsd(purchaseMoney.paidEquivalentUsd ?? purchaseMoney.paidUsd), "text-blue-600"],
-              ["សល់សុទ្ធ", fmtUsd(Number(paymentSummary.netEquivalentUsd || 0) - Number(purchaseMoney.paidEquivalentUsd ?? purchaseMoney.paidUsd ?? 0)), "text-violet-600"],
-            ].map(([label, value, valueClass]) => (
+              ["លុយចូល", fmtUsd(cashIn), "text-emerald-600", null],
+              ["លុយចេញ", fmtUsd(cashOut), "text-blue-600", null],
+              ["សល់ (លុយចូល ដក លុយចេញ)", fmtUsd(net), netClass, netHint],
+            ].map(([label, value, valueClass, hint]) => (
               <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
-                <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
+                <p className={`text-sm font-semibold ${theme.muted}`}>{label}</p>
                 <p className={`mt-1 truncate text-2xl font-extrabold tabular-nums ${valueClass}`}>{value}</p>
+                {hint && <p className={`mt-1.5 text-[11px] leading-snug ${theme.muted}`}>{hint}</p>}
               </div>
             ))}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {!suppressReport && reportTab === "financial" && showReportType("customer_due") && renderReportTable(
         "អតិថិជនមិនទាន់ទូទាត់",
@@ -2467,16 +2619,15 @@ export default function Report() {
                 </div>
               </div>
               {showPurchaseSummary && (
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {[
-                  ["បានបង់ USD", fmtUsd(purchaseMoney.paidUsd), theme.pageTitle],
-                  ["បានបង់ KHR", formatKhr(purchaseMoney.paidKhr), theme.pageTitle],
-                  ["មិនទាន់បង់ USD", fmtUsd(purchaseMoney.outstandingUsd), "text-amber-600"],
-                  ["មិនទាន់បង់ KHR", formatKhr(purchaseMoney.outstandingKhr), "text-amber-600"],
-                ].map(([label, value, valueClass]) => (
+                  ["បានបង់", fmtUsd(purchaseMoney.paidEquivalentUsd), formatKhr(purchaseMoney.paidEquivalentKhr), theme.pageTitle],
+                  ["មិនទាន់បង់", fmtUsd(purchaseMoney.outstandingUsd), formatKhr(purchaseMoney.outstandingKhr), "text-amber-600"],
+                ].map(([label, value, khrValue, valueClass]) => (
                   <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
                     <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
                     <p className={`mt-1 truncate text-lg font-extrabold tabular-nums ${valueClass}`}>{value}</p>
+                    <p className={`mt-0.5 truncate text-xs ${theme.muted}`}>{khrValue}</p>
                   </div>
                 ))}
               </div>

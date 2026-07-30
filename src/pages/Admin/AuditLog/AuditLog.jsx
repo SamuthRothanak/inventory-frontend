@@ -85,8 +85,11 @@ export default function AuditLog() {
   const total      = meta.total ?? 0;
   const lastPage   = meta.last_page ?? 1;
 
-  const todayStr     = new Date().toISOString().slice(0, 10);
-  const todayCount   = rows.filter((r) => String(r.created_at).startsWith(todayStr)).length;
+  // fmtDate (local calendar day, not UTC) — matches the "quick date" filter buttons above and
+  // avoids miscounting entries made 00:00-07:00 local time as "yesterday" (still UTC's previous
+  // day at that hour, since Cambodia is UTC+7).
+  const todayStr     = fmtDate(new Date());
+  const todayCount   = rows.filter((r) => fmtDate(new Date(r.created_at)) === todayStr).length;
   const criticalCount = rows.filter((r) => ["deleted", "cancelled", "void"].includes(String(r.action).toLowerCase())).length;
   const moduleCount  = new Set(rows.map((r) => r.module)).size;
 
@@ -112,8 +115,8 @@ export default function AuditLog() {
   ];
 
   return (
-    <div className={`space-y-6 px-5 pb-8 pt-6 ${pageText}`}>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className={`space-y-4 pb-6 sm:space-y-6 sm:pb-8 ${pageText}`}>
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         <AuditLogSummaryCard
           title="សកម្មភាពសរុប"
           value={isLoading ? "..." : total}
@@ -237,7 +240,7 @@ export default function AuditLog() {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => p - 1)}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+              className="table-icon-3d flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-white"
             >
               <FiChevronLeft />
             </button>
@@ -248,10 +251,10 @@ export default function AuditLog() {
                   key={p}
                   type="button"
                   onClick={() => setPage(p)}
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl border text-sm font-bold transition ${
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl border text-sm font-bold transition hover:-translate-y-0.5 ${
                     p === page
-                      ? "border-red-500 bg-red-500 text-white"
-                      : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      ? "quick-action-icon-3d border-red-500 bg-red-500 text-white"
+                      : "table-icon-3d border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-white/5 dark:text-white"
                   }`}
                 >
                   {p}
@@ -262,7 +265,7 @@ export default function AuditLog() {
               type="button"
               disabled={page >= lastPage}
               onClick={() => setPage((p) => p + 1)}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+              className="table-icon-3d flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-white"
             >
               <FiChevronRight />
             </button>

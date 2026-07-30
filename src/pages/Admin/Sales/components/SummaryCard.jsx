@@ -4,7 +4,7 @@ export default function SummaryCard({ theme, title, value, subValue, icon, iconB
   return (
     <div className={`rounded-2xl border px-5 py-5 shadow-sm ${theme.card}`}>
       <div className="flex items-center gap-4">
-        <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${iconBg}`}>
+        <div className={`summary-icon-3d flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${iconBg}`}>
           {icon}
         </div>
 

@@ -401,7 +401,7 @@ export default function CurrentSalePanel({
               type="button"
               onClick={onHold}
               disabled={cart.length === 0}
-              className="flex h-8 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
+              className="table-icon-3d flex h-8 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition hover:-translate-y-0.5 hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Receipt className="h-3.5 w-3.5" /> ផ្អាក
             </button>
@@ -409,7 +409,7 @@ export default function CurrentSalePanel({
               type="button"
               onClick={() => setShowNote((v) => !v)}
               className={cn(
-                "flex h-8 items-center justify-center gap-1 rounded-xl border text-[11px] font-semibold transition",
+                "table-icon-3d flex h-8 items-center justify-center gap-1 rounded-xl border text-[11px] font-semibold transition hover:-translate-y-0.5",
                 note
                   ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
                   : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
@@ -421,7 +421,7 @@ export default function CurrentSalePanel({
               type="button"
               onClick={onClear}
               disabled={cart.length === 0}
-              className="flex h-8 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+              className="table-icon-3d flex h-8 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition hover:-translate-y-0.5 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Trash2 className="h-3.5 w-3.5" /> សម្អាត
             </button>
@@ -449,7 +449,7 @@ export default function CurrentSalePanel({
             type="button"
             disabled={cart.length === 0 || requiresCustomer}
             onClick={onOpenPayment}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-red-500 to-rose-500 text-[13px] font-extrabold text-white shadow-md shadow-red-200 transition hover:from-red-600 hover:to-rose-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+            className="quick-action-icon-3d flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-[13px] font-extrabold text-white shadow-md shadow-red-200 transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
           >
             <Wallet className="h-4 w-4" />
             បង់ថ្លៃ

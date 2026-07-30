@@ -11,7 +11,7 @@ export const defaultReturnForm = {
 export const saleReturnSchema = z.object({
   returnType: z.enum(["full", "partial"]),
   resolutionType: z.enum(["refund", "replacement", "store_credit"]),
-  reason: z.string().trim().min(1, "Return reason is required."),
+  reason: z.string().trim(),
   status: z.enum(["pending_approval", "approved", "completed", "rejected"]),
 });
 

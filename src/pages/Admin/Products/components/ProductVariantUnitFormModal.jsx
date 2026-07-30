@@ -157,6 +157,7 @@ export default function ProductVariantUnitFormModal({
 
   return (
     <ModalShell
+      mobileFullScreen
       title={isEdit ? "កែខ្នាតទំនិញ" : "បន្ថែមខ្នាតទំនិញ"}
       subtitle={`មុខទំនិញ: ${variant?.variantName || "-"} · កំណត់ខ្នាតមូលដ្ឋាននិងការប្ដូរ ។`}
       theme={theme}
@@ -165,11 +166,11 @@ export default function ProductVariantUnitFormModal({
       footer={
         <>
           <button type="button" onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
             បោះបង់
           </button>
           <button type="submit" form="variant-unit-form" disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
             <FiSave />
             {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកខ្នាតទំនិញ"}
           </button>

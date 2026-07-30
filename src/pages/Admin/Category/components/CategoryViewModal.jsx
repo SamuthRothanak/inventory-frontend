@@ -24,7 +24,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បិទ
           </button>
@@ -32,7 +32,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
           <button
             type="button"
             onClick={onEdit}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700"
           >
             <FiEdit2 />
             កែប្រភេទ
@@ -44,7 +44,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
         <div
           className={`overflow-hidden rounded-[28px] border shadow-sm ${theme.section}`}
         >
-          <div className="relative bg-zinc-100 p-4 dark:bg-[#202024]">
+          <div className="relative bg-zinc-100 p-3 sm:p-4 dark:bg-[#202024]">
             <CategoryImage
               image={category.imagePath}
               name={category.name}
@@ -59,7 +59,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
                     ប្រភេទ
                   </p>
 
-                  <h3 className="mt-1 truncate text-2xl font-bold text-white">
+                  <h3 className="mt-1 truncate text-xl font-bold text-white sm:text-2xl">
                     {category.name || "-"}
                   </h3>
                 </div>
@@ -104,7 +104,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
           </div>
         </div>
 
-        <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+        <div className={`rounded-2xl border p-4 shadow-sm sm:p-5 ${theme.section}`}>
           <SectionTitle
             icon={<FiFileText />}
             title="ការពិពណ៌នា"
@@ -125,7 +125,7 @@ export default function CategoryViewModal({ category, theme, onClose, onEdit }) 
           </div>
         </div>
 
-        <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
+        <div className={`rounded-2xl border p-4 shadow-sm sm:p-5 ${theme.section}`}>
           <SectionTitle
             icon={<FiLink />}
             title="ប្រភពរូបភាព"
@@ -148,7 +148,7 @@ function MiniInfoCard({ label, value, theme, icon }) {
   return (
     <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
       <div className="flex items-center gap-2">
-        <span className={theme.muted}>{icon}</span>
+        <span className="table-icon-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-500">{icon}</span>
         <p
           className={`text-xs font-bold uppercase tracking-wide ${theme.muted}`}
         >
@@ -164,7 +164,7 @@ function MiniInfoCard({ label, value, theme, icon }) {
 function SectionTitle({ icon, title, subtitle, theme }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+      <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
         {icon}
       </div>
 

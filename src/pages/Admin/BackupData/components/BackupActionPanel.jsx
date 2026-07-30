@@ -22,10 +22,10 @@ export default function BackupActionPanel({ theme, onCreateBackup, isCreating, o
 
   return (
     <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-      <div className={`rounded-2xl border p-6 shadow-sm ${theme.card}`}>
+      <div className={`rounded-2xl border p-4 shadow-sm sm:p-6 ${theme.card}`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-3xl text-red-500">
+            <div className="summary-icon-3d flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-3xl text-red-500">
               <FiArchive />
             </div>
             <div>
@@ -40,7 +40,7 @@ export default function BackupActionPanel({ theme, onCreateBackup, isCreating, o
             type="button"
             onClick={onCreateBackup}
             disabled={isCreating}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 font-bold text-white shadow-sm transition hover:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="quick-action-icon-3d inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 font-bold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isCreating ? (
               <>
@@ -66,9 +66,9 @@ export default function BackupActionPanel({ theme, onCreateBackup, isCreating, o
         </div>
       </div>
 
-      <div className={`rounded-2xl border p-6 shadow-sm ${theme.card}`}>
+      <div className={`rounded-2xl border p-4 shadow-sm sm:p-6 ${theme.card}`}>
         <div className="flex items-start gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 text-3xl text-amber-500">
+          <div className="summary-icon-3d flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 text-3xl text-amber-500">
             <FiUploadCloud />
           </div>
           <div>
@@ -87,7 +87,7 @@ export default function BackupActionPanel({ theme, onCreateBackup, isCreating, o
           <p className={`mt-2 text-sm ${theme.muted}`}>គាំទ្រតែ .zip ពីប្រព័ន្ធនេះប៉ុណ្ណោះ។</p>
           <button
             type="button"
-            className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-bold text-white shadow-sm transition hover:bg-blue-700"
+            className="quick-action-icon-3d mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-bold text-white transition hover:-translate-y-0.5 hover:bg-blue-700 active:translate-y-0"
           >
             <FiUploadCloud />
             ជ្រើសរើសឯកសារ

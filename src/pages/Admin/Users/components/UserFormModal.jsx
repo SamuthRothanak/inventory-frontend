@@ -44,14 +44,14 @@ export default function UserFormModal({
   return (
     <div
       onMouseDown={closeModal}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:px-4 sm:py-6"
     >
       <div
         onMouseDown={(event) => event.stopPropagation()}
-        className={`flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border shadow-2xl ${theme.modal}`}
+        className={`flex h-dvh max-h-dvh w-full max-w-3xl flex-col overflow-hidden border-0 shadow-2xl sm:h-auto sm:max-h-[90dvh] sm:rounded-3xl sm:border ${theme.modal}`}
       >
         {/* Header */}
-        <div className={`shrink-0 border-b px-6 py-5 ${theme.modalHeader}`}>
+        <div className={`shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5 ${theme.modalHeader}`}>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h2 className="text-xl font-bold tracking-tight">
@@ -71,9 +71,9 @@ export default function UserFormModal({
               aria-label="បិទផ្ទាំង"
               disabled={isSaving}
               className="
-                flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl
-                border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm
-                transition hover:bg-zinc-200 hover:text-zinc-950
+                table-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl
+                border border-zinc-300 bg-zinc-100 text-zinc-700
+                transition hover:-translate-y-0.5 hover:bg-zinc-200 hover:text-zinc-950
                 disabled:cursor-not-allowed disabled:opacity-70
                 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300
                 dark:hover:bg-white/10 dark:hover:text-white
@@ -93,7 +93,7 @@ export default function UserFormModal({
           {/* Scroll body */}
           <div
             className={`
-              min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5
+              min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5
               [scroll-behavior:smooth] [scrollbar-gutter:stable]
               ${theme.modalBody}
             `}
@@ -237,16 +237,16 @@ export default function UserFormModal({
           </div>
 
           {/* Footer */}
-          <div className={`shrink-0 border-t px-6 py-4 ${theme.modalHeader}`}>
+          <div className={`shrink-0 border-t px-4 py-3 sm:px-6 sm:py-4 ${theme.modalHeader}`}>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={closeModal}
                 disabled={isSaving}
                 className="
-                  h-11 rounded-xl border border-zinc-300 bg-white px-5
-                  text-sm font-semibold text-zinc-700 shadow-sm transition
-                  hover:bg-zinc-100 hover:text-zinc-950
+                  table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5
+                  text-sm font-semibold text-zinc-700 transition
+                  hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950
                   disabled:cursor-not-allowed disabled:opacity-70
                   dark:border-white/10 dark:bg-white/5 dark:text-zinc-200
                   dark:hover:bg-white/10 dark:hover:text-white
@@ -259,9 +259,9 @@ export default function UserFormModal({
                 type="submit"
                 disabled={isSaving}
                 className="
-                  inline-flex h-11 items-center justify-center gap-2 rounded-xl
-                  bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm
-                  transition hover:bg-emerald-600
+                  quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl
+                  bg-emerald-500 px-5 text-sm font-semibold text-white
+                  transition hover:-translate-y-0.5 hover:bg-emerald-600
                   disabled:cursor-not-allowed disabled:opacity-70
                 "
               >
@@ -280,7 +280,7 @@ function FormSection({ title, subtitle, icon, theme, children }) {
   return (
     <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
       <div className="mb-4 flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+        <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
           {icon}
         </div>
 

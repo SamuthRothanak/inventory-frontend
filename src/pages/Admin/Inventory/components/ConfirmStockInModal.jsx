@@ -34,6 +34,7 @@ export default function ConfirmStockInModal({
   theme,
   onClose,
   onConfirm,
+  isLoading = false,
   isConfirming = false,
 }) {
   const [lotNumbers, setLotNumbers] = useState({});
@@ -70,13 +71,45 @@ export default function ConfirmStockInModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បិទ
           </button>
         }
       >
-        {pendingPurchases.length === 0 ? (
+        {isLoading ? (
+          <div
+            className={`flex min-h-[300px] flex-col items-center justify-center rounded-2xl border ${theme.section}`}
+            role="status"
+            aria-live="polite"
+          >
+            <div
+              className="relative flex h-28 w-28 items-center justify-center"
+              style={{ perspective: "700px" }}
+            >
+              <div className="absolute bottom-1 h-4 w-20 animate-pulse rounded-[50%] bg-emerald-500/25 blur-md" />
+              <div className="absolute inset-1 animate-spin rounded-full border border-dashed border-emerald-400/50 [animation-duration:3s]" />
+              <div className="absolute inset-4 animate-spin rounded-full border-2 border-transparent border-l-lime-300 border-r-emerald-600 [animation-direction:reverse] [animation-duration:1.8s]" />
+
+              <div
+                className="relative flex h-14 w-14 items-center justify-center rounded-[18px] border border-white/40 bg-gradient-to-br from-lime-300 via-emerald-500 to-teal-700 text-white"
+                style={{
+                  transform: "rotateX(12deg) rotateY(-18deg) translateZ(18px)",
+                  boxShadow:
+                    "12px 16px 22px rgba(6, 95, 70, 0.28), inset 4px 4px 9px rgba(255,255,255,0.38), inset -5px -7px 11px rgba(15,118,110,0.3)",
+                }}
+              >
+                <div className="absolute inset-1 rounded-[14px] border border-white/20" />
+                <FiRefreshCw className="relative animate-spin text-2xl drop-shadow-md [animation-duration:2.5s]" />
+              </div>
+            </div>
+
+            <p className="mt-3 text-sm font-bold">រង់ចាំបន្តិច...</p>
+            <p className={`mt-1 text-xs ${theme.muted}`}>
+              កំពុងរៀបចំបញ្ជីស្តុកចូល
+            </p>
+          </div>
+        ) : pendingPurchases.length === 0 ? (
           <div
             className={`rounded-2xl border p-8 text-center ${theme.section}`}
           >
@@ -125,7 +158,7 @@ export default function ConfirmStockInModal({
                     type="button"
                     disabled={isConfirming}
                     onClick={() => setConfirmingPurchase(purchase)}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="quick-action-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isConfirming ? (
                       <FiRefreshCw className="animate-spin" />
@@ -274,7 +307,7 @@ export default function ConfirmStockInModal({
               </div>
             )}
 
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10">
+            <div className="summary-icon-3d mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10">
               <FiAlertTriangle className="text-2xl text-emerald-500" />
             </div>
             <h3 className="text-base font-bold">បញ្ជាក់ស្តុកចូល</h3>
@@ -303,7 +336,7 @@ export default function ConfirmStockInModal({
                     getConfirmPayload(confirmingPurchase),
                   )
                 }
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
+                className="quick-action-icon-3d inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:opacity-60"
               >
                 {isConfirming ? (
                   <FiRefreshCw className="animate-spin" />

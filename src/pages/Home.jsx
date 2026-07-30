@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   FiMoon,
@@ -15,6 +16,7 @@ import {
   FiDollarSign,
   FiUser,
   FiShield,
+  FiKey,
   FiFileText,
   FiSettings,
   FiSliders,
@@ -22,6 +24,8 @@ import {
   FiActivity,
   FiRefreshCcw,
   FiLogOut,
+  FiMenu,
+  FiX,
 } from "react-icons/fi";
 import { useMutation } from "@tanstack/react-query";
 
@@ -48,7 +52,7 @@ const mainMenus = [
 
 const adminMenus = [
   { label: "អ្នកប្រើប្រាស់",  icon: FiUser,   path: "/home/users", permission: "users.view" },
-  { label: "តួនាទី & សិទ្ធិ", icon: FiShield, path: "/home/roles", permission: "roles.view" },
+  { label: "តួនាទី & សិទ្ធិ", icon: FiKey, path: "/home/roles", permission: "roles.view" },
 ];
 
 const systemMenus = [
@@ -58,13 +62,14 @@ const systemMenus = [
   { label: "កំណត់ហេតុ",         icon: FiActivity,   path: "/home/audit-log",      permission: "audit-log.view" },
 ];
 
-function MenuLink({ item, collapsed, isDark }) {
+function MenuLink({ item, collapsed, isDark, onNavigate }) {
   const Icon = item.icon;
 
   return (
     <NavLink
       to={item.path}
       end={item.end}
+      onClick={onNavigate}
       title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
         [
@@ -84,11 +89,15 @@ function MenuLink({ item, collapsed, isDark }) {
         <>
           <span
             className={[
-              "flex h-6 w-6 shrink-0 items-center justify-center",
-              isActive ? "text-white" : "",
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border transition-all duration-200",
+              isActive
+                ? "border-white/25 bg-gradient-to-br from-white/25 to-white/5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_8px_rgba(127,29,29,0.24)]"
+                : isDark
+                  ? "border-white/10 bg-gradient-to-br from-zinc-700 to-zinc-900 text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_4px_8px_rgba(0,0,0,0.28)] group-hover:border-white/15 group-hover:text-white"
+                  : "border-white bg-gradient-to-br from-white to-zinc-100 text-zinc-600 shadow-[inset_0_1px_0_rgba(255,255,255,1),0_4px_9px_rgba(24,24,27,0.16)] group-hover:text-red-500",
             ].join(" ")}
           >
-            <Icon className="text-[19px]" />
+            <Icon className="text-[18px] drop-shadow-sm" />
           </span>
 
           {!collapsed && (
@@ -104,27 +113,55 @@ function MenuLink({ item, collapsed, isDark }) {
 
 function MenuGroup({
   title,
-  icon: Icon,
+  icon,
   items,
   open,
   setOpen,
   collapsed,
   isDark,
 }) {
+  const GroupIcon = icon;
+  const groupLocation = useLocation();
+  const buttonRef = useRef(null);
+  const [flyoutPosition, setFlyoutPosition] = useState({ left: 92, top: 0 });
+  const isGroupActive = items.some(
+    (item) =>
+      groupLocation.pathname === item.path ||
+      groupLocation.pathname.startsWith(item.path + "/"),
+  );
+
   return (
     <div className="mt-4">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (collapsed) {
+            const rect = buttonRef.current?.getBoundingClientRect();
+            if (rect) {
+              const estimatedHeight = 52 + items.length * 48;
+              setFlyoutPosition({
+                left: rect.right + 10,
+                top: Math.max(8, Math.min(rect.top, window.innerHeight - estimatedHeight - 8)),
+              });
+            }
+            setOpen(!open);
+            return;
+          }
+
+          setOpen(!open);
+        }}
         title={collapsed ? title : undefined}
         className={[
           "flex rounded-xl text-[15px] font-bold transition-all duration-200",
           collapsed
             ? "mx-auto h-11 w-11 items-center justify-center"
             : "h-11 w-full items-center justify-between px-3",
-          isDark
-            ? "text-zinc-200 hover:bg-zinc-800"
-            : "text-zinc-800 hover:bg-zinc-100",
+          isGroupActive
+            ? "bg-red-500 text-white shadow-sm shadow-red-500/20"
+            : isDark
+              ? "text-zinc-200 hover:bg-zinc-800"
+              : "text-zinc-800 hover:bg-zinc-100",
         ].join(" ")}
       >
         <div
@@ -133,8 +170,17 @@ function MenuGroup({
             collapsed ? "justify-center" : "gap-3",
           ].join(" ")}
         >
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center">
-            <Icon className="text-[19px]" />
+          <span
+            className={[
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border transition-all duration-200",
+              isGroupActive
+                ? "border-white/25 bg-gradient-to-br from-white/25 to-white/5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_8px_rgba(127,29,29,0.24)]"
+                : isDark
+                  ? "border-white/10 bg-gradient-to-br from-zinc-700 to-zinc-900 text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_4px_8px_rgba(0,0,0,0.28)]"
+                  : "border-white bg-gradient-to-br from-white to-zinc-100 text-zinc-600 shadow-[inset_0_1px_0_rgba(255,255,255,1),0_4px_9px_rgba(24,24,27,0.16)]",
+            ].join(" ")}
+          >
+            <GroupIcon className="text-[18px] drop-shadow-sm" />
           </span>
 
           {!collapsed && (
@@ -164,6 +210,43 @@ function MenuGroup({
           ))}
         </div>
       )}
+
+      {open && collapsed && createPortal(
+        <>
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-[60] cursor-default bg-transparent"
+          />
+          <div
+            className={`fixed z-[70] w-64 rounded-2xl border p-2 shadow-2xl ${
+              isDark
+                ? "border-white/10 bg-zinc-900 text-white shadow-black/40"
+                : "border-zinc-200 bg-white text-zinc-900 shadow-zinc-300/60"
+            }`}
+            style={{ left: flyoutPosition.left, top: flyoutPosition.top }}
+          >
+            <p className={`px-3 pb-2 pt-1 text-xs font-bold uppercase tracking-wide ${
+              isDark ? "text-zinc-400" : "text-zinc-500"
+            }`}>
+              {title}
+            </p>
+            <div className="space-y-1">
+              {items.map((item) => (
+                <MenuLink
+                  key={item.path}
+                  item={item}
+                  collapsed={false}
+                  isDark={isDark}
+                  onNavigate={() => setOpen(false)}
+                />
+              ))}
+            </div>
+          </div>
+        </>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -188,6 +271,7 @@ export default function Home() {
   });
 
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [shopInfo, setShopInfo] = useState(() => getStoredShopInfo());
 
   const isAdminPath = adminMenus.some(
@@ -210,8 +294,23 @@ export default function Home() {
   });
 
   useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDark);
+    document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+
+    return () => {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.style.colorScheme = "";
+    };
+  }, [isDark]);
+
+  useEffect(() => {
     localStorage.setItem("theme", isDark ? "dark" : "light");
   }, [isDark]);
+
+  useEffect(() => {
+    const closeTimer = window.setTimeout(() => setMobileSidebarOpen(false), 0);
+    return () => window.clearTimeout(closeTimer);
+  }, [location.pathname]);
 
   useEffect(() => {
     const syncShopInfo = (event) => {
@@ -259,12 +358,12 @@ export default function Home() {
       : "bg-white border-zinc-200",
 
     brandBox: isDark
-      ? "bg-zinc-950 border-zinc-800"
-      : "bg-zinc-50 border-zinc-200",
+      ? "border-zinc-800 bg-zinc-950 shadow-[0_5px_14px_rgba(0,0,0,0.18)]"
+      : "border-zinc-200/80 bg-zinc-50 shadow-[0_5px_14px_rgba(24,24,27,0.07)]",
 
     header: isDark
-      ? "bg-zinc-900/95 border-zinc-800"
-      : "bg-white/95 border-zinc-200",
+      ? "border-zinc-800 bg-zinc-900/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_4px_12px_rgba(0,0,0,0.18)]"
+      : "border-zinc-200 bg-white/95 shadow-[inset_0_1px_0_rgba(255,255,255,1),0_4px_12px_rgba(24,24,27,0.06)]",
 
     title: isDark ? "text-white" : "text-zinc-900",
     subTitle: isDark ? "text-zinc-400" : "text-zinc-500",
@@ -276,33 +375,53 @@ export default function Home() {
 
     contentWrap: isDark ? "bg-zinc-950" : "bg-zinc-100",
   };
+  const sidebarCollapsed = collapsed && !mobileSidebarOpen;
 
   return (
     <div className={`h-screen overflow-hidden ${theme.app}`}>
       <div className="flex h-full">
+        {mobileSidebarOpen && (
+          <button
+            type="button"
+            aria-label="Close navigation"
+            onClick={() => setMobileSidebarOpen(false)}
+            className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px] lg:hidden"
+          />
+        )}
+
         <aside
           className={[
-            "relative shrink-0 border-r transition-all duration-300",
-            collapsed ? "w-[82px]" : "w-[260px]",
+            "fixed inset-y-0 left-0 z-50 w-[min(300px,86vw)] shrink-0 border-r transition-all duration-300 lg:relative lg:z-auto",
+            mobileSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+            collapsed ? "lg:w-[82px]" : "lg:w-[260px]",
             theme.sidebar,
           ].join(" ")}
         >
           <div className="flex h-full flex-col overflow-hidden">
             <div className={`border-b p-3 ${theme.border}`}>
+              <button
+                type="button"
+                aria-label="Close navigation"
+                onClick={() => setMobileSidebarOpen(false)}
+                className={`absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-xl border lg:hidden ${theme.toggle}`}
+              >
+                <FiX className="text-xl" />
+              </button>
+
               <div
                 className={[
                   "rounded-2xl border transition-all duration-300",
-                  collapsed
-                    ? "mx-auto flex h-[56px] w-[54px] items-center justify-center p-0"
-                    : "flex min-h-[68px] items-center gap-3 px-3 py-3",
+                  sidebarCollapsed
+                    ? "mx-auto flex h-[52px] w-[52px] items-center justify-center p-0"
+                    : "flex min-h-[62px] items-center gap-3 px-3 py-2",
                   theme.brandBox,
                 ].join(" ")}
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500 text-base font-bold text-white shadow-sm">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-300/50 bg-gradient-to-br from-red-400 via-red-500 to-red-600 text-base font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.38),0_5px_10px_rgba(239,68,68,0.28)]">
                   {getShopInitials(shopInfo.name)}
                 </div>
 
-                {!collapsed && (
+                {!sidebarCollapsed && (
                   <div className="min-w-0 leading-tight">
                     <h2
                       className={[
@@ -331,7 +450,7 @@ export default function Home() {
                   <MenuLink
                     key={item.path}
                     item={item}
-                    collapsed={collapsed}
+                    collapsed={sidebarCollapsed}
                     isDark={isDark}
                   />
                 ))}
@@ -344,7 +463,7 @@ export default function Home() {
                   items={visibleAdmin}
                   open={openAdmin}
                   setOpen={setOpenAdmin}
-                  collapsed={collapsed}
+                  collapsed={sidebarCollapsed}
                   isDark={isDark}
                 />
               )}
@@ -356,7 +475,7 @@ export default function Home() {
                   items={visibleSystem}
                   open={openSystem}
                   setOpen={setOpenSystem}
-                  collapsed={collapsed}
+                  collapsed={sidebarCollapsed}
                   isDark={isDark}
                 />
               )}
@@ -368,13 +487,16 @@ export default function Home() {
                 onClick={() => logoutMutation.mutate()}
                 disabled={logoutMutation.isPending}
                 className={[
-                  "flex items-center justify-center rounded-xl bg-red-500 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70",
-                  collapsed ? "mx-auto h-11 w-11" : "h-11 w-full gap-2 px-4",
+                  "group flex items-center justify-center rounded-xl border text-sm font-bold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-70",
+                  sidebarCollapsed ? "mx-auto h-11 w-11" : "h-11 w-full gap-2 px-4",
+                  isDark
+                    ? "border-red-500/20 bg-gradient-to-br from-zinc-800 to-zinc-900 text-red-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_4px_10px_rgba(0,0,0,0.22)] hover:border-red-500 hover:bg-none hover:bg-red-500 hover:text-white"
+                    : "border-red-200 bg-gradient-to-br from-white to-red-50/60 text-red-500 shadow-[inset_0_1px_0_rgba(255,255,255,1),0_4px_10px_rgba(24,24,27,0.09)] hover:border-red-500 hover:bg-none hover:bg-red-500 hover:text-white hover:shadow-[0_5px_12px_rgba(239,68,68,0.22)]",
                 ].join(" ")}
               >
                 <FiLogOut className="text-[18px]" />
 
-                {!collapsed && (
+                {!sidebarCollapsed && (
                   <span>
                     {logoutMutation.isPending ? "កំពុងចេញ..." : "ចេញ"}
                   </span>
@@ -386,8 +508,10 @@ export default function Home() {
               type="button"
               onClick={() => setCollapsed(!collapsed)}
               className={[
-                "absolute -right-4 top-[74px] z-50 flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition",
-                theme.toggle,
+                "absolute -right-4 top-[74px] z-50 hidden h-9 w-9 items-center justify-center rounded-full border transition-all duration-200 lg:flex",
+                isDark
+                  ? "border-white/10 bg-gradient-to-br from-zinc-700 to-zinc-900 text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_4px_10px_rgba(0,0,0,0.32)] hover:border-red-400/40 hover:text-red-400"
+                  : "border-white bg-gradient-to-br from-white to-zinc-100 text-zinc-600 shadow-[inset_0_1px_0_rgba(255,255,255,1),0_4px_10px_rgba(24,24,27,0.14)] hover:border-red-200 hover:text-red-500 hover:shadow-[inset_0_1px_0_rgba(255,255,255,1),0_5px_12px_rgba(239,68,68,0.16)]",
               ].join(" ")}
             >
               <FiChevronLeft
@@ -403,36 +527,52 @@ export default function Home() {
         <div className="flex min-w-0 flex-1 flex-col">
           <header
             className={[
-              "sticky top-0 z-40 flex h-[74px] shrink-0 items-center justify-between border-b px-6 backdrop-blur",
+              "sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b px-3 backdrop-blur sm:h-[68px] sm:px-4 lg:px-6",
               theme.header,
             ].join(" ")}
           >
-            <div className="min-w-0">
-              <h1 className={`truncate text-2xl font-extrabold leading-snug pb-1 ${theme.title}`}>
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <button
+                type="button"
+                aria-label="Open navigation"
+                onClick={() => setMobileSidebarOpen(true)}
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border lg:hidden ${theme.toggle}`}
+              >
+                <FiMenu className="text-xl" />
+              </button>
+
+              <h1
+                className={`truncate pb-1 text-lg font-extrabold leading-snug sm:text-xl ${
+                  isDark
+                    ? "[text-shadow:0_-1px_0_rgba(255,255,255,0.10),0_2px_2px_rgba(0,0,0,0.55)]"
+                    : "[text-shadow:0_-1px_0_rgba(255,255,255,1),0_2px_2px_rgba(24,24,27,0.18)]"
+                } ${theme.title}`}
+              >
                 {pageTitle}
               </h1>
-
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               <NotificationBell isDark={isDark} />
 
               <button
                 type="button"
                 onClick={() => setIsDark((prev) => !prev)}
-                className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
+                className="group relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-[14px] border border-red-400/40 bg-gradient-to-br from-[#ff4655] via-[#ff3347] to-[#e91f37] text-white shadow-[4px_6px_14px_rgba(190,24,49,0.24),-2px_-2px_7px_rgba(255,255,255,0.7),inset_0_1px_1px_rgba(255,255,255,0.38),inset_0_-2px_4px_rgba(159,18,57,0.12)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[5px_9px_18px_rgba(190,24,49,0.3),-2px_-2px_8px_rgba(255,255,255,0.75),inset_0_1px_1px_rgba(255,255,255,0.42)] active:translate-y-px active:scale-[0.97] active:shadow-[2px_3px_8px_rgba(190,24,49,0.22),inset_0_2px_5px_rgba(127,29,29,0.16)] dark:shadow-[4px_7px_15px_rgba(0,0,0,0.36),-1px_-1px_5px_rgba(255,255,255,0.08),inset_0_1px_1px_rgba(255,255,255,0.32)]"
+                aria-label={isDark ? "ប្ដូរទៅផ្ទៃភ្លឺ" : "ប្ដូរទៅផ្ទៃងងឹត"}
               >
+                <span className="pointer-events-none absolute left-2 right-2 top-1 h-px rounded-full bg-white/45" />
                 {isDark ? (
-                  <FiSun className="text-[18px]" />
+                  <FiSun className="relative text-[19px] drop-shadow-[0_2px_2px_rgba(127,29,29,0.28)] transition-transform duration-300 group-hover:rotate-45" />
                 ) : (
-                  <FiMoon className="text-[18px]" />
+                  <FiMoon className="relative text-[19px] drop-shadow-[0_2px_2px_rgba(127,29,29,0.28)] transition-transform duration-300 group-hover:-rotate-12" />
                 )}
               </button>
             </div>
           </header>
 
           <main className={`flex-1 overflow-x-hidden overflow-y-auto ${theme.contentWrap}`}>
-            <div className="min-w-0 p-6">
+            <div className="min-w-0 p-3 sm:p-4 lg:p-6">
               <div className="mx-auto w-full max-w-7xl">
                 <Outlet context={{ isDark }} />
               </div>

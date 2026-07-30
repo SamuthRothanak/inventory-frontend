@@ -227,7 +227,7 @@ export default function QuickAddModal({
             type="button"
             onClick={onAddToCart}
             disabled={!appliedRule || isInvalidQty || isOverStock || isOutOfStock}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-red-500 to-rose-500 text-sm font-extrabold text-white shadow-md shadow-red-200 transition hover:from-red-600 hover:to-rose-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+            className="quick-action-icon-3d flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-extrabold text-white shadow-md shadow-red-200 transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
           >
             <ShoppingCart className="h-4 w-4" />
             បន្ថែម — {usd(lineTotal)}

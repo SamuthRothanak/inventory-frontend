@@ -74,7 +74,7 @@ export default function SalePrintModal({ sale, onClose }) {
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex h-9 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+            className="quick-action-icon-3d inline-flex h-9 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-700 active:translate-y-0"
           >
             <FiPrinter size={14} /> បោះពុម្ព
           </button>

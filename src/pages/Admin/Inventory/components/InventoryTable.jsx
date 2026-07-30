@@ -10,7 +10,6 @@ import {
   FiTrendingDown,
   FiTrendingUp,
 } from "react-icons/fi";
-import TableLoading from "../../../../components/TableLoading";
 import {
   ExpiryBadge,
   formatUsdTwoDigits,
@@ -41,7 +40,7 @@ export default function InventoryTable({
     return (
       <div className={`overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-white/10">
+        <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div>
             <h2 className={`text-base font-semibold ${theme.pageTitle}`}>បញ្ជីស្តុក</h2>
             <p className={`mt-0.5 text-xs ${theme.muted}`}>
@@ -55,7 +54,7 @@ export default function InventoryTable({
               type="button"
               disabled={!canExport}
               onClick={() => canExport && setExportMenuOpen?.((open) => !open)}
-              className={`inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge}`}
+              className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 sm:h-10 sm:w-auto ${theme.badge}`}
             >
               <FiDownload />
               Export
@@ -80,7 +79,7 @@ export default function InventoryTable({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-240">
+          <table className="responsive-card-table w-full min-w-240">
             <thead className="bg-red-600 text-white">
               <tr>
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide">ទំនិញ</th>
@@ -94,7 +93,7 @@ export default function InventoryTable({
 
             <tbody>
               {isLoading ? (
-                <TableLoading theme={theme} colSpan={6} text="រង់ចាំបន្តិច..." />
+                <Inventory3DLoading theme={theme} colSpan={6} />
               ) : (
                 filteredInventory.map((item) => {
                   const stockBreakdown = getVariantStockBreakdown(item);
@@ -116,7 +115,7 @@ export default function InventoryTable({
                   return (
                     <tr key={item.id} className={`border-t transition ${theme.row}`}>
                       {/* Product / Variant */}
-                      <td className="px-5 py-3.5">
+                      <td data-label="ទំនិញ" className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <InventoryThumb item={item} />
                           <div className="min-w-0">
@@ -134,7 +133,7 @@ export default function InventoryTable({
                       </td>
 
                       {/* Current Stock */}
-                      <td className="px-5 py-3.5">
+                      <td data-label="ស្តុកបច្ចុប្បន្ន" className="px-5 py-3.5">
                         <p className="text-sm font-bold">{stockBreakdown.baseText}</p>
                         {stockBreakdown.convertedTexts.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
@@ -153,7 +152,7 @@ export default function InventoryTable({
                       </td>
 
                       {/* Low Stock Alert */}
-                      <td className="px-5 py-3.5">
+                      <td data-label="កម្រិតស្តុក" className="px-5 py-3.5">
                         {thresholdBreakdown.convertedTexts.length > 0 ? (
                           thresholdBreakdown.convertedTexts.map((c) => (
                             <p key={c.unitName} className="text-sm font-semibold">{c.text}</p>
@@ -164,7 +163,7 @@ export default function InventoryTable({
                       </td>
 
                       {/* Cost / Value */}
-                      <td className="px-5 py-3.5">
+                      <td data-label="តម្លៃដើម" className="px-5 py-3.5">
                         <p className="text-sm font-semibold">
                           {formatUsdTwoDigits(item.unitCostBase)}
                           <span className={`ml-1 text-xs font-normal ${theme.muted}`}>/ {item.baseUnit}</span>
@@ -191,7 +190,7 @@ export default function InventoryTable({
                       </td>
 
                       {/* Status */}
-                      <td className="px-5 py-3.5 text-center">
+                      <td data-label="ស្ថានភាព" className="px-5 py-3.5 text-center">
                         <div className="flex flex-col items-center gap-1.5">
                           <StockStatusBadge status={item.status} getStatusClass={getStatusClass} />
                           <ExpiryBadge info={nearestExpiry?.info} />
@@ -199,24 +198,24 @@ export default function InventoryTable({
                       </td>
 
                       {/* Actions */}
-                      <td className="px-5 py-3.5">
+                      <td data-label="សកម្មភាព" className="px-5 py-3.5">
                         <div className="flex items-center justify-center gap-2">
                           <Tooltip label="មើលស្តុក">
                             <button type="button" onClick={() => openViewModal(item)}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-amber-400 to-orange-500 text-white shadow-md shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-amber-500 hover:to-orange-600 hover:shadow-lg hover:shadow-orange-500/25 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0">
+                              className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-orange-600 hover:shadow-orange-500/25 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0">
                               <FiEye size={15} />
                             </button>
                           </Tooltip>
                           <PermissionGate permission="stock.adjust">
                             <Tooltip label="ស្តុកចូល">
                               <button type="button" onClick={() => openAdjustmentModal("adjustment_in", item)}
-                                className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-blue-600 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0">
+                                className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0">
                                 <FiTrendingUp size={15} />
                               </button>
                             </Tooltip>
                             <Tooltip label="ស្តុកចេញ">
                               <button type="button" onClick={() => openAdjustmentModal("adjustment_out", item)}
-                                className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0">
+                                className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0">
                                 <FiTrendingDown size={15} />
                               </button>
                             </Tooltip>
@@ -252,7 +251,7 @@ export default function InventoryTable({
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" disabled={pagination.currentPage <= 1}
                 onClick={() => onPageChange((c) => Math.max(1, c - 1))}
-                className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+                className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
                 <FiChevronLeft /> មុន
               </button>
               {pageNumbers.map((p, i) =>
@@ -260,10 +259,10 @@ export default function InventoryTable({
                   <span key={`e-${i}`} className={`px-2 text-sm font-semibold ${theme.muted}`}>...</span>
                 ) : (
                   <button key={p} type="button" onClick={() => onPageChange(p)}
-                    className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition ${
+                    className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition hover:-translate-y-0.5 ${
                       p === pagination.currentPage
-                        ? "bg-red-600 text-white"
-                        : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                        ? "quick-action-icon-3d bg-red-600 text-white"
+                        : "table-icon-3d border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
                     }`}>
                     {p}
                   </button>
@@ -271,7 +270,7 @@ export default function InventoryTable({
               )}
               <button type="button" disabled={pagination.currentPage >= pagination.lastPage}
                 onClick={() => onPageChange((c) => Math.min(pagination.lastPage, c + 1))}
-                className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+                className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
                 បន្ទាប់ <FiChevronRight />
               </button>
             </div>
@@ -280,6 +279,52 @@ export default function InventoryTable({
       </div>
     );
   }
+
+function Inventory3DLoading({ theme, colSpan }) {
+  return (
+    <tr className={`border-t ${theme.row}`}>
+      <td colSpan={colSpan} className="px-4 py-16 text-center">
+        <div
+          className="flex min-h-[230px] flex-col items-center justify-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="relative flex h-32 w-32 items-center justify-center"
+            style={{ perspective: "700px" }}
+          >
+            <div className="absolute bottom-1 h-5 w-20 animate-pulse rounded-[50%] bg-amber-500/25 blur-md" />
+
+            <div className="absolute inset-2 animate-spin rounded-full border border-dashed border-amber-400/50 [animation-duration:3s]" />
+            <div className="absolute inset-5 animate-spin rounded-full border-2 border-transparent border-l-yellow-300 border-r-orange-600 [animation-direction:reverse] [animation-duration:1.8s]" />
+
+            <div
+              className="relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-white/40 bg-gradient-to-br from-yellow-300 via-amber-500 to-orange-700 text-white"
+              style={{
+                transform: "rotateX(12deg) rotateY(-18deg) translateZ(18px)",
+                boxShadow:
+                  "14px 18px 24px rgba(146, 64, 14, 0.3), inset 4px 4px 10px rgba(255,255,255,0.38), inset -5px -7px 12px rgba(154,52,18,0.3)",
+              }}
+            >
+              <div className="absolute inset-1 rounded-[16px] border border-white/20" />
+              <FiPackage className="relative text-3xl drop-shadow-md" />
+              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-400 text-[11px] font-black text-emerald-950 shadow-lg shadow-emerald-400/40">
+                +
+              </span>
+            </div>
+          </div>
+
+          <p className={`mt-3 text-sm font-bold ${theme.pageTitle}`}>
+            រង់ចាំបន្តិច...
+          </p>
+          <p className={`mt-1 text-xs ${theme.muted}`}>
+            កំពុងរៀបចំបញ្ជីស្តុក
+          </p>
+        </div>
+      </td>
+    </tr>
+  );
+}
 
 function Tooltip({ label, children }) {
   return (

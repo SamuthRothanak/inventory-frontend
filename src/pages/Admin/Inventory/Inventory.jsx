@@ -32,7 +32,6 @@
   } from "react-icons/fi";
   import {
     confirmPurchaseStockInApi,
-    getPurchaseByIdApi,
     getPurchaseReturnsApi,
     getPurchasesApi,
     updatePurchaseReturnApi,
@@ -245,6 +244,12 @@
           getPurchasesApi({ status: "pending_claim", per_page: 100 }),
           getPurchaseReturnsApi(purchaseReturnParams),
         ]);
+        // The pending_stock_in/pending_claim list responses above already eager-load everything
+        // this screen needs (supplier, items.productVariantUnit.unit, items.productVariantUnit.
+        // productVariant — see PurchaseRepository::paginate) — identical to the single-purchase
+        // detail endpoint except for used_credits, which this stock-in flow never reads. This used
+        // to re-fetch getPurchaseByIdApi() once per purchase here (an N+1 round trip on every
+        // Inventory page load), purely to get that unused field.
         const purchases = responses
           .slice(0, 2)
           .flatMap((response) => extractApiData(response))
@@ -253,17 +258,6 @@
             (purchase, index, list) =>
               list.findIndex((item) => String(item.id) === String(purchase.id)) === index
           );
-
-        const detailed = await Promise.all(
-          purchases.map(async (purchase) => {
-            try {
-              const detailResponse = await getPurchaseByIdApi(purchase.id);
-              return normalizePurchase(extractApiObject(detailResponse));
-            } catch {
-              return purchase;
-            }
-          })
-        );
 
         // No resolution_type gate here: replacement_received_qty/replacement_stocked_in_qty on the
         // return are already scoped to replacement-type items only by the backend rollup
@@ -278,13 +272,14 @@
             return receivedQty > stockedQty;
           });
 
-        return [...detailed, ...replacementReturns.map(normalizePendingReplacementReturnForStockIn)];
+        return [...purchases, ...replacementReturns.map(normalizePendingReplacementReturnForStockIn)];
       },
       staleTime: 0,
       refetchOnMount: true,
     });
 
     const theme = {
+      isDark,
       pageTitle: isDark ? "text-white" : "text-zinc-900",
 
       card: isDark
@@ -400,11 +395,13 @@
     });
 
     const normalizeStockMovement = (item = {}) => {
+      const purchase = item.purchase || {};
       const purchaseReturn = item.purchase_return || item.purchaseReturn || {};
       const sourcePurchase = purchaseReturn.purchase || purchaseReturn.source_purchase || purchaseReturn.sourcePurchase || {};
       const refType = item.reference_type || item.ref_type || item.refType || item.source_type || item.sourceType || "-";
       const refId = item.reference_id || item.ref_id || item.refId || item.source_id || item.sourceId || "";
       const purchaseReturnNo = purchaseReturn.purchase_return_no || purchaseReturn.purchaseReturnNo || "";
+      const purchaseNo = purchase.purchase_no || purchase.purchaseNo || "";
       const sourcePurchaseNo = sourcePurchase.purchase_no || sourcePurchase.purchaseNo || "";
 
       return {
@@ -414,7 +411,9 @@
         refType,
         refId,
         referenceLabel:
-          refType === "purchase_return" && purchaseReturnNo
+          refType === "purchase" && purchaseNo
+            ? purchaseNo
+            : refType === "purchase_return" && purchaseReturnNo
             ? `Claim ${purchaseReturnNo}`
             : `${String(refType || "-").replaceAll("_", " ")}${refId ? ` #${refId}` : ""}`,
         sourcePurchaseNo,
@@ -1332,8 +1331,17 @@
 
         return confirmPurchaseStockInApi(purchase.id, payload);
       },
-      onSuccess: () => {
+      onSuccess: (_data, { purchase }) => {
         invalidateInventoryQueries();
+        // Optimistically drop the just-confirmed purchase right away instead of waiting for the
+        // invalidation above to refetch over the network — that round trip used to take a couple
+        // seconds, during which the row stayed visible with its "រង់ចាំស្តុកចូល" badge even though
+        // the success toast had already fired. This is only ever a temporary bridge: the
+        // pendingPurchasesQuery.isSuccess effect below still overwrites pendingPurchases with the
+        // server's own list once that refetch completes, so this can't leave stale/wrong state.
+        setPendingPurchases((previous) =>
+          previous.filter((item) => String(item.id) !== String(purchase.id))
+        );
         notify.success("ស្តុកចូលបានបញ្ជាក់", "ចំនួនការទិញដែលទទួលបានត្រូវបានបន្ថែមទៅស្តុករួចហើយ");
         // Don't closeModal() here — this list can hold several pending purchases at once, and
         // closing the whole modal after confirming just one forces the user to reopen it to
@@ -1527,14 +1535,7 @@
         Number(adjustmentForm.qty || 0) *
         Number(selectedUnit.conversionQty || 1);
 
-      const isStockIn = adjustmentForm.adjustmentType === "increase";
-      const signedQtyBase = isStockIn ? baseQty : -baseQty;
-
-      const nextQty = Number(item.stockBaseQty || 0) + signedQtyBase;
-      const nextStatus = getStockStatus(nextQty, item.lowStockThreshold);
-      const nowDate = getToday();
       const now = getNow();
-      const adjustmentId = Date.now();
       const movementType = getMovementTypeFromAdjustment(
         adjustmentForm.adjustmentType,
         adjustmentForm.reason
@@ -1546,102 +1547,27 @@
         (batch) => String(batch.id) === String(adjustmentForm.inventoryBatchId)
       );
 
-      if (stockBalancesQuery.isSuccess && item.productVariantId) {
-        createStockAdjustmentMutation.mutate({
-          adjustment_type: adjustmentForm.adjustmentType,
-          reason: adjustmentForm.reason,
-          note: adjustmentForm.note || "Manual stock adjustment",
-          created_at: now,
-          status: "approved",
-          items: [
-            {
-              product_variant_id: item.productVariantId,
-              product_variant_unit_id: selectedUnit.id || item.productVariantUnitId,
-              inventory_batch_id: selectedBatch?.id || null,
-              qty: Number(adjustmentForm.qty || 0),
-              base_qty: baseQty,
-              movement_type: movementType,
-              unit_cost_base: unitCostBase,
-              line_cost: lineCost,
-              note: adjustmentForm.note || "Manual stock adjustment",
-              created_at: now,
-            },
-          ],
-        });
-        return;
-      }
-
-      const adjustment = {
-        id: adjustmentId,
-        adjustmentNo: `ADJ-${String(stockAdjustments.length + 1).padStart(3, "0")}`,
-        adjustmentType: adjustmentForm.adjustmentType,
+      createStockAdjustmentMutation.mutate({
+        adjustment_type: adjustmentForm.adjustmentType,
         reason: adjustmentForm.reason,
         note: adjustmentForm.note || "Manual stock adjustment",
-        createdBy: 1,
-        createdAt: now,
+        created_at: now,
         status: "approved",
         items: [
           {
-            id: adjustmentId + 1,
-            stockAdjustmentId: adjustmentId,
-            productVariantId: item.productVariantId,
-            productVariantUnitId: selectedUnit.id || null,
-            inventoryBatchId: selectedBatch?.id || null,
+            product_variant_id: item.productVariantId,
+            product_variant_unit_id: selectedUnit.id || item.productVariantUnitId,
+            inventory_batch_id: selectedBatch?.id || null,
             qty: Number(adjustmentForm.qty || 0),
-            baseQty,
-            movementType,
-            unitCostBase,
-            lineCost,
+            base_qty: baseQty,
+            movement_type: movementType,
+            unit_cost_base: unitCostBase,
+            line_cost: lineCost,
             note: adjustmentForm.note || "Manual stock adjustment",
-            createdAt: now,
+            created_at: now,
           },
         ],
-      };
-
-      setStockAdjustments((previous) => [adjustment, ...previous]);
-
-      setInventory((previous) =>
-        previous.map((inventoryItem) => {
-          if (inventoryItem.id !== item.id) return inventoryItem;
-
-          const updatedBatches = inventoryItem.batches.map((batch) => {
-            if (String(batch.id) !== String(adjustmentForm.inventoryBatchId)) {
-              return batch;
-            }
-
-            const nextBatchQty = Math.max(
-              0,
-              Number(batch.qtyRemainingBase || 0) + signedQtyBase
-            );
-
-            return {
-              ...batch,
-              qtyRemainingBase: nextBatchQty,
-              status: nextBatchQty <= 0 ? "depleted" : batch.status,
-            };
-          });
-
-          return {
-            ...inventoryItem,
-            stockBaseQty: nextQty,
-            status: nextStatus,
-            batches: updatedBatches,
-            movements: [
-              {
-                type: movementType,
-                qtyBase: signedQtyBase,
-                refType: "adjustment",
-                refId: adjustmentId,
-                note: adjustmentForm.note || "Manual stock adjustment",
-                createdAt: nowDate,
-              },
-              ...inventoryItem.movements,
-            ],
-          };
-        })
-      );
-
-      closeModal();
+      });
     };
 
     const handleCancelAdjustment = async (adjustment) => {
@@ -1655,7 +1581,7 @@
     };
 
     return (
-      <section className="space-y-6">
+      <section className="space-y-4 sm:space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
            
@@ -1663,7 +1589,7 @@
 
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
           <SummaryCard
             theme={theme}
             title="ទំនិញក្នុងស្តុក"
@@ -1782,7 +1708,7 @@
               <button
                 type="button"
                 onClick={openConfirmStockInModal}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+                className="quick-action-icon-3d inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600"
               >
                 <FiCheckCircle className="text-lg" />
                 បញ្ជាក់ស្តុកចូល
@@ -1841,11 +1767,12 @@
           </PermissionGate>
         </div>
 
-        <div
-          className={`flex flex-col gap-4 rounded-2xl border p-5 shadow-sm md:flex-row md:items-center md:justify-between ${theme.card}`}
-        >
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div
+            className={`flex h-full flex-col gap-4 rounded-2xl border p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between ${theme.card}`}
+          >
           <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
+            <div className="summary-icon-3d flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
               <FiClipboard className="text-4xl text-emerald-500" />
             </div>
 
@@ -1867,20 +1794,20 @@
               type="button"
               disabled={pendingPurchases.length === 0}
               onClick={openConfirmStockInModal}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FiCheckCircle />
               ពិនិត្យ & បញ្ជាក់
             </button>
           </PermissionGate>
-        </div>
+          </div>
 
-        {lowStockList.length > 0 && (
-          <div
-            className={`flex flex-col gap-4 rounded-2xl border p-5 shadow-sm md:flex-row md:items-center md:justify-between ${theme.card}`}
-          >
+          {lowStockList.length > 0 && (
+            <div
+              className={`flex h-full flex-col gap-4 rounded-2xl border p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between ${theme.card}`}
+            >
             <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10">
+              <div className="summary-icon-3d flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10">
                 <FiAlertTriangle className="text-4xl text-amber-500" />
               </div>
 
@@ -1896,13 +1823,14 @@
             <button
               type="button"
               onClick={() => setStatusFilter("Needs Action")}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white hover:bg-amber-600"
+              className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-amber-600"
             >
               <FiList />
               មើលស្តុកត្រូវការ
             </button>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
         <InventoryTable
           theme={theme}
@@ -2122,6 +2050,7 @@
             theme={theme}
             onClose={closeModal}
             onConfirm={handleConfirmStockIn}
+            isLoading={pendingPurchasesQuery.isLoading}
             isConfirming={confirmStockInMutation.isPending}
           />
         )}

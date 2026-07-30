@@ -25,7 +25,6 @@ import {
   updateExchangeRateApi,
   deleteExchangeRateApi,
 } from "../../../services/exchangeRate.service";
-import TableLoading from "../../../components/TableLoading";
 import { useNotification } from "../../../components/AppNotification";
 
 function extractApiData(response) {
@@ -469,7 +468,7 @@ export default function ExchangeRate() {
 
   return (
     <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
         <SummaryCard
           theme={theme}
           title="អត្រាកំពុងប្រើ"
@@ -504,7 +503,7 @@ export default function ExchangeRate() {
         />
       </div>
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex flex-col gap-3 sm:gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="grid w-full grid-cols-1 gap-3 lg:max-w-[760px] lg:grid-cols-[minmax(280px,520px)_220px]">
           <div className="relative">
             <FiSearch
@@ -537,7 +536,7 @@ export default function ExchangeRate() {
           <button
             type="button"
             onClick={openAddForm}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[190px]"
+            className="quick-action-icon-3d inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 active:translate-y-0 xl:min-w-[190px]"
           >
             <FiPlusCircle className="text-lg" />
             បន្ថែមអត្រាប្តូរប្រាក់
@@ -581,7 +580,7 @@ function SummaryCard({ theme, icon, title, value, subtitle, iconBg }) {
     <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
       <div className="flex items-center gap-4">
         <div
-          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${iconBg}`}
+          className={`summary-icon-3d flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${iconBg}`}
         >
           {icon}
         </div>
@@ -627,7 +626,7 @@ function ExchangeRateTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[760px] w-full text-left">
+        <table className="responsive-card-table min-w-[760px] w-full text-left">
           <thead>
             <tr className="bg-red-600 text-sm text-white">
               <th className="px-5 py-4 font-bold">កាលបរិច្ឆេទ</th>
@@ -640,26 +639,35 @@ function ExchangeRateTable({
 
           <tbody>
             {isLoading ? (
-              <TableLoading
+              <ExchangeRate3DLoading
                 theme={theme}
                 colSpan={5}
-                text="រង់ចាំបន្តិច..."
               />
             ) : rates.length === 0 ? (
               <tr>
                 <td
                   colSpan={5}
-                  className={`px-5 py-10 text-center ${theme.muted}`}
+                  className="px-5 py-14 text-center"
                 >
-                  រកមិនឃើញអត្រាប្តូរប្រាក់។
+                  <div className="flex flex-col items-center justify-center">
+                    <span className={`summary-icon-3d flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}>
+                      <FiRefreshCcw className={`text-3xl ${theme.muted}`} />
+                    </span>
+                    <p className={`mt-4 text-sm font-semibold ${theme.title}`}>
+                      រកមិនឃើញអត្រាប្តូរប្រាក់
+                    </p>
+                    <p className={`mt-1 text-xs ${theme.muted}`}>
+                      សូមប្តូរពាក្យស្វែងរក ឬតម្រងស្ថានភាព។
+                    </p>
+                  </div>
                 </td>
               </tr>
             ) : (
               rates.map((rate) => (
                 <tr key={rate.id} className={`border-t ${theme.row}`}>
-                  <td className="px-5 py-4">
+                  <td data-label="កាលបរិច្ឆេទ" className="px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+                      <div className="table-icon-3d flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
                         <FiCalendar />
                       </div>
 
@@ -669,7 +677,7 @@ function ExchangeRateTable({
                     </div>
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td data-label="អត្រាប្តូរ" className="px-5 py-4">
                     <p className="font-extrabold">
                       1 USD = {formatRate(rate.usdToKhrRate)} រៀល
                     </p>
@@ -678,7 +686,7 @@ function ExchangeRateTable({
                     </p>
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td data-label="ការបង្គត់" className="px-5 py-4">
                     <span
                       className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${theme.softCard}`}
                     >
@@ -686,22 +694,22 @@ function ExchangeRateTable({
                     </span>
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td data-label="ស្ថានភាព" className="px-5 py-4">
                     <StatusBadge status={rate.status} />
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td data-label="សកម្មភាព" className="px-5 py-4">
                     <div className="flex justify-end gap-2">
                       <Tooltip label="កែប្រែ">
                         <button type="button" onClick={() => onEdit(rate)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-blue-600 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0"
+                          className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0"
                           >
                           <FiEdit2 size={16}/>
                         </button>
                       </Tooltip>
                       <Tooltip label="លុប">
                         <button type="button" disabled={isDeleting} onClick={() => onDelete(rate)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                           <FiTrash2 size={16}/>
                         </button>
@@ -715,6 +723,52 @@ function ExchangeRateTable({
         </table>
       </div>
     </div>
+  );
+}
+
+function ExchangeRate3DLoading({ theme, colSpan }) {
+  return (
+    <tr className={`border-t ${theme.row}`}>
+      <td colSpan={colSpan} className="px-4 py-16 text-center">
+        <div
+          className="flex min-h-[230px] flex-col items-center justify-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="relative flex h-32 w-32 items-center justify-center"
+            style={{ perspective: "700px" }}
+          >
+            <div className="absolute bottom-1 h-5 w-20 animate-pulse rounded-[50%] bg-emerald-500/25 blur-md" />
+
+            <div className="absolute inset-2 animate-spin rounded-full border border-dashed border-emerald-400/50 [animation-duration:3s]" />
+            <div className="absolute inset-5 animate-spin rounded-full border-2 border-transparent border-l-emerald-300 border-r-teal-500 [animation-direction:reverse] [animation-duration:1.8s]" />
+
+            <div
+              className="relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-white/40 bg-gradient-to-br from-emerald-300 via-emerald-500 to-teal-700 text-white"
+              style={{
+                transform: "rotateX(12deg) rotateY(-18deg) translateZ(18px)",
+                boxShadow:
+                  "14px 18px 24px rgba(6, 78, 59, 0.28), inset 4px 4px 10px rgba(255,255,255,0.35), inset -5px -7px 12px rgba(6,78,59,0.28)",
+              }}
+            >
+              <div className="absolute inset-1 rounded-[16px] border border-white/20" />
+              <FiRefreshCcw className="relative animate-spin text-3xl drop-shadow-md [animation-duration:2.5s]" />
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-amber-400 px-1 text-[9px] font-black text-amber-950 shadow-lg shadow-amber-400/40">
+                $
+              </span>
+            </div>
+          </div>
+
+          <p className={`mt-3 text-sm font-bold ${theme.title}`}>
+            រង់ចាំបន្តិច...
+          </p>
+          <p className={`mt-1 text-xs ${theme.muted}`}>
+            កំពុងរៀបចំអត្រាប្តូរប្រាក់
+          </p>
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -841,9 +895,9 @@ function ExchangeRateFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:px-4 sm:py-6">
       <div
-        className={`flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border shadow-2xl ${theme.modal}`}
+        className={`flex h-dvh max-h-dvh w-full max-w-3xl flex-col overflow-hidden border-0 shadow-2xl sm:h-auto sm:max-h-[92dvh] sm:rounded-3xl sm:border ${theme.modal}`}
       >
         <div
           className={`flex items-start justify-between gap-4 border-b px-6 py-5 ${theme.modalHeader}`}
@@ -861,7 +915,7 @@ function ExchangeRateFormModal({
             type="button"
             onClick={onClose}
             aria-label="បិទ"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
           >
             <FiX className="text-xl" />
           </button>
@@ -955,7 +1009,7 @@ function ExchangeRateFormModal({
             <button
               type="button"
               onClick={onClose}
-              className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+              className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
             >
               បោះបង់
             </button>
@@ -963,7 +1017,7 @@ function ExchangeRateFormModal({
             <button
               type="submit"
               disabled={isSaving}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+              className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FiCheckCircle />
               {isSaving

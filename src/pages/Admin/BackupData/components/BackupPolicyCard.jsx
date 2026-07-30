@@ -23,7 +23,7 @@ export default function BackupPolicyCard({ theme }) {
   ];
 
   return (
-    <div className={`rounded-2xl border p-6 shadow-sm ${theme.card}`}>
+    <div className={`rounded-2xl border p-4 shadow-sm sm:p-6 ${theme.card}`}>
       <div className="mb-5">
         <h2 className="text-xl font-extrabold">គោលការណ៍បម្រុងទុកដែលណែនាំ</h2>
         <p className={`mt-1 text-sm ${theme.muted}`}>ស្តង់ដារសាមញ្ញសម្រាប់គម្រោង Mart/POS ពិតប្រាកដ។</p>
@@ -32,7 +32,7 @@ export default function BackupPolicyCard({ theme }) {
       <div className="grid gap-4 md:grid-cols-3">
         {policies.map((policy) => (
           <div key={policy.title} className={`rounded-2xl border p-5 ${theme.softCard}`}>
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/10 text-2xl text-red-500">
+            <div className="table-icon-3d mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/10 text-2xl text-red-500">
               {policy.icon}
             </div>
             <p className={`text-sm font-semibold ${theme.muted}`}>{policy.title}</p>
@@ -44,4 +44,3 @@ export default function BackupPolicyCard({ theme }) {
     </div>
   );
 }
-

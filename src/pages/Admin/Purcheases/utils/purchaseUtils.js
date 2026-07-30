@@ -58,7 +58,7 @@ const RESOLUTION_LABEL_KH = {
   replacement: "ជំនួសទំនិញថ្មី",
   refund:      "សងលុយ",
   credit_note: "កាត់លុយលើវិក្កយបត្រក្រោយ",
-  none:        "មិនដោះស្រាយ",
+  none:        "លះបង់ការទាមទារ",
 };
 
 export function formatCondition(value = "") {
@@ -607,7 +607,9 @@ export function buildTheme(isDark) {
 
       : "border-zinc-300 bg-white text-zinc-900 focus:border-red-400 focus:ring-red-400/20",
 
-    tableWrap: isDark ? "border-white/10 bg-zinc-900" : "border-zinc-200 bg-white",
+    tableWrap: isDark
+      ? "border-zinc-800 bg-zinc-900 text-zinc-100"
+      : "border-zinc-200 bg-white text-zinc-900",
 
     row: isDark ? "border-white/10 text-zinc-200 hover:bg-white/[0.04]" : "border-zinc-200 text-zinc-700 hover:bg-zinc-50",
 

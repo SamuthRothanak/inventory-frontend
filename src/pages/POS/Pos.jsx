@@ -9,6 +9,7 @@ import PaymentModal        from "./components/paymentModal";
 import SalesReturnsModal   from "./components/salesReturnsModal";
 import HardwareScannerInput from "./components/hardwareScannerInput";
 import BarcodeCameraModal   from "./components/barcodeCameraModal";
+import CustomerSearchSelect from "./components/customerSearchSelect";
 
 import {
   ScanLine, LogOut, X,
@@ -81,11 +82,11 @@ function HeldOrdersModal({ heldOrders, onResume, onDelete, onClose }) {
                   </div>
                   <div className="flex shrink-0 gap-1.5">
                     <button type="button" onClick={() => onResume(order)}
-                      className="flex h-8 items-center gap-1 rounded-lg bg-amber-500 px-3 text-xs font-bold text-white shadow-sm transition hover:bg-amber-600">
+                      className="quick-action-icon-3d flex h-8 items-center gap-1 rounded-lg bg-amber-500 px-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-amber-600 active:translate-y-0">
                       <Receipt className="h-3.5 w-3.5" /> បន្ត
                     </button>
                     <button type="button" onClick={() => onDelete(order.id)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500">
+                      className="quick-action-icon-3d flex h-8 w-8 items-center justify-center rounded-lg bg-red-500 text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -576,10 +577,40 @@ export default function Pos() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-100">
-        <div className="text-center">
-          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-red-500 border-t-transparent" />
-          <p className="text-sm font-semibold text-slate-600">រង់ចាំបន្តិច...</p>
+      <div className="flex h-screen items-center justify-center bg-slate-100 p-6">
+        <div
+          className="flex min-h-[360px] w-full max-w-xl flex-col items-center justify-center rounded-3xl border border-white bg-white/80 shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="relative flex h-36 w-36 items-center justify-center"
+            style={{ perspective: "750px" }}
+          >
+            <div className="absolute bottom-1 h-5 w-24 animate-pulse rounded-[50%] bg-red-500/25 blur-md" />
+            <div className="absolute inset-2 animate-spin rounded-full border border-dashed border-red-400/45 [animation-duration:3.2s]" />
+            <div className="absolute inset-6 animate-spin rounded-full border-2 border-transparent border-l-rose-300 border-r-red-600 [animation-direction:reverse] [animation-duration:1.9s]" />
+
+            <div
+              className="relative flex h-[72px] w-[72px] items-center justify-center rounded-[22px] border border-white/50 bg-gradient-to-br from-rose-300 via-red-500 to-red-700 text-white"
+              style={{
+                transform: "rotateX(12deg) rotateY(-18deg) translateZ(20px)",
+                boxShadow:
+                  "16px 20px 28px rgba(153, 27, 27, 0.28), inset 5px 5px 11px rgba(255,255,255,0.4), inset -6px -8px 14px rgba(127,29,29,0.3)",
+              }}
+            >
+              <div className="absolute inset-1 rounded-[18px] border border-white/20" />
+              <ShoppingCart className="relative h-8 w-8 drop-shadow-md" />
+              <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-pulse rounded-full border-2 border-white bg-emerald-400 shadow-lg shadow-emerald-400/40" />
+            </div>
+          </div>
+
+          <p className="mt-3 text-sm font-bold text-slate-700">
+            រង់ចាំបន្តិច...
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            កំពុងរៀបចំប្រព័ន្ធលក់ POS
+          </p>
         </div>
       </div>
     );
@@ -597,13 +628,13 @@ export default function Pos() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 p-3 gap-3">
+    <div className="flex min-h-screen flex-col gap-3 overflow-y-auto bg-slate-100 p-2 sm:p-3 xl:h-screen xl:overflow-hidden">
 
       {/* ── Top bar ── */}
-      <div className="flex shrink-0 items-center gap-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="relative z-30 flex shrink-0 flex-wrap items-center gap-0 overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm xl:flex-nowrap">
 
         {/* Group A: Logo */}
-        <div className="flex shrink-0 items-center gap-2.5 border-r border-slate-100 bg-slate-50 px-4 py-3 rounded-l-2xl">
+        <div className="flex shrink-0 items-center gap-2.5 border-r border-slate-100 bg-slate-50 px-3 py-3 sm:px-4 xl:rounded-l-2xl">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm shadow-red-200">
             <ScanLine className="h-4 w-4" />
           </div>
@@ -614,7 +645,7 @@ export default function Pos() {
         </div>
 
         {/* Group B: Sale mode + Customer */}
-        <div className="flex flex-1 items-center gap-3 px-4 py-2.5">
+        <div className="order-3 flex w-full flex-wrap items-center gap-2 border-t border-slate-100 px-3 py-2.5 sm:gap-3 sm:px-4 xl:order-none xl:w-auto xl:flex-1 xl:flex-nowrap xl:border-t-0">
           <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 shrink-0">
             <button type="button"
               onClick={() => { setSaleMode("walk-in"); setSelectedCustomerId(""); setSaleChannel("pos"); }}
@@ -632,20 +663,15 @@ export default function Pos() {
             </button>
           </div>
 
-          <div className="h-6 w-px shrink-0 bg-slate-200" />
+          <div className="hidden h-6 w-px shrink-0 bg-slate-200 sm:block" />
 
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <select
+            <CustomerSearchSelect
+              customers={customers}
               value={selectedCustomerId}
-              onChange={(e) => { setSelectedCustomerId(e.target.value); if (!e.target.value) setSaleChannel("pos"); }}
+              onChange={(id) => { setSelectedCustomerId(id); if (!id) setSaleChannel("pos"); }}
               disabled={saleMode !== "wholesale"}
-              className="h-9 w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 focus:border-red-300"
-            >
-              <option value="">ជ្រើសរើសអតិថិជន...</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>{c.shopName} ({c.code})</option>
-              ))}
-            </select>
+            />
             {saleMode === "wholesale" && selectedCustomer && (
               <span className="hidden truncate text-xs text-slate-500 xl:block">
                 {selectedCustomer.contactName} · {selectedCustomer.phone}
@@ -655,7 +681,7 @@ export default function Pos() {
         </div>
 
         {/* Group C: Function buttons + Exchange rate + Logout */}
-        <div className="flex shrink-0 items-center gap-2 border-l border-slate-100 bg-slate-50 px-4 py-2.5 rounded-r-2xl">
+        <div className="relative z-40 ml-auto flex max-w-full shrink-0 items-center gap-2 overflow-x-auto border-l border-slate-100 bg-slate-50 px-3 py-2.5 sm:px-4 xl:overflow-visible xl:rounded-r-2xl">
 
           {/* ── Function buttons ── */}
           <IconBtn color="amber"   title="ការបញ្ជាទិញដែលផ្អាក"   badge={heldOrders.length}    onClick={() => setShowHeld(true)}>
@@ -677,7 +703,7 @@ export default function Pos() {
           <div className="h-6 w-px bg-slate-200" />
 
           {/* Exchange rate */}
-          <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 h-8">
+          <div className="hidden h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 sm:flex">
             <span className="text-[11px] text-slate-500">1 USD =</span>
             <span className="text-xs font-extrabold text-slate-900">{exchangeRate.toLocaleString()} KHR</span>
           </div>
@@ -701,7 +727,7 @@ export default function Pos() {
       <HardwareScannerInput onScan={handleBarcodeScanned} />
 
       {/* ── Main content ── */}
-      <div className="flex min-h-0 flex-1 gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 xl:flex-row">
         <ProductBrowser
           categories={categories}
           category={category}
@@ -713,7 +739,7 @@ export default function Pos() {
           onOpenBarcodeCamera={() => setShowBarcodeCameraModal(true)}
         />
 
-        <div className="w-90 shrink-0">
+        <div className="w-full shrink-0 xl:w-90">
           <CurrentSalePanel
             saleMode={saleMode}
             selectedCustomer={selectedCustomer}

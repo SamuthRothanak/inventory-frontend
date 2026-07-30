@@ -85,7 +85,7 @@ export function ProfileSettings({
 
         <div className={`rounded-xl border p-5 shadow-sm ${theme.softCard}`}>
           <div className="flex flex-col items-center text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-red-500 text-lg font-extrabold text-white shadow-sm">
+            <div className="summary-icon-3d flex h-14 w-14 items-center justify-center rounded-xl bg-red-500 text-lg font-extrabold text-white">
               {initials}
             </div>
             <h4 className={`mt-3 text-base font-extrabold ${theme.pageTitle}`}>
@@ -246,7 +246,7 @@ export function ExchangeRateInfo({ theme, rate, onManage }) {
             <button
               type="button"
               onClick={onManage}
-              className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-red-500 transition hover:bg-red-50"
+              className="quick-action-icon-3d mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-red-500 transition hover:-translate-y-0.5 hover:bg-red-50 active:translate-y-0"
             >
               គ្រប់គ្រងអត្រា
               <FiArrowRight />
@@ -267,7 +267,7 @@ export function ExchangeRateInfo({ theme, rate, onManage }) {
             <InfoRow
               theme={theme}
               label="ស្ថានភាព"
-              value={rate.status === "active" ? "សកម្ម" : "អសកម្ម"}
+              value={rate.status === "active" ? "ដំណើរការ" : "មិនដំណើរការ"}
               highlight={rate.status === "active"}
             />
             <InfoRow
@@ -280,8 +280,8 @@ export function ExchangeRateInfo({ theme, rate, onManage }) {
       ) : (
         <EmptyState
           theme={theme}
-          title="មិនទាន់មានអត្រាប្ដូរសកម្ម"
-          description="សូមបន្ថែម ឬកំណត់អត្រាមួយឲ្យសកម្ម ដើម្បីប្រើក្នុង POS និងរបាយការណ៍។"
+          title="មិនទាន់មានអត្រាប្ដូរប្រាក់កំពុងដំណើរការ"
+          description="សូមបន្ថែម ឬកំណត់អត្រាមួយឲ្យដំណើរការ ដើម្បីប្រើក្នុង POS និងរបាយការណ៍។"
           action="បន្ថែមអត្រាថ្មី"
           onAction={onManage}
         />
@@ -357,7 +357,7 @@ export function ShopInfoSettings({
             <button
               type="button"
               onClick={onManageExchange}
-              className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold transition ${theme.outlineButton}`}
+              className={`table-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold transition hover:-translate-y-0.5 ${theme.outlineButton}`}
             >
               <FiDollarSign />
               អត្រាប្តូរប្រាក់
@@ -370,19 +370,19 @@ export function ShopInfoSettings({
 
         <div className={`rounded-xl border p-5 shadow-sm ${theme.softCard}`}>
           <div className={`rounded-xl border border-dashed p-4 text-center ${theme.receiptPreview}`}>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-red-500 text-lg font-extrabold text-white">
+            <div className="summary-icon-3d mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-red-500 text-lg font-extrabold text-white">
               {getInitials(shopInfo.name || "HL")}
             </div>
             <h4 className="mt-3 text-base font-extrabold">
               {shopInfo.name || "Hak Ley Mart"}
             </h4>
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className={`mt-1 text-xs ${theme.muted}`}>
               {shopInfo.phone || "លេខទូរស័ព្ទហាង"}
             </p>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">
+            <p className={`mt-1 text-xs leading-5 ${theme.muted}`}>
               {shopInfo.khmerName || "ឈ្មោះហាងជាភាសាខ្មែរ"}
             </p>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">
+            <p className={`mt-1 text-xs leading-5 ${theme.muted}`}>
               {shopInfo.address || "អាសយដ្ឋានហាង"}
             </p>
             <div className={`my-4 border-t border-dashed ${theme.dashedDivider}`} />
@@ -401,7 +401,7 @@ export function ShopInfoSettings({
               </div>
             </div>
             <div className={`my-4 border-t border-dashed ${theme.dashedDivider}`} />
-            <p className="text-xs font-semibold text-zinc-500">
+            <p className={`text-xs font-semibold ${theme.muted}`}>
               {shopInfo.receiptFooter || "សូមអរគុណសម្រាប់ការជាវ។"}
             </p>
           </div>
@@ -587,7 +587,7 @@ function FormSection({
       }
     >
       <div className="mb-4 flex items-start gap-3">
-        <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+        <div className="summary-icon-3d mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
           {icon}
         </div>
         <div>
@@ -678,7 +678,7 @@ function PrimaryButton({ children, onClick, disabled, icon }) {
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+      className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {icon}
       {children}
@@ -739,7 +739,7 @@ function EmptyState({ theme, title, description, action, onAction }) {
     <div
       className={`rounded-xl border p-8 text-center shadow-sm ${theme.softCard}`}
     >
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-red-500/10 text-2xl text-red-500">
+      <div className="summary-icon-3d mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-red-500/10 text-2xl text-red-500">
         <FiDollarSign />
       </div>
       <h4 className={`mt-4 text-base font-extrabold ${theme.pageTitle}`}>
@@ -751,7 +751,7 @@ function EmptyState({ theme, title, description, action, onAction }) {
       <button
         type="button"
         onClick={onAction}
-        className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-red-600"
+        className="quick-action-icon-3d mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0"
       >
         {action}
         <FiArrowRight />
@@ -772,7 +772,7 @@ function RuleCard({ theme, title, description, tone = "red" }) {
     <div className={`rounded-xl border p-4 transition hover:-translate-y-0.5 hover:shadow-sm ${theme.softCard}`}>
       <div className="flex items-start gap-3">
         <span
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${toneClass}`}
+          className={`table-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${toneClass}`}
         >
           <FiCheckCircle />
         </span>
@@ -800,7 +800,7 @@ function StepCard({ theme, item }) {
     >
       <div className="flex flex-col items-center gap-1">
         <div
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base ${toneMap[item.tone]}`}
+          className={`table-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base ${toneMap[item.tone]}`}
         >
           {item.icon}
         </div>
@@ -826,7 +826,7 @@ function ToolCard({ theme, icon, title, description, action, onClick }) {
       className={`flex min-h-44 flex-col justify-between rounded-xl border p-4 shadow-sm ${theme.softCard}`}
     >
       <div>
-        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10 text-xl text-red-500">
+        <div className="summary-icon-3d mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10 text-xl text-red-500">
           {icon}
         </div>
         <p className={`text-base font-extrabold ${theme.pageTitle}`}>{title}</p>
@@ -835,7 +835,7 @@ function ToolCard({ theme, icon, title, description, action, onClick }) {
       <button
         type="button"
         onClick={onClick}
-        className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-sm font-bold text-white transition hover:bg-red-600"
+        className="quick-action-icon-3d mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0"
       >
         {action}
         <FiArrowRight />

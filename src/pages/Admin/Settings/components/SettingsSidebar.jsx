@@ -33,7 +33,9 @@ export default function SettingsSidebar({
               }`}
             >
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                isActive ? "bg-white/20 text-white" : "bg-red-500/10 text-red-500"
+                isActive
+                  ? "quick-action-icon-3d bg-white/20 text-white"
+                  : "table-icon-3d bg-red-500/10 text-red-500"
               }`}>
                 <Icon size={15} />
               </span>

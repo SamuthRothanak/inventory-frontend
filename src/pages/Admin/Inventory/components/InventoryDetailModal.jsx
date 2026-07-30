@@ -25,22 +25,22 @@ function BatchTablePagination({ theme, currentPage, lastPage, onPageChange }) {
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" disabled={currentPage <= 1}
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-          className="inline-flex h-8 items-center gap-1 rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+          className={`table-icon-3d inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${theme.isDark ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10" : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"}`}>
           <FiChevronLeft /> មុន
         </button>
         {pageNumbers.map((p, i) => p === "..." ? (
           <span key={`e-${i}`} className={`px-1.5 text-xs font-semibold ${theme.muted}`}>...</span>
         ) : (
           <button key={p} type="button" onClick={() => onPageChange(p)}
-            className={`h-8 min-w-8 rounded-lg px-2.5 text-xs font-bold transition ${
-              p === currentPage ? "bg-red-600 text-white" : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+            className={`table-icon-3d h-8 min-w-8 rounded-lg px-2.5 text-xs font-bold transition hover:-translate-y-0.5 ${
+              p === currentPage ? "bg-red-600 text-white" : theme.isDark ? "border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10" : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"
             }`}>
             {p}
           </button>
         ))}
         <button type="button" disabled={currentPage >= lastPage}
           onClick={() => onPageChange(Math.min(lastPage, currentPage + 1))}
-          className="inline-flex h-8 items-center gap-1 rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+          className={`table-icon-3d inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${theme.isDark ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10" : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"}`}>
           បន្ទាប់ <FiChevronRight />
         </button>
       </div>
@@ -122,7 +122,7 @@ export default function InventoryDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className={`table-icon-3d h-11 rounded-xl border px-5 text-sm font-semibold transition hover:-translate-y-0.5 ${theme.isDark ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10 hover:text-white" : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"}`}
           >
             បិទ
           </button>
@@ -236,8 +236,8 @@ export default function InventoryDetailModal({
               />
 
               {/* Active Batches */}
-              <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">
-                <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-4 py-2 dark:border-white/10 dark:bg-white/5">
+              <div className={`mt-4 overflow-hidden rounded-xl border ${theme.isDark ? "border-white/10 bg-[#18181b]" : "border-zinc-200 bg-white"}`}>
+                <div className={`flex items-center justify-between border-b px-4 py-2 ${theme.isDark ? "border-white/10 bg-white/[0.045]" : "border-zinc-200 bg-zinc-50"}`}>
                   <span className="text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400">
                     Batch មានស្តុក
                   </span>
@@ -254,7 +254,7 @@ export default function InventoryDetailModal({
                   </thead>
                   <tbody>
                     {activeBatchesPage.length > 0 ? activeBatchesPage.map((batch) => (
-                      <tr key={batch.id || batch.batchNo} className="border-t border-zinc-200 dark:border-white/10">
+                      <tr key={batch.id || batch.batchNo} className={`border-t ${theme.isDark ? "border-white/10 bg-[#18181b] text-zinc-100" : "border-zinc-200 bg-white text-zinc-800"}`}>
                         <td className="px-4 py-4">
                           <p className="font-semibold" title={batch.batchNo}>{truncateBatchNo(batch.batchNo)}</p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -294,7 +294,7 @@ export default function InventoryDetailModal({
 
               {/* Depleted Batches — collapsed by default */}
               {depletedBatches.length > 0 && (
-                <div className="mt-3 overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">
+                <div className={`mt-3 overflow-hidden rounded-xl border ${theme.isDark ? "border-white/10 bg-[#18181b]" : "border-zinc-200 bg-white"}`}>
                   <button
                     type="button"
                     onClick={() => setShowDepleted((prev) => !prev)}
@@ -323,7 +323,7 @@ export default function InventoryDetailModal({
                       </thead>
                       <tbody>
                         {depletedBatchesPage.map((batch) => (
-                          <tr key={batch.id || batch.batchNo} className={`border-t border-zinc-200 opacity-60 dark:border-white/10`}>
+                          <tr key={batch.id || batch.batchNo} className={`border-t opacity-60 ${theme.isDark ? "border-white/10 bg-[#18181b] text-zinc-100" : "border-zinc-200 bg-white text-zinc-800"}`}>
                             <td className="px-4 py-4">
                               <p className="font-semibold" title={batch.batchNo}>{truncateBatchNo(batch.batchNo)}</p>
                               <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -377,7 +377,7 @@ export default function InventoryDetailModal({
                     return (
                       <div key={`${movement.type}-${index}`} className={`rounded-xl border p-3 ${theme.softCard}`}>
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>
+                          <div className={`table-icon-3d mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>
                             {isIn ? <FiArrowUp /> : <FiArrowDown />}
                           </div>
 

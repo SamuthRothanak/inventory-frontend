@@ -46,10 +46,12 @@ const STOCK_ACTION_LABEL   = { restock: "ដាក់ស្តុកត្រឡ
 export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
   const fmtRate = Number(sale.exchangeRateKhrPerUsd).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
+  // sale.returnsCount only counts *completed* returns (see SaleRepository::withCompletedReturnAggregates)
+  // — gating this query on it would hide the whole return history for a sale whose only
+  // return so far is still pending_approval/approved or was rejected.
   const returnsQuery = useQuery({
     queryKey: ["admin-sale-returns", sale.id],
     queryFn:  () => getSalesReturnsApi({ sale_id: sale.id, per_page: 50 }),
-    enabled:  sale.returnsCount > 0,
   });
 
   const returns = (() => {
@@ -147,7 +149,7 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បិទ
           </button>
@@ -155,7 +157,7 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
             <button
               type="button"
               onClick={onPrint}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-red-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+              className="quick-action-icon-3d inline-flex h-11 items-center gap-2 rounded-xl bg-red-600 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-700 active:translate-y-0"
             >
               <FiPrinter size={15} />
               បោះពុម្ព
@@ -167,7 +169,7 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">
         {/* ── Left info panel ── */}
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
-          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+          <div className="summary-icon-3d flex h-20 w-20 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
             <FiShoppingCart size={38} />
           </div>
 
@@ -297,7 +299,7 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
                 {sale.payments.map((p, i) => (
                   <div key={p.id ?? i} className={`flex items-center justify-between rounded-xl border p-3 ${theme.softCard}`}>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
+                      <div className="table-icon-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
                         <FiCreditCard size={14} />
                       </div>
                       <div>
@@ -333,9 +335,9 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
           </FormSection>
 
           {/* Returns History */}
-          {sale.returnsCount > 0 && (
+          {(returnsQuery.isLoading || returns.length > 0) && (
             <FormSection
-              title={`ប្រវត្តិត្រឡប់ (${sale.returnsCount})`}
+              title={`ប្រវត្តិត្រឡប់ (${returns.length})`}
               subtitle="ការត្រឡប់ទំនិញទាំងអស់ដែលភ្ជាប់ជាមួយការលក់នេះ ។"
               icon={<FiRefreshCcw />}
               theme={theme}
@@ -369,7 +371,7 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
                             type="button"
                             onClick={() => printReturnReceipt(ret)}
                             title="Print return receipt"
-                            className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 transition hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20"
+                            className="table-icon-3d flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 transition hover:-translate-y-0.5 hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20"
                           >
                             <FiPrinter size={13} />
                           </button>
@@ -390,6 +392,16 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
                             </div>
                           )}
                         </div>
+
+                        {ret.status === "rejected" && ret.reject_reason && (
+                          <div className="rounded-lg bg-red-500/5 p-3">
+                            <p className="text-xs font-semibold text-red-500">
+                              មូលហេតុបដិសេធ{ret.rejected_by_user?.name ? ` ដោយ ${ret.rejected_by_user.name}` : ""}
+                              {ret.rejected_at ? ` · ${ret.rejected_at.slice(0, 16).replace("T", " ")}` : ""}
+                            </p>
+                            <p className="mt-1 text-sm">{ret.reject_reason}</p>
+                          </div>
+                        )}
 
                         {/* Returned items */}
                         {ret.items?.length > 0 && (

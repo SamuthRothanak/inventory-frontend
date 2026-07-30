@@ -81,7 +81,7 @@ export default function ViewSupplierModal({ supplier, theme, onClose, onEdit, cr
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បិទ
           </button>
@@ -89,7 +89,7 @@ export default function ViewSupplierModal({ supplier, theme, onClose, onEdit, cr
           <button
             type="button"
             onClick={onEdit}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700"
           >
             <FiEdit2 />
             កែអ្នកផ្គត់ផ្គង់
@@ -289,7 +289,7 @@ export default function ViewSupplierModal({ supplier, theme, onClose, onEdit, cr
 function SectionTitle({ icon, title, subtitle, theme }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+      <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
         {icon}
       </div>
 
@@ -305,7 +305,11 @@ function InfoBox({ label, value, theme, icon }) {
   return (
     <div className={`rounded-xl border p-3 ${theme.softCard}`}>
       <div className="flex items-center gap-2">
-        {icon && <span className={theme.muted}>{icon}</span>}
+        {icon && (
+          <span className={`table-icon-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-500`}>
+            {icon}
+          </span>
+        )}
         <p className={`text-xs font-semibold ${theme.muted}`}>{label}</p>
       </div>
 
@@ -318,7 +322,11 @@ function DetailBlock({ label, value, theme, icon }) {
   return (
     <div>
       <div className="flex items-center gap-2">
-        {icon && <span className={theme.muted}>{icon}</span>}
+        {icon && (
+          <span className="table-icon-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+            {icon}
+          </span>
+        )}
         <p className={`text-xs font-semibold ${theme.muted}`}>{label}</p>
       </div>
 

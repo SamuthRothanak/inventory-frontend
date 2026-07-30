@@ -20,6 +20,7 @@ import {
   FiChevronDown,
   FiDownload,
   FiFileText,
+  FiInbox,
 } from "react-icons/fi";
 
 import SalesActivityChart from "./components/SalesActivityChart";
@@ -30,13 +31,33 @@ import { RecordPaymentModal } from "./components/RecordPaymentModal";
 import { ReturnSaleModal } from "./components/ReturnSaleModal";
 import { ViewSaleModal } from "./components/ViewSaleModal";
 import SalePrintModal from "./components/SalePrintModal";
-import TableLoading from "../../../components/TableLoading";
+import PendingReturnsPanel from "./components/PendingReturnsPanel";
+import ViewPendingReturnModal from "./components/ViewPendingReturnModal";
 import PermissionGate from "../../../components/PermissionGate";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import { defaultReturnForm, validateSaleReturn } from "./schemas/saleReturnSchema";
 import { useLockBodyScroll } from "./utils/useLockBodyScroll";
 import { exportSalesCsv, exportSalesExcel, exportSalesPdf } from "./utils/salesExport";
 import { getSalesApi, recordSalePaymentApi } from "../../../services/sale.service";
-import { createSalesReturnApi } from "../../../services/salesReturn.service";
+import {
+  createSalesReturnApi,
+  getSalesReturnsApi,
+  approveSalesReturnApi,
+  rejectSalesReturnApi,
+  completeSalesReturnApi,
+} from "../../../services/salesReturn.service";
+
+// Calendar-day key in the *local* timezone (not UTC) — staff run this app physically in
+// Cambodia, so the browser's local clock already matches the shop's report timezone, and this
+// must line up with Dashboard's Asia/Phnom_Penh "today" boundary. `.toISOString()` returns the
+// UTC date instead, which silently drops/shifts sales made in the 00:00–07:00 local window
+// (still "yesterday" in UTC) from "today" totals.
+function toLocalDateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 function transformSale(s) {
   const roundUsd = (value) => Number(Number(value || 0).toFixed(2));
@@ -51,7 +72,7 @@ function transformSale(s) {
     saleChannel: s.sale_channel,
     invoiceCurrency: s.invoice_currency,
     exchangeRateKhrPerUsd: s.exchange_rate_khr_per_usd,
-    saleDate: soldAt.toISOString().slice(0, 10),
+    saleDate: toLocalDateKey(soldAt),
     displayDate: soldAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
     subtotal: roundUsd(s.subtotal_usd),
     discountTotal: roundUsd(s.discount_total_usd),
@@ -77,6 +98,8 @@ function transformSale(s) {
       unitNameSnapshot: item.unit_name_snapshot,
       qty: item.qty,
       baseQty: item.base_qty,
+      conversionQtySnapshot: item.conversion_qty_snapshot,
+      returnedQtyBase: Number(item.returned_qty_base || 0),
       unitPrice: item.unit_price_usd ?? item.unit_price,
       discountType: item.discount_type,
       discountValue: item.discount_value,
@@ -99,10 +122,21 @@ function transformSale(s) {
     })),
     returnsCount:    s.sales_returns_count ?? 0,
     returnsTotalUsd: s.sales_returns_total_usd ?? 0,
+    // Unlike returnsTotalUsd (any resolution type — used for isFullyReturned/return badges),
+    // this only counts refund-type completed returns — a replacement or store-credit return
+    // keeps the customer's original payment, so it must not reduce a revenue figure.
+    returnsRefundTotalUsd: s.sales_returns_refund_total_usd ?? 0,
     isFullyReturned: (s.sales_returns_count ?? 0) > 0 &&
       Number(s.sales_returns_total_usd ?? 0) >= Number(s.grand_total_usd ?? 0) - 0.001,
     returns: [],
   };
+}
+
+function computeSelectedReturnTotal(items) {
+  const sum = items
+    .filter((item) => item.selected)
+    .reduce((total, item) => total + Number(item.qty || 0) * Number(item.unitPrice || 0), 0);
+  return Number(sum.toFixed(2));
 }
 
 export default function Sale() {
@@ -113,6 +147,44 @@ export default function Sale() {
     queryKey: ["admin-sales"],
     queryFn: () => getSalesApi({ per_page: 200 }),
   });
+
+  const pendingReturnsQuery = useQuery({
+    queryKey: ["sales-returns", "pending_review"],
+    queryFn: () => getSalesReturnsApi({ status: ["pending_approval", "approved"], per_page: 100 }),
+  });
+
+  const pendingReturns = useMemo(() => {
+    const res = pendingReturnsQuery.data;
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.data)) return res.data;
+    if (Array.isArray(res?.data?.data)) return res.data.data;
+    return [];
+  }, [pendingReturnsQuery.data]);
+
+  // sale_item_id -> qty already claimed by a return still pending_approval/approved (not yet
+  // completed/rejected) — nothing else marks these items as unreturnable, so without this the
+  // return modal would let staff submit a duplicate for the same item and only find out it's
+  // rejected after filling out the whole form.
+  const pendingClaimedBySaleItemId = useMemo(() => {
+    const map = {};
+    pendingReturns.forEach((ret) => {
+      (ret.items || []).forEach((item) => {
+        map[item.sale_item_id] = (map[item.sale_item_id] || 0) + Number(item.base_qty || 0);
+      });
+    });
+    return map;
+  }, [pendingReturns]);
+
+  // Whether any line item on this sale still has qty left to return, after subtracting both
+  // completed returns AND whatever's already claimed by a pending_approval/approved one — used
+  // to disable the row-level "ត្រឡប់" button itself instead of only gating the per-item
+  // checkboxes once the modal is already open.
+  const hasReturnableItems = (sale) =>
+    (sale.items || []).some((item) => {
+      const remainingAfterCompleted = Number(item.baseQty || 0) - Number(item.returnedQtyBase || 0);
+      const pendingClaimed = Number(pendingClaimedBySaleItemId[item.id] || 0);
+      return remainingAfterCompleted - pendingClaimed > 0.0001;
+    });
 
   const [sales, setSales] = useState([]);
 
@@ -155,7 +227,10 @@ export default function Sale() {
   });
 
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [toast, setToast] = useState(null);
+  const [processingReturnId, setProcessingReturnId] = useState(null);
+  const [viewingReturn, setViewingReturn] = useState(null);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -328,9 +403,9 @@ export default function Sale() {
 
   const totalSalesAmount = completedSales
     .filter((sale) => sale.paymentStatus !== "refunded")
-    .reduce((total, sale) => total + Number(sale.grandTotal || 0) - Number(sale.returnsTotalUsd || 0), 0);
+    .reduce((total, sale) => total + Number(sale.grandTotal || 0) - Number(sale.returnsRefundTotalUsd || 0), 0);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalDateKey(new Date());
 
   const [chartPeriod, setChartPeriod] = useState("សប្ដាហ៍");
 
@@ -422,17 +497,17 @@ export default function Sale() {
         sale.saleStatus === "completed" &&
         sale.paymentStatus !== "refunded"
     )
-    .reduce((total, sale) => total + Number(sale.grandTotal || 0) - Number(sale.returnsTotalUsd || 0), 0);
+    .reduce((total, sale) => total + Number(sale.grandTotal || 0) - Number(sale.returnsRefundTotalUsd || 0), 0);
 
   const refundedAmount = sales
-    .reduce((total, sale) => total + Number(sale.returnsTotalUsd || 0), 0);
+    .reduce((total, sale) => total + Number(sale.returnsRefundTotalUsd || 0), 0);
 
   const pendingPaymentAmount = sales
     .filter(
       (sale) =>
         sale.paymentStatus === "partial" || sale.paymentStatus === "unpaid"
     )
-    .reduce((total, sale) => total + Number(sale.grandTotal || 0), 0);
+    .reduce((total, sale) => total + Number(sale.balanceTotal || 0), 0);
 
   const displayRate = sales.length > 0 ? Number(sales[0].exchangeRateKhrPerUsd) || 4100 : 4100;
 
@@ -539,24 +614,42 @@ export default function Sale() {
   const openReturnModal = (sale) => {
     setSelectedSale(sale);
     setReturnErrors({});
-    setReturnForm({
-      ...defaultReturnForm,
-      totalAmount: sale.grandTotal,
-    });
-    setReturnItems(
-      sale.items.map((item) => ({
+
+    const initialItems = sale.items.map((item) => {
+      // maxQty must subtract whatever was already returned on a prior partial return, AND
+      // whatever's still claimed by another return sitting in pending_approval/approved —
+      // otherwise this modal offers qty that's already spoken for (backend's validateReturnQty
+      // rejects the overflow, but only after the user fills the whole form and hits save).
+      const conversionQty = Number(item.conversionQtySnapshot) || 1;
+      const remainingAfterCompleted = Math.max(0, Number(item.baseQty || 0) - Number(item.returnedQtyBase || 0));
+      const pendingClaimedBase = Number(pendingClaimedBySaleItemId[item.id] || 0);
+      const remainingBase = Math.max(0, remainingAfterCompleted - pendingClaimedBase);
+      const maxQty = Math.round((remainingBase / conversionQty) * 1000) / 1000;
+      const isFullyReturned = remainingAfterCompleted <= 0;
+      const isPendingClaimed = !isFullyReturned && remainingBase <= 0;
+
+      return {
         id: item.id,
         productVariantUnitId: item.productVariantUnitId,
         productNameSnapshot: item.productNameSnapshot,
         variantNameSnapshot: item.variantNameSnapshot,
         unitNameSnapshot: item.unitNameSnapshot,
-        maxQty: item.qty,
-        selected: true,
-        qty: item.qty,
+        maxQty,
+        isFullyReturned,
+        isPendingClaimed,
+        selected: maxQty > 0,
+        qty: maxQty,
         baseQty: item.baseQty,
+        unitPrice: item.unitPrice,
         condition: "good",
-      }))
-    );
+      };
+    });
+
+    setReturnForm({
+      ...defaultReturnForm,
+      totalAmount: computeSelectedReturnTotal(initialItems),
+    });
+    setReturnItems(initialItems);
     setModalMode("return");
   };
 
@@ -686,6 +779,9 @@ export default function Sale() {
     setReturnForm((previous) => ({
       ...previous,
       ...(field === "resolutionType" && value === "replacement" ? { totalAmount: "" } : {}),
+      ...(field === "resolutionType" && value !== "replacement" && previous.status === "approved"
+        ? { status: "pending_approval" }
+        : {}),
       [field]: value,
     }));
 
@@ -696,11 +792,23 @@ export default function Sale() {
   };
 
   const handleReturnItemChange = (itemId, field, value) => {
-    setReturnItems((previous) =>
-      previous.map((item) =>
+    setReturnItems((previous) => {
+      const next = previous.map((item) =>
         item.id === itemId ? { ...item, [field]: value } : item
-      )
-    );
+      );
+
+      // Keep the (editable) suggested refund amount in sync with whichever items are
+      // actually selected — it used to be frozen at the full sale total from modal-open,
+      // silently overcharging the refund whenever staff returned only some of the items.
+      if (field === "selected" || field === "qty") {
+        setReturnForm((previousForm) => ({
+          ...previousForm,
+          totalAmount: computeSelectedReturnTotal(next),
+        }));
+      }
+
+      return next;
+    });
     setReturnErrors((previous) => ({ ...previous, items: "" }));
   };
 
@@ -751,8 +859,13 @@ export default function Sale() {
     mutationFn: (payload) => createSalesReturnApi(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-sales"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-returns", "pending_approval"] });
       closeModal();
-      showToast("បង្កើតការត្រឡប់ដោយជោគជ័យ!");
+      showToast(
+        returnForm.status === "completed"
+          ? "ការត្រឡប់បានបញ្ចប់ដោយជោគជ័យ!"
+          : "បានដាក់ស្នើសំណើត្រឡប់ — រង់ចាំការអនុម័ត!"
+      );
     },
     onError: (err) => {
       const msg =
@@ -766,6 +879,90 @@ export default function Sale() {
     },
   });
 
+  const getReturnActionErrorMessage = (err, fallback) =>
+    err?.response?.data?.message ||
+    (err?.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(" ") : null) ||
+    err?.message ||
+    fallback;
+
+  const invalidatePendingReturns = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-sales"] });
+    queryClient.invalidateQueries({ queryKey: ["sales-returns", "pending_review"] });
+  };
+
+  const approveReturnMutation = useMutation({
+    // complete() requires status already "approved" — this is one user-facing "អនុម័ត"
+    // action that fires both backend calls in sequence.
+    mutationFn: async (returnId) => {
+      await approveSalesReturnApi(returnId);
+      return completeSalesReturnApi(returnId);
+    },
+    onSuccess: () => {
+      invalidatePendingReturns();
+      showToast("បានអនុម័ត និងបញ្ចប់ការត្រឡប់!");
+    },
+    onError: (err) => {
+      alert(getReturnActionErrorMessage(err, "ការអនុម័តបរាជ័យ។ សូមព្យាយាមម្តងទៀត។"));
+    },
+    onSettled: () => setProcessingReturnId(null),
+  });
+
+  const rejectReturnMutation = useMutation({
+    mutationFn: ({ returnId, reason }) => rejectSalesReturnApi(returnId, reason),
+    onSuccess: () => {
+      invalidatePendingReturns();
+      showToast("បានបដិសេធសំណើត្រឡប់។");
+    },
+    onError: (err) => {
+      alert(getReturnActionErrorMessage(err, "ការបដិសេធបរាជ័យ។ សូមព្យាយាមម្តងទៀត។"));
+    },
+    onSettled: () => setProcessingReturnId(null),
+  });
+
+  const completeReturnMutation = useMutation({
+    // Return is already "approved" (waiting for stock) — a single complete() call applies
+    // the stock action and marks it completed.
+    mutationFn: (returnId) => completeSalesReturnApi(returnId),
+    onSuccess: () => {
+      invalidatePendingReturns();
+      showToast("បានបញ្ចប់ការត្រឡប់!");
+    },
+    onError: (err) => {
+      alert(getReturnActionErrorMessage(err, "ការបញ្ចប់ការត្រឡប់បរាជ័យ។ សូមព្យាយាមម្តងទៀត។"));
+    },
+    onSettled: () => setProcessingReturnId(null),
+  });
+
+  const handleApprovePendingReturn = async (ret) => {
+    const ok = await confirm(
+      `តើអ្នកប្រាកដថាចង់អនុម័តការត្រឡប់ ${ret.sales_return_no} សម្រាប់ ${ret.original_sale_no_snapshot}? ស្តុក/ការសងប្រាក់ នឹងប៉ះពាល់ភ្លាមៗ។`,
+      { title: "អនុម័តការត្រឡប់", confirmLabel: "អនុម័ត", cancelLabel: "បោះបង់" }
+    );
+    if (!ok) return;
+    setProcessingReturnId(ret.id);
+    approveReturnMutation.mutate(ret.id);
+  };
+
+  const handleCompletePendingReturn = async (ret) => {
+    const ok = await confirm(
+      `តើទំនិញចូលស្តុករួចហើយឬ? ការត្រឡប់ ${ret.sales_return_no} សម្រាប់ ${ret.original_sale_no_snapshot} នឹងចូលជាបញ្ចប់ ស្តុក/ការសងប្រាក់ នឹងប៉ះពាល់ភ្លាមៗ។`,
+      { title: "បញ្ចប់ការត្រឡប់", confirmLabel: "បញ្ចប់", cancelLabel: "បោះបង់" }
+    );
+    if (!ok) return;
+    setProcessingReturnId(ret.id);
+    completeReturnMutation.mutate(ret.id);
+  };
+
+  const handleRejectPendingReturn = async (ret) => {
+    const reason = await confirm(
+      `សូមបញ្ចូលមូលហេតុបដិសេធ/លុបចោលការត្រឡប់ ${ret.sales_return_no}:`,
+      { title: "បដិសេធ/លុបចោលការត្រឡប់", confirmLabel: "បញ្ជាក់", cancelLabel: "បោះបង់", reasonRequired: true }
+    );
+    if (!reason) return;
+    setProcessingReturnId(ret.id);
+    rejectReturnMutation.mutate({ returnId: ret.id, reason });
+  };
+
   const handleSaveReturn = () => {
     if (!selectedSale) return;
     if (!validateReturnForm()) return;
@@ -776,6 +973,9 @@ export default function Sale() {
       return_type:         returnForm.returnType,
       resolution_type:     returnForm.resolutionType,
       reason:              returnForm.reason.trim(),
+      // Only "pending_approval" (queued for review) and "completed" (immediate — e.g. the
+      // owner is the one processing the return) are offered in the form; the old 4-option
+      // picker included "approved" alone, a dead-end status nothing could ever advance past.
       status:              returnForm.status,
       refund_amount_input: returnForm.resolutionType !== "replacement" && returnForm.totalAmount ? Number(returnForm.totalAmount) : undefined,
       items: returnItems
@@ -794,9 +994,9 @@ export default function Sale() {
   };
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-4 sm:space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         <SummaryCard
           theme={theme}
           title="ការលក់សរុប"
@@ -851,7 +1051,8 @@ export default function Sale() {
           {[
             { id: "all",      label: "ទាំងអស់",       icon: <FiShoppingCart />, count: sales.length,                                                                                        alert: false },
             { id: "pending",  label: "មិនទាន់ទូទាត់", icon: <FiClock />,        count: sales.filter((s) => s.paymentStatus === "unpaid" || s.paymentStatus === "partial").length,           alert: true  },
-            { id: "refunded", label: "ត្រឡប់",         icon: <FiRefreshCcw />,   count: sales.filter((s) => s.paymentStatus === "refunded" || s.returnsCount > 0).length,               alert: false },
+            { id: "pending_returns", label: "រង់ចាំអនុម័ត", icon: <FiInbox />,   count: pendingReturns.length,                                                                              alert: true  },
+            { id: "refunded", label: "ដោះស្រាយរួច",     icon: <FiRefreshCcw />,   count: sales.filter((s) => s.paymentStatus === "refunded" || s.returnsCount > 0).length,               alert: false },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -878,6 +1079,19 @@ export default function Sale() {
           ))}
         </div>
 
+        {activeTab === "pending_returns" ? (
+          <PendingReturnsPanel
+            theme={theme}
+            returns={pendingReturns}
+            isLoading={pendingReturnsQuery.isLoading}
+            onApprove={handleApprovePendingReturn}
+            onComplete={handleCompletePendingReturn}
+            onReject={handleRejectPendingReturn}
+            onView={setViewingReturn}
+            processingId={processingReturnId}
+          />
+        ) : (
+        <>
         {/* Filter bar inside card */}
         <div className="border-b border-zinc-200 px-4 py-4 dark:border-white/10 space-y-3">
           {/* Row 1: Search + POS button */}
@@ -894,7 +1108,7 @@ export default function Sale() {
             </div>
             <Link
               to="/pos"
-              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600"
+              className="quick-action-icon-3d inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-red-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0"
             >
               បើក POS <FiArrowUpRight />
             </Link>
@@ -958,7 +1172,7 @@ export default function Sale() {
               type="button"
               onClick={() => filteredSales.length > 0 && setExportMenuOpen((open) => !open)}
               disabled={filteredSales.length === 0}
-              className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:border-red-400 hover:text-red-500`}
+              className={`table-icon-3d inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:border-red-400 hover:text-red-500`}
             >
               <FiDownload />
               Export
@@ -987,7 +1201,163 @@ export default function Sale() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="divide-y divide-zinc-200 dark:divide-white/10 lg:hidden">
+          {salesQuery.isLoading && (
+            <div className="flex min-h-64 flex-col items-center justify-center px-4 py-12">
+              <div className="h-12 w-12 animate-spin rounded-full border-4 border-red-500/20 border-t-red-500" />
+              <p className={`mt-4 text-sm font-semibold ${theme.muted}`}>កំពុងផ្ទុកការលក់...</p>
+            </div>
+          )}
+
+          {!salesQuery.isLoading && paginatedSales.map((sale) => (
+            <article key={sale.id} className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className={`break-words text-base font-extrabold leading-6 ${theme.pageTitle}`}>
+                    {sale.saleNo}
+                  </h3>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${theme.badge}`}>
+                      {SALE_TYPE_LABEL[sale.saleType] ?? sale.saleType}
+                    </span>
+                    <span className={`text-xs ${theme.muted}`}>
+                      {sale.displayDate} · <span className="font-semibold text-blue-500">{sale.cashierName}</span>
+                    </span>
+                  </div>
+                </div>
+
+                <StatusBadge
+                  status={sale.saleStatus}
+                  label={SALE_STATUS_LABEL[sale.saleStatus]}
+                  getStatusClass={getSaleStatusClass}
+                  getStatusIcon={getSaleStatusIcon}
+                />
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className={`min-w-0 rounded-2xl border p-3 ${theme.softCard}`}>
+                  <p className={`text-[11px] font-semibold ${theme.muted}`}>អតិថិជន</p>
+                  <p className={`mt-1.5 truncate text-sm font-bold ${theme.pageTitle}`} title={sale.customerName}>
+                    {sale.customerName}
+                  </p>
+                  <p className={`mt-1 text-xs ${theme.muted}`}>
+                    {sale.customerId ? "លក់ដុំ" : "លក់រាយ"}
+                  </p>
+                </div>
+
+                <div className={`min-w-0 rounded-2xl border p-3 ${theme.softCard}`}>
+                  <p className={`text-[11px] font-semibold ${theme.muted}`}>តម្លៃសរុប</p>
+                  <p className={`mt-1.5 break-words text-lg font-extrabold tabular-nums ${theme.pageTitle}`}>
+                    {getSaleTotalDisplay(sale)}
+                  </p>
+                  {shouldShowTotalEquivalent(sale) && (
+                    <p className={`mt-1 text-xs ${theme.muted}`}>
+                      ≈ {Math.round(Number(sale.grandTotal || 0) * Number(sale.exchangeRateKhrPerUsd || 0)).toLocaleString()} ៛
+                    </p>
+                  )}
+                </div>
+
+                <div className={`min-w-0 rounded-2xl border p-3 ${theme.softCard}`}>
+                  <p className={`text-[11px] font-semibold ${theme.muted}`}>ទំនិញ</p>
+                  <p className={`mt-1.5 text-sm font-bold ${theme.pageTitle}`}>
+                    {sale.items.length} មុខ · {getItemsCount(sale)} ចំនួន
+                  </p>
+                  <p className={`mt-1 truncate text-xs ${theme.muted}`}>
+                    {sale.items.map((item) => item.variantNameSnapshot).filter(Boolean).join(", ") || "-"}
+                  </p>
+                </div>
+
+                <div className={`min-w-0 rounded-2xl border p-3 ${theme.softCard}`}>
+                  <p className={`text-[11px] font-semibold ${theme.muted}`}>ការទូទាត់</p>
+                  <p className={`mt-1.5 truncate text-sm font-bold ${theme.pageTitle}`}>
+                    {getPaymentSummary(sale)}
+                  </p>
+                  <div className="mt-2">
+                    <StatusBadge
+                      status={sale.paymentStatus}
+                      label={PAYMENT_STATUS_LABEL[sale.paymentStatus]}
+                      getStatusClass={getPaymentStatusClass}
+                      getStatusIcon={getPaymentStatusIcon}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {sale.deliveryRequired && (
+                <div className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2.5 ${isDark ? "bg-sky-500/10" : "bg-sky-50"}`}>
+                  <span className={`text-xs font-semibold ${theme.muted}`}>ថ្លៃដឹកជញ្ជូន</span>
+                  <span className="text-sm font-bold text-sky-600">
+                    ${Number(sale.deliveryFee || 0).toFixed(2)}
+                  </span>
+                </div>
+              )}
+
+              <div className="mt-4 flex items-center justify-end gap-2 border-t border-zinc-200 pt-3 dark:border-white/10">
+                <span className={`mr-auto text-[11px] font-bold ${theme.muted}`}>សកម្មភាព</span>
+                <PermissionGate permission="sales.create">
+                  {(sale.paymentStatus === "unpaid" || sale.paymentStatus === "partial") && (
+                    <button
+                      type="button"
+                      onClick={() => openRecordPaymentModal(sale)}
+                      title="កត់ត្រាការទូទាត់"
+                      aria-label="កត់ត្រាការទូទាត់"
+                      className="quick-action-icon-3d inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0"
+                    >
+                      <FiCreditCard size={17} />
+                    </button>
+                  )}
+                </PermissionGate>
+
+                <button
+                  type="button"
+                  onClick={() => openViewModal(sale)}
+                  title="មើលវិក្កយបត្រ"
+                  aria-label="មើលវិក្កយបត្រ"
+                  className="quick-action-icon-3d inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-orange-600 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0"
+                >
+                  <FiEye size={17} />
+                </button>
+
+                <PermissionGate permission="sales.print_receipt">
+                  <button
+                    type="button"
+                    onClick={() => handlePrint(sale)}
+                    title="បោះពុម្ពវិក្កយបត្រ"
+                    aria-label="បោះពុម្ពវិក្កយបត្រ"
+                    className="quick-action-icon-3d inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-emerald-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-emerald-600 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 active:translate-y-0"
+                  >
+                    <FiPrinter size={17} />
+                  </button>
+                </PermissionGate>
+
+                <PermissionGate permission="sales.refund">
+                  <button
+                    type="button"
+                    disabled={sale.paymentStatus !== "paid" || sale.saleStatus === "cancelled" || sale.isFullyReturned || !hasReturnableItems(sale)}
+                    onClick={() => openReturnModal(sale)}
+                    title="ត្រឡប់ការលក់"
+                    aria-label="ត្រឡប់ការលក់"
+                    className="quick-action-icon-3d inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <FiRotateCcw size={17} />
+                  </button>
+                </PermissionGate>
+              </div>
+            </article>
+          ))}
+
+          {!salesQuery.isLoading && filteredSales.length === 0 && (
+            <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
+              <div className={`summary-icon-3d flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}>
+                <FiSearch className={`text-3xl ${theme.muted}`} />
+              </div>
+              <p className={`mt-4 text-sm font-semibold ${theme.pageTitle}`}>រកមិនឃើញការលក់</p>
+              <p className={`mt-1 text-xs ${theme.muted}`}>សូមផ្លាស់ប្ដូរពាក្យស្វែងរក ឬតម្រង។</p>
+            </div>
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[1060px]">
             <thead className="bg-red-600 text-white">
               <tr>
@@ -1020,10 +1390,9 @@ export default function Sale() {
 
             <tbody>
               {salesQuery.isLoading && (
-                <TableLoading
+                <Sales3DLoading
                   theme={theme}
                   colSpan={8}
-                  text="រង់ចាំបន្តិច..."
                 />
               )}
 
@@ -1031,7 +1400,7 @@ export default function Sale() {
                 <tr key={sale.id} className={`border-t transition ${theme.row}`}>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                      <div className="table-icon-3d flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
                         <FiHash size={21} />
                       </div>
 
@@ -1157,7 +1526,7 @@ export default function Sale() {
                         {(sale.paymentStatus === "unpaid" || sale.paymentStatus === "partial") && (
                           <Tooltip label="កត់ត្រាការទូទាត់">
                             <button type="button" onClick={() => openRecordPaymentModal(sale)}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-blue-600 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0">
+                              className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0">
                               <FiCreditCard size={16} />
                             </button>
                           </Tooltip>
@@ -1165,14 +1534,14 @@ export default function Sale() {
                       </PermissionGate>
                       <Tooltip label="មើលវិក្កយបត្រ">
                         <button type="button" onClick={() => openViewModal(sale)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-amber-400 to-orange-500 text-white shadow-md shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-amber-500 hover:to-orange-600 hover:shadow-lg hover:shadow-orange-500/25 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0">
+                          className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-orange-600 hover:shadow-orange-500/25 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0">
                           <FiEye size={16} />
                         </button>
                       </Tooltip>
                       <PermissionGate permission="sales.print_receipt">
                         <Tooltip label="បោះពុម្ព">
                           <button type="button" onClick={() => handlePrint(sale)}
-                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-emerald-400 to-emerald-600 text-white shadow-md shadow-emerald-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-emerald-500 hover:to-emerald-700 hover:shadow-lg hover:shadow-emerald-600/25 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 active:translate-y-0">
+                            className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-emerald-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-emerald-600/25 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 active:translate-y-0">
                             <FiPrinter size={16} />
                           </button>
                         </Tooltip>
@@ -1180,9 +1549,9 @@ export default function Sale() {
                       <PermissionGate permission="sales.refund">
                         <Tooltip label="ត្រឡប់">
                           <button type="button"
-                            disabled={sale.paymentStatus !== "paid" || sale.saleStatus === "cancelled" || sale.isFullyReturned}
+                            disabled={sale.paymentStatus !== "paid" || sale.saleStatus === "cancelled" || sale.isFullyReturned || !hasReturnableItems(sale)}
                             onClick={() => openReturnModal(sale)}
-                            className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50">
+                            className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50">
                             <FiRotateCcw size={16} />
                           </button>
                         </Tooltip>
@@ -1197,7 +1566,7 @@ export default function Sale() {
                   <td colSpan="8" className="px-4 py-14 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <div
-                        className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}
+                        className={`summary-icon-3d flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}
                       >
                         <FiSearch className={`text-3xl ${theme.muted}`} />
                       </div>
@@ -1228,7 +1597,7 @@ export default function Sale() {
                 type="button"
                 disabled={safeCurrentPage === 1}
                 onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                className={`inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`table-icon-3d inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
                   isDark
                     ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
                     : "border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
@@ -1242,7 +1611,7 @@ export default function Sale() {
                   key={page}
                   type="button"
                   onClick={() => setCurrentPage(page)}
-                  className={`inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-bold transition ${
+                  className={`table-icon-3d inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-sm font-bold transition hover:-translate-y-0.5 ${
                     page === safeCurrentPage
                       ? "bg-red-600 text-white shadow-sm"
                       : isDark
@@ -1258,7 +1627,7 @@ export default function Sale() {
                 type="button"
                 disabled={safeCurrentPage === totalPages}
                 onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                className={`inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`table-icon-3d inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
                   isDark
                     ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
                     : "border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
@@ -1268,6 +1637,8 @@ export default function Sale() {
               </button>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
 
@@ -1311,6 +1682,14 @@ export default function Sale() {
         />
       )}
 
+      {viewingReturn && (
+        <ViewPendingReturnModal
+          salesReturn={viewingReturn}
+          theme={theme}
+          onClose={() => setViewingReturn(null)}
+        />
+      )}
+
       {toast && (
         <div className="fixed bottom-6 right-6 z-9999 flex items-center gap-2.5 rounded-2xl bg-emerald-600 px-5 py-3.5 text-sm font-semibold text-white shadow-2xl">
           <FiCheckCircle size={17} />
@@ -1318,6 +1697,52 @@ export default function Sale() {
         </div>
       )}
     </section>
+  );
+}
+
+function Sales3DLoading({ theme, colSpan }) {
+  return (
+    <tr className={`border-t ${theme.row}`}>
+      <td colSpan={colSpan} className="px-4 py-16 text-center">
+        <div
+          className="flex min-h-[230px] flex-col items-center justify-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="relative flex h-32 w-32 items-center justify-center"
+            style={{ perspective: "700px" }}
+          >
+            <div className="absolute bottom-1 h-5 w-20 animate-pulse rounded-[50%] bg-emerald-500/25 blur-md" />
+
+            <div className="absolute inset-2 animate-spin rounded-full border border-dashed border-emerald-400/50 [animation-duration:3s]" />
+            <div className="absolute inset-5 animate-spin rounded-full border-2 border-transparent border-l-lime-300 border-r-emerald-600 [animation-direction:reverse] [animation-duration:1.8s]" />
+
+            <div
+              className="relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-white/40 bg-gradient-to-br from-lime-300 via-emerald-500 to-teal-700 text-white"
+              style={{
+                transform: "rotateX(12deg) rotateY(-18deg) translateZ(18px)",
+                boxShadow:
+                  "14px 18px 24px rgba(6, 95, 70, 0.3), inset 4px 4px 10px rgba(255,255,255,0.38), inset -5px -7px 12px rgba(15,118,110,0.3)",
+              }}
+            >
+              <div className="absolute inset-1 rounded-[16px] border border-white/20" />
+              <FiShoppingCart className="relative text-3xl drop-shadow-md" />
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-amber-400 px-1 text-[9px] font-black text-amber-950 shadow-lg shadow-amber-400/40">
+                $
+              </span>
+            </div>
+          </div>
+
+          <p className={`mt-3 text-sm font-bold ${theme.pageTitle}`}>
+            រង់ចាំបន្តិច...
+          </p>
+          <p className={`mt-1 text-xs ${theme.muted}`}>
+            កំពុងរៀបចំបញ្ជីការលក់
+          </p>
+        </div>
+      </td>
+    </tr>
   );
 }
 

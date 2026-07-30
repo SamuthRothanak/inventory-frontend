@@ -51,7 +51,6 @@ import { getActiveSuppliersApi, getSupplierCreditBalanceApi } from "../../../ser
 import { getActiveExchangeRateApi } from "../../../services/exchangeRate.service";
 import { getProductVariantUnitsApi } from "../../../services/productVariantUnit.service";
 import { useNotification } from "../../../components/AppNotification";
-import TableLoading from "../../../components/TableLoading";
 import PermissionGate from "../../../components/PermissionGate";
 
 import {
@@ -108,18 +107,45 @@ import {
   exportPurchasesExcel,
   exportPurchasesPdf,
 } from "./utils/purchaseExport";
+import {
+  calculateGrandTotal,
+  calculateLineTotalsByPaymentMode,
+  calculateSubtotal,
+  fmtUsd,
+  getClaimRequiredCount,
+  getClampedClaimAmount,
+  getDamagedCount,
+  getItemOnlyAmount,
+  getPurchaseLines,
+  getPurchasePaymentBalance,
+  getPurchaseReturnStatusClass,
+  getPurchaseReturnStatusIcon,
+  getReturnItemResolution,
+  getStatusClass,
+  getStatusIcon,
+  getUnpaidItemAmountBeforeClaim,
+  hasAnyStockedInQty,
+  hasPurchasePaymentBalance,
+  hasRemainingStockInQty,
+  isReplacementClaimIncomplete,
+  normalizeClaimResolutionType,
+  normalizeReturnResolutionType,
+  normalizeReturnStatusLabel,
+  returnHasOpenReplacementItem,
+} from "./utils/purchaseStatusHelpers.jsx";
+import { usePurchaseClaimStatus } from "./hooks/usePurchaseClaimStatus";
 
 const PURCHASE_ACTION_ICON_CLASS =
-  "inline-flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-md ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-4 active:translate-y-0";
+  "quick-action-icon-3d inline-flex h-9 w-9 items-center justify-center rounded-xl text-white ring-1 ring-white/30 transition hover:-translate-y-0.5 focus:outline-none focus:ring-4 active:translate-y-0";
 
 const CLIENT_TAB_PAGE_SIZE = 10;
 
 const PURCHASE_ACTION_TONE = {
-  view: "bg-gradient-to-b from-amber-400 to-orange-500 shadow-orange-500/20 hover:from-amber-500 hover:to-orange-600 hover:shadow-orange-500/25 focus:ring-orange-500/20",
-  receive: "bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-indigo-600/20 hover:from-indigo-600 hover:to-indigo-800 hover:shadow-indigo-600/25 focus:ring-indigo-500/20",
-  confirm: "bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-emerald-600/20 hover:from-emerald-500 hover:to-emerald-700 hover:shadow-emerald-600/25 focus:ring-emerald-500/20",
-  claim: "bg-gradient-to-b from-red-500 to-red-700 shadow-red-600/20 hover:from-red-600 hover:to-red-800 hover:shadow-red-600/25 focus:ring-red-500/20",
-  payment: "bg-gradient-to-b from-cyan-500 to-blue-600 shadow-blue-600/20 hover:from-cyan-600 hover:to-blue-700 hover:shadow-blue-600/25 focus:ring-blue-500/20",
+  view: "bg-orange-500 shadow-orange-500/20 hover:bg-orange-600 hover:shadow-orange-500/25 focus:ring-orange-500/20",
+  receive: "bg-indigo-600 shadow-indigo-600/20 hover:bg-indigo-700 hover:shadow-indigo-600/25 focus:ring-indigo-500/20",
+  confirm: "bg-emerald-500 shadow-emerald-600/20 hover:bg-emerald-600 hover:shadow-emerald-600/25 focus:ring-emerald-500/20",
+  claim: "bg-red-600 shadow-red-600/20 hover:bg-red-700 hover:shadow-red-600/25 focus:ring-red-500/20",
+  payment: "bg-blue-600 shadow-blue-600/20 hover:bg-blue-700 hover:shadow-blue-600/25 focus:ring-blue-500/20",
 };
 
 export default function Purchases() {
@@ -422,284 +448,23 @@ export default function Purchases() {
     [allPurchasesQuery.data]
   );
 
-  const calculateSubtotal = (items) => items.reduce((total, item) => total + Number(item.lineTotal || 0), 0);
-
-  const calculateGrandTotal = (items, form) => {
-    const subtotal = calculateSubtotal(items);
-    return Number(subtotal || 0) - Number(form.discountTotal || 0) + Number(form.deliveryFee || 0);
-  };
-
-  const calculateLineTotalsByPaymentMode = ({
-    paymentMode,
-    inputCurrency,
-    inputUnitCost,
-    invoiceTotal,
-    paidAmount,
-    invoicedQty,
-    acceptedQty,
-    receivedQty,
-    damagedQty,
-    paidQty,
-    exchangeRate,
-  }) => {
-    const rate = Number(exchangeRate || 0);
-    const unitCost = Number(inputUnitCost || 0);
-    // Mirrors PurchaseService::resolvePayableQty() on the backend exactly — before anything on
-    // this line has actually been checked (received/accepted/damaged all still 0, i.e. a purchase
-    // that hasn't been through receive-goods yet), the payable qty for pay_after_check must fall
-    // back to the FULL invoiced qty, not 0. Previously this used acceptedQty unconditionally, so
-    // every freshly-created pay_after_check purchase showed a $0 grand total (a real invoice value
-    // silently discarded) until goods were received — the backend's own calculation is correct
-    // here, but only gets applied once hasCheckedQty flips true; before that it trusts whatever the
-    // client sends, which was this $0.
-    const hasCheckedQty = Number(receivedQty || 0) > 0 || Number(acceptedQty || 0) > 0 || Number(damagedQty || 0) > 0;
-    const payableQty = paymentMode === "pay_after_check"
-      ? (hasCheckedQty ? Number(acceptedQty || 0) : Number(invoicedQty || 0))
-      : Number(invoicedQty || 0);
-    const fullQty = Number(invoicedQty || 0);
-    const exactInvoiceTotal = Number(invoiceTotal || 0);
-    const exactPaidAmount = Number(paidAmount || 0);
-    const currency = String(inputCurrency || "USD").toUpperCase();
-
-    let inputLineTotal = payableQty * unitCost;
-    if (paymentMode === "pay_after_check" && exactInvoiceTotal > 0 && fullQty > 0) {
-      inputLineTotal = (exactInvoiceTotal / fullQty) * payableQty;
-    } else if (exactInvoiceTotal > 0 && fullQty > 0 && Math.abs(payableQty - fullQty) < 0.0001) {
-      inputLineTotal = exactInvoiceTotal;
-    }
-
-    if (!rate || rate <= 0) return { lineTotalUsd: 0, lineTotalKhr: 0 };
-
-    if (currency === "KHR") {
-      return {
-        lineTotalUsd: Number((inputLineTotal / rate).toFixed(2)),
-        lineTotalKhr: Number(inputLineTotal.toFixed(2)),
-      };
-    }
-
-    return {
-      lineTotalUsd: Number(inputLineTotal.toFixed(2)),
-      lineTotalKhr: Number((inputLineTotal * rate).toFixed(2)),
-    };
-  };
-
   const calculateBalanceAmount = (grandTotal, paidAmount) => Math.max(0, Number(grandTotal || 0) - Number(paidAmount || 0));
-
-  const getClaimRequiredCount = (purchase = {}) => {
-    const lines = Array.isArray(purchase.items) && purchase.items.length > 0 ? purchase.items : (purchase.summaryItems || []);
-    return lines.reduce((total, item) => total + Number(item.claimQty ?? item.claim_qty ?? 0), 0);
-  };
-  const getDamagedCount = (purchase) => purchase.items.reduce((total, item) => total + Number(item.damagedQty || 0), 0);
 
   const totalPurchaseReturnAmount = purchaseReturns.reduce((total, item) => total + Number(item.subtotal || 0), 0);
 
-  const getStatusClass = (status) => {
-    if (status === STATUS.RECEIVED) return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
-    if (status === STATUS.PENDING_STOCK_IN) return "bg-blue-500/10 text-blue-600 dark:text-blue-400";
-    if (status === STATUS.PENDING_RECEIVE) return "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400";
-    if (status === STATUS.PENDING_CLAIM) return "bg-red-500/10 text-red-600 dark:text-red-400";
-    if (status === STATUS.DRAFT) return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
-    return "bg-zinc-500/10 text-zinc-500 dark:text-zinc-400";
-  };
-
-  const getStatusIcon = (status) => {
-    if (status === STATUS.RECEIVED) return <FiCheckCircle />;
-    if (status === STATUS.PENDING_STOCK_IN) return <FiClock />;
-    if (status === STATUS.PENDING_RECEIVE) return <FiTruck />;
-    if (status === STATUS.PENDING_CLAIM) return <FiAlertTriangle />;
-    if (status === STATUS.DRAFT) return <FiFileText />;
-    return <FiXCircle />;
-  };
-
-  const getPurchaseReturnStatusClass = (status) => {
-    if (status === RETURN_STATUS.COMPLETED) return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
-    if (status === RETURN_STATUS.SUBMITTED || status === RETURN_STATUS.APPROVED) return "bg-blue-500/10 text-blue-600 dark:text-blue-400";
-    if (status === RETURN_STATUS.WAITING_REPLACEMENT) return "bg-purple-500/10 text-purple-600 dark:text-purple-400";
-    if (status === RETURN_STATUS.DRAFT) return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
-    if (status === RETURN_STATUS.REJECTED) return "bg-red-500/10 text-red-600 dark:text-red-400";
-    return "bg-red-500/10 text-red-500 dark:text-red-400";
-  };
-
-  const getPurchaseReturnStatusIcon = (status) => {
-    if (status === RETURN_STATUS.COMPLETED) return <FiCheckCircle />;
-    if (status === RETURN_STATUS.SUBMITTED || status === RETURN_STATUS.APPROVED) return <FiClock />;
-    if (status === RETURN_STATUS.WAITING_REPLACEMENT) return <FiTruck />;
-    if (status === RETURN_STATUS.DRAFT) return <FiFileText />;
-    if (status === RETURN_STATUS.REJECTED) return <FiXCircle />;
-    return <FiXCircle />;
-  };
-
-  const normalizeReturnStatusLabel = (value = RETURN_STATUS.DRAFT) => {
-    const status = String(value || "").trim().toLowerCase();
-    const map = {
-      draft: RETURN_STATUS.DRAFT,
-      submitted: RETURN_STATUS.SUBMITTED,
-      approved: RETURN_STATUS.APPROVED,
-      waiting_replacement: RETURN_STATUS.WAITING_REPLACEMENT,
-      "waiting replacement": RETURN_STATUS.WAITING_REPLACEMENT,
-      rejected: RETURN_STATUS.REJECTED,
-      resolved: RETURN_STATUS.COMPLETED,
-      completed: RETURN_STATUS.COMPLETED,
-      cancelled: RETURN_STATUS.CANCELLED,
-      canceled: RETURN_STATUS.CANCELLED,
-    };
-    return map[status] || value || RETURN_STATUS.SUBMITTED;
-  };
-
-  const getRelatedPurchaseReturns = (purchase) => {
-    if (!purchase?.id) return [];
-    const fromPurchase = Array.isArray(purchase.returns) ? purchase.returns : [];
-    const fromQuery = purchaseReturns.filter((item) => String(item.purchaseId) === String(purchase.id));
-    const merged = [...fromPurchase, ...fromQuery];
-    return merged.filter((item, index, list) => list.findIndex((current) => String(current.id) === String(item.id)) === index);
-  };
-
-  const getOpenSupplierClaim = (purchase) => {
-    return getRelatedPurchaseReturns(purchase).find((item) => {
-      const status = normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status);
-      // "Resolved" (agreed) is not the same as "fully received/stocked in" for a replacement —
-      // keep treating it as open until the physical goods are actually accounted for.
-      return ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(status) || isReplacementClaimIncomplete(item);
-    });
-  };
-
-  // Narrower than getOpenSupplierClaim above: only cares whether the claim *decision* is still
-  // pending (status not completed/cancelled) — not whether replacement goods have been fully
-  // received/stocked in. Once the supplier has agreed to a resolution, a *different* item's claim
-  // shouldn't have to wait for the first item's physical stock-in to finish; those are unrelated.
-  // Use this (not getOpenSupplierClaim) to gate "can a new claim be created" — matches how
-  // ViewPurchaseModal.jsx's activeReturn / PurchaseTable.jsx's activeClaim already do it.
-  const hasUnresolvedClaimDecision = (purchase) =>
-    getRelatedPurchaseReturns(purchase).some((item) =>
-      ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(
-        normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status)
-      )
-    );
-
-  const hasResolvedSupplierClaim = (purchase) => {
-    return getRelatedPurchaseReturns(purchase).some((item) =>
-      normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status) === RETURN_STATUS.COMPLETED &&
-      !isReplacementClaimIncomplete(item)
-    );
-  };
-
-  const getPurchaseClaimLines = (purchase = {}) => {
-    const items = Array.isArray(purchase.items) ? purchase.items : [];
-    return items.length > 0 ? items : (Array.isArray(purchase.summaryItems) ? purchase.summaryItems : []);
-  };
-
-  const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
-
-  const getItemUnitCostAmounts = (item = {}) => ({
-    usd: Number(item.unitCostUsd ?? item.unit_cost_usd ?? item.unitCost ?? item.unit_cost ?? 0),
-    khr: Number(item.unitCostKhr ?? item.unit_cost_khr ?? 0),
-  });
-
-  const getItemOnlyAmount = (item = {}, qty) => {
-    const useQty = Number(qty ?? item.qtyReturned ?? item.qty_returned ?? item.claimQty ?? item.claim_qty ?? item.damagedQty ?? item.damaged_qty ?? item.invoicedQty ?? item.invoiced_qty ?? item.quantity ?? 0);
-    const unitCost = getItemUnitCostAmounts(item);
-
-    if (useQty > 0 && (unitCost.usd > 0 || unitCost.khr > 0)) {
-      return {
-        usd: roundMoney(useQty * unitCost.usd),
-        khr: Math.round(useQty * unitCost.khr),
-      };
-    }
-
-    return {
-      usd: Number(item.itemTotalUsd ?? item.item_total_usd ?? item.lineSubtotalUsd ?? item.line_subtotal_usd ?? item.lineTotalUsd ?? item.line_total_usd ?? item.lineTotal ?? 0),
-      khr: Number(item.itemTotalKhr ?? item.item_total_khr ?? item.lineSubtotalKhr ?? item.line_subtotal_khr ?? item.lineTotalKhr ?? item.line_total_khr ?? 0),
-    };
-  };
-
-  const getPartialPrepaidClaimDeduction = (purchase = {}) => {
-    if ((purchase.paymentMode || "").toLowerCase() !== "partial_prepaid") return { usd: 0, khr: 0 };
-
-    return getPurchaseClaimLines(purchase).reduce(
-      (total, item) => {
-        const claimQty = Number(item.claimQty ?? item.claim_qty ?? 0);
-        if (claimQty <= 0) return total;
-        const claimAmount = getItemOnlyAmount(item, claimQty);
-
-        return {
-          usd: total.usd + claimAmount.usd,
-          khr: total.khr + claimAmount.khr,
-        };
-      },
-      { usd: 0, khr: 0 }
-    );
-  };
-
-  const getPurchaseItemTotals = (purchase = {}) => {
-    const lines = getPurchaseClaimLines(purchase);
-    if (lines.length === 0) {
-      return {
-        usd: Number(purchase.itemsTotalUsd ?? purchase.subtotalUsd ?? purchase.subTotalUsd ?? 0),
-        khr: Number(purchase.itemsTotalKhr ?? purchase.subtotalKhr ?? purchase.subTotalKhr ?? 0),
-      };
-    }
-
-    return lines.reduce(
-      (total, item) => ({
-        usd: total.usd + getItemOnlyAmount(item, item.invoicedQty ?? item.invoiced_qty ?? item.quantity).usd,
-        khr: total.khr + getItemOnlyAmount(item, item.invoicedQty ?? item.invoiced_qty ?? item.quantity).khr,
-      }),
-      { usd: 0, khr: 0 }
-    );
-  };
-
-  const getUnpaidItemAmountBeforeClaim = (purchase = {}) => {
-    const itemTotals = getPurchaseItemTotals(purchase);
-    const paidUsd = Number(purchase.paidAmountUsd ?? purchase.paidAmount ?? 0);
-    const paidKhr = Number(purchase.paidAmountKhr ?? 0);
-
-    return {
-      usd: Math.max(0, itemTotals.usd - Math.min(itemTotals.usd, paidUsd)),
-      khr: Math.max(0, itemTotals.khr - Math.min(itemTotals.khr, paidKhr)),
-    };
-  };
-
-  const isSupplierClaimNeeded = (purchase = {}) => {
-    const claimQty = getClaimRequiredCount(purchase);
-    if (claimQty <= 0) return false;
-    if ((purchase.paymentMode || "").toLowerCase() !== "partial_prepaid") return true;
-
-    const claimDeduction = getPartialPrepaidClaimDeduction(purchase);
-    const unpaidBeforeClaim = getUnpaidItemAmountBeforeClaim(purchase);
-
-    return claimDeduction.usd > unpaidBeforeClaim.usd + 0.01 || claimDeduction.khr > unpaidBeforeClaim.khr + 1;
-  };
-
-  // Once a claim's resolution decision is made (status completed) and, for a replacement, the
-  // goods have actually been received, there's nothing left requiring the supplier — only an
-  // internal stock-in action remains. getOpenSupplierClaim (used below) deliberately stays
-  // "open" until stock-in too, which is right for gating claim-related buttons, but wrong for
-  // deciding whether the purchase should still read "waiting for claim" vs "waiting to stock in".
-  const hasOutstandingSupplierAction = (purchase) => {
-    const returns = getRelatedPurchaseReturns(purchase);
-    // No claim/return record created yet at all — trust isSupplierClaimNeeded (claimQty is a
-    // fresh, accurate signal here). Once a return exists, don't also consult isSupplierClaimNeeded:
-    // claim_qty never resets for replacement claims even after they're fully resolved/received/
-    // stocked in, so it would wrongly read "still needed" forever — the per-return status below
-    // is the reliable source once a return actually exists.
-    if (returns.length === 0) return isSupplierClaimNeeded(purchase);
-    return returns.some((item) => {
-      const status = normalizeReturnStatusLabel(item.status || item.resolutionStatus || item.resolution_status);
-      if (status === RETURN_STATUS.CANCELLED) return false;
-      if (status !== RETURN_STATUS.COMPLETED) return true;
-      return isReplacementNotFullyReceived(item);
-    });
-  };
-
-  const getEffectivePurchaseStatus = (purchase) => {
-    if (purchase.status === STATUS.PENDING_CLAIM && !hasOutstandingSupplierAction(purchase)) {
-      return STATUS.PENDING_STOCK_IN;
-    }
-    if (purchase.status === STATUS.PENDING_CLAIM && !getOpenSupplierClaim(purchase) && !isSupplierClaimNeeded(purchase)) {
-      return STATUS.PENDING_STOCK_IN;
-    }
-    return purchase.status;
-  };
+  const {
+    purchaseReturnsByPurchaseId,
+    getRelatedPurchaseReturns,
+    getOpenSupplierClaim,
+    hasUnresolvedClaimDecision,
+    hasResolvedSupplierClaim,
+    getEffectivePurchaseStatus,
+    hasPendingReplacementStockIn,
+    getOpenReplacementClaim,
+    getOpenMoneyClaim,
+    isPaymentReady,
+    shouldShowInPaymentFlow,
+  } = usePurchaseClaimStatus(purchaseReturns);
 
   // Moved below getEffectivePurchaseStatus (was defined earlier in the file, before that
   // function existed) — filterPurchaseList's status match now calls it, and a const defined
@@ -806,55 +571,23 @@ export default function Purchases() {
     [pagination.currentPage, pagination.lastPage]
   );
 
-  const getPurchaseLines = (purchase = {}) => {
-    const items = Array.isArray(purchase.items) ? purchase.items : [];
-    if (items.length > 0) return items;
-    return Array.isArray(purchase.summaryItems) ? purchase.summaryItems : [];
-  };
-
-  const getRemainingStockInQty = (item = {}) => {
-    // A server-provided remaining qty of exactly 0 (fully stocked in) is valid and must not
-    // fall through to the base-qty fallback below — stocked_in_base_qty is never sent by the
-    // API, so that fallback always reads as "nothing stocked in yet" once triggered.
-    if (item.remainingStockInQty != null || item.remaining_stock_in_qty != null) {
-      return Number(item.remainingStockInQty ?? item.remaining_stock_in_qty ?? 0);
+  // These used to be plain consts recomputed on every render (any keystroke anywhere on the page),
+  // each scanning all of allPurchases — now memoized so they only redo the scan when the purchase/
+  // return data actually changes.
+  const { pendingReceive, pendingStockIn, pendingClaims, pendingClaimWithStock } = useMemo(() => {
+    let receive = 0;
+    let stockIn = 0;
+    let claims = 0;
+    let claimWithStock = 0;
+    for (const item of allPurchases) {
+      const eff = getEffectivePurchaseStatus(item);
+      if (eff === STATUS.PENDING_RECEIVE) receive += 1;
+      if (eff === STATUS.PENDING_STOCK_IN) stockIn += 1;
+      if (eff === STATUS.PENDING_CLAIM) claims += 1;
+      if (item.status === STATUS.PENDING_CLAIM && hasRemainingStockInQty(item)) claimWithStock += 1;
     }
-
-    const conversionQty = Number(item.conversionQty ?? item.conversion_qty ?? 1) || 1;
-    const acceptedBaseQty = Number(item.acceptedBaseQty ?? item.accepted_base_qty ?? 0);
-    const stockedInBaseQty = Number(item.stockedInBaseQty ?? item.stocked_in_base_qty ?? 0);
-    if (acceptedBaseQty > 0 || stockedInBaseQty > 0) return Math.max(0, acceptedBaseQty - stockedInBaseQty);
-
-    const acceptedQty = Number(item.acceptedQty ?? item.accepted_qty ?? 0);
-    const stockedInQty = Number(item.stockedInQty ?? item.stocked_in_qty ?? 0);
-    return Math.max(0, (acceptedQty - stockedInQty) * conversionQty);
-  };
-
-  const hasRemainingStockInQty = (purchase) =>
-    getPurchaseLines(purchase).some((item) => getRemainingStockInQty(item) > 0);
-
-  const hasAnyStockedInQty = (purchase) =>
-    getPurchaseLines(purchase).some((item) => Number(item.stockedInQty ?? item.stocked_in_qty ?? 0) > 0);
-
-  const hasPendingReplacementStockIn = (purchase) =>
-    getRelatedPurchaseReturns(purchase).some((item) => {
-      // A "resolved" claim only means the supplier agreed to replace — it does not mean the
-      // goods have physically arrived, so a genuinely-zero received_qty must not be treated
-      // as "fully received" just because the claim status looks complete.
-      // No resolutionType gate here: replacementReceivedQty/replacementStockedInQty are already
-      // scoped to replacement-type items only by the backend rollup (recomputeReturnRollup), so
-      // they're both 0 for a return with no replacement items regardless of its rollup type
-      // (which reads "mixed" once a claim also has a refund/credit_note item — gating on
-      // resolutionType === "replacement" here used to hide a mixed claim's pending stock-in).
-      const receivedQty = Number(item.replacementReceivedQty ?? item.replacement_received_qty ?? 0);
-      const stockedQty = Number(item.replacementStockedInQty ?? item.replacement_stocked_in_qty ?? 0);
-      return receivedQty > stockedQty;
-    });
-
-  const pendingReceive = allPurchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_RECEIVE).length;
-  const pendingStockIn = allPurchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_STOCK_IN).length;
-  const pendingClaims = allPurchases.filter((item) => getEffectivePurchaseStatus(item) === STATUS.PENDING_CLAIM).length;
-  const pendingClaimWithStock = allPurchases.filter((p) => p.status === STATUS.PENDING_CLAIM && hasRemainingStockInQty(p)).length;
+    return { pendingReceive: receive, pendingStockIn: stockIn, pendingClaims: claims, pendingClaimWithStock: claimWithStock };
+  }, [allPurchases, purchaseReturnsByPurchaseId]);
   const purchaseStats = extractApiObject(purchaseStatsQuery.data) || {};
   const totalPurchasesCount = Number(purchaseStats.total_purchases ?? purchaseStats.totalPurchases ?? pagination.total ?? purchases.length);
   const pendingReceiveCount = Number(purchaseStats.pending_receive ?? purchaseStats.pendingReceive ?? pendingReceive);
@@ -865,16 +598,13 @@ export default function Purchases() {
   const totalBalanceUsd = Number(purchaseStats.total_balance_usd ?? 0);
   const totalBalanceKhr = Number(purchaseStats.total_balance_khr ?? 0);
 
-  const fmtUsd = (n) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const fmtKhr = (n) => `៛${Math.round(n).toLocaleString("en-US")}`;
-
   const filteredSummaryPurchases = exportPurchases;
   const filteredTotalUsd = filteredSummaryPurchases.reduce((sum, p) => sum + Number(p.grandTotalUsd || 0), 0);
   const filteredTotalKhr = filteredSummaryPurchases.reduce((sum, p) => sum + Number(p.grandTotalKhr || 0), 0);
   const filteredCount = filteredSummaryPurchases.length;
   const isDateFiltered = dateFilter !== "all";
   const invoiceTotalTitle = isDateFiltered
-    ? `តម្លៃវិក្កយបត្រ${dateFilter === "today" ? "ថ្ងៃនេះ" : dateFilter === "week" ? "អាទិត្យនេះ" : "ខែនេះ"}`
+    ? `តម្លៃវិក្កយបត្រ${dateFilter === "today" ? "ថ្ងៃនេះ" : dateFilter === "week" ? "អាទិត្យនេះ" : dateFilter === "month" ? "ខែនេះ" : "តាមកាលបរិច្ឆេទ"}`
     : "តម្លៃវិក្កយបត្រសរុប";
   const summaryPurchases = isDateFiltered ? filteredSummaryPurchases : allPurchases;
   const summaryPurchaseIds = new Set(summaryPurchases.map((purchase) => String(purchase.id)));
@@ -882,49 +612,40 @@ export default function Purchases() {
   const summaryInvoiceKhr = isDateFiltered ? filteredTotalKhr : totalGrandKhr;
   const summaryPaidUsd = summaryPurchases.reduce((sum, p) => sum + Number(p.paidAmountUsd || 0), 0);
   const summaryPaidKhr = summaryPurchases.reduce((sum, p) => sum + Number(p.paidAmountKhr || 0), 0);
-  const normalizeClaimResolutionType = (value = "") => {
-    const type = String(value || "").trim().toLowerCase();
-    if (type === "credit" || type === "credit note") return "credit_note";
-    return type;
-  };
-  const getClampedClaimAmount = (item = {}, type = "refund") => {
-    const usdKey = type === "credit_note" ? "creditAmountUsd" : "refundAmountUsd";
-    const usdApiKey = type === "credit_note" ? "credit_amount_usd" : "refund_amount_usd";
-    const khrKey = type === "credit_note" ? "creditAmountKhr" : "refundAmountKhr";
-    const khrApiKey = type === "credit_note" ? "credit_amount_khr" : "refund_amount_khr";
-    const rawUsd = Number(item[usdKey] ?? item[usdApiKey] ?? 0);
-    const rawKhr = Number(item[khrKey] ?? item[khrApiKey] ?? 0);
-    const claimUsd = Number(item.subtotalUsd ?? item.totalAmountUsd ?? item.total_amount_usd ?? item.subtotal_usd ?? item.subtotal ?? 0);
-    const claimKhr = Number(item.subtotalKhr ?? item.totalAmountKhr ?? item.total_amount_khr ?? item.subtotal_khr ?? 0);
-    // rawUsd/Khr (refund_amount_usd/khr) can legitimately be 0 when the claim is fully
-    // absorbed into what's still owed instead of paid back in cash — do not fall back to
-    // the full claim value in that case, or "actual cost" wrongly drops by the gross claim
-    // even though no cash was ever actually refunded.
-    return {
-      usd: claimUsd > 0 ? Math.min(rawUsd, claimUsd) : rawUsd,
-      khr: claimKhr > 0 ? Math.min(rawKhr, claimKhr) : rawKhr,
-    };
-  };
   const summaryClaimDeduction = purchaseReturns.reduce(
-    (total, item) => {
-      if (summaryPurchaseIds.size > 0 && !summaryPurchaseIds.has(String(item.purchaseId))) return total;
-      if (normalizeReturnStatusLabel(item.status || item.resolutionStatus) !== RETURN_STATUS.COMPLETED) return total;
+    (total, ret) => {
+      if (summaryPurchaseIds.size > 0 && !summaryPurchaseIds.has(String(ret.purchaseId))) return total;
 
-      const resolutionType = normalizeClaimResolutionType(item.resolutionType || item.resolution_type || "");
-      // credit_note deliberately excluded: this dashboard card is a CASH metric ("ចំណាយពិត ដក
-      // តែតម្លៃសងដែលដោះស្រាយរួច" — actual cost = cash paid minus cash refunded), but a resolved
-      // credit_note never produces cash at all — it creates a portable credit for a DIFFERENT,
-      // later purchase instead (credit_amount_usd/khr is now always the full claim value, not a
-      // cash figure — see PurchaseReturnService::applyItemSettlement). Including it here would
-      // wrongly subtract money that was never actually paid back.
-      if (resolutionType === "refund") {
+      // Per-item, not the return's own resolutionType rollup — a return with items of
+      // different types (e.g. one replacement + one refund) rolls its resolutionType up to
+      // "mixed", which never equals "refund" and would silently hide that item's refund
+      // amount from this total. Falls back to the return object itself only when it has no
+      // items recorded (legacy data with no per-item resolution).
+      const items = Array.isArray(ret.items) && ret.items.length > 0 ? ret.items : [ret];
+
+      return items.reduce((subtotal, item) => {
+        if (
+          normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status || item.status) !==
+          RETURN_STATUS.COMPLETED
+        ) {
+          return subtotal;
+        }
+
+        const resolutionType = normalizeClaimResolutionType(item.resolutionType || item.resolution_type || "");
+        // credit_note deliberately excluded: this card is a CASH metric ("ចំណាយពិត ដក
+        // តែតម្លៃសងដែលដោះស្រាយរួច" — actual cost = cash paid minus cash refunded), but a resolved
+        // credit_note never produces cash at all — it creates a portable credit for a DIFFERENT,
+        // later purchase instead (credit_amount_usd/khr is now always the full claim value, not a
+        // cash figure — see PurchaseReturnService::applyItemSettlement). Including it here would
+        // wrongly subtract money that was never actually paid back.
+        if (resolutionType !== "refund") return subtotal;
+
         const amount = getClampedClaimAmount(item, "refund");
         return {
-          usd: total.usd + amount.usd,
-          khr: total.khr + amount.khr,
+          usd: subtotal.usd + amount.usd,
+          khr: subtotal.khr + amount.khr,
         };
-      }
-      return total;
+      }, total);
     },
     { usd: 0, khr: 0 }
   );
@@ -935,37 +656,6 @@ export default function Purchases() {
     0,
     (summaryPaidKhr || (activeExchangeRate ? summaryPaidUsd * activeExchangeRate : 0)) - summaryClaimDeductionKhr
   );
-
-  // A replacement claim marked "resolved" (agreed) can still have goods that haven't been
-  // physically received/stocked in yet — "resolved" only means the supplier agreed to replace.
-  // Treat those as still needing action so they don't disappear from the "open" bucket.
-  //
-  // Checked per ITEM (not the return's own aggregate fields) — a claim can now mix resolution
-  // types across its items, so a return-level check would either wrongly skip a mixed claim's
-  // replacement items (return-level resolutionType reads "mixed", never literally "replacement")
-  // or wrongly treat a resolved refund item as if it were an incomplete replacement.
-  function isReplacementClaimIncomplete(r) {
-    const items = Array.isArray(r.items) ? r.items : [];
-    return items.some((item) => {
-      if (normalizeReturnResolutionType(item.resolutionType || item.resolution_type) !== "replacement") return false;
-      const claimedQty = Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? item.replacement_qty ?? item.replacementQty ?? 0);
-      const stockedQty = Number(item.replacementStockedInQty ?? item.replacement_stocked_in_qty ?? 0);
-      return stockedQty < claimedQty;
-    });
-  }
-
-  // Narrower than isReplacementClaimIncomplete above: only true while there's still unreceived
-  // qty (vs. fully received but not yet stocked in, which needs "confirm stock in", not another
-  // "ទទួលជំនួស" receive pass). Same per-item scoping as isReplacementClaimIncomplete.
-  function isReplacementNotFullyReceived(r) {
-    const items = Array.isArray(r.items) ? r.items : [];
-    return items.some((item) => {
-      if (normalizeReturnResolutionType(item.resolutionType || item.resolution_type) !== "replacement") return false;
-      const claimedQty = Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? item.replacement_qty ?? item.replacementQty ?? 0);
-      const receivedQty = Number(item.replacementReceivedQty ?? item.replacement_received_qty ?? 0);
-      return receivedQty < claimedQty;
-    });
-  }
 
   const openReturnsCount = purchaseReturns.filter((r) =>
     ![RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED].includes(
@@ -979,114 +669,30 @@ export default function Purchases() {
     ) && !isReplacementClaimIncomplete(r)
   ).length;
 
-  const isPaymentReady = (p) => {
-    if ((p.paymentMode || "").toLowerCase() === "pay_after_check") {
-      return [STATUS.PENDING_STOCK_IN, STATUS.PENDING_CLAIM, STATUS.RECEIVED].includes(
-        getEffectivePurchaseStatus(p)
-      );
-    }
-    return true;
-  };
-
-  const getPurchasePaymentBalance = (p = {}) => {
-    // Trust the server-computed balance_amount_usd/khr — it already nets out any
-    // resolved refund/credit_note claim deduction (see PurchaseService::recalculateTotals).
-    // Do not re-derive the deduction here from claim_qty: it is reset to 0 once a claim
-    // is resolved, which previously made this recompute silently undo the deduction.
-    //
-    // A server balance of exactly 0 (fully paid, or fully offset by a resolved claim)
-    // is valid and must not fall back to grandTotal-paid — that fallback ignores any
-    // resolved claim deduction and resurrects an already-settled balance as unpaid.
-    const hasServerBalanceUsd = p.balanceAmountUsd != null || p.balanceAmount != null;
-    const hasServerBalanceKhr = p.balanceAmountKhr != null;
-    const rawUsd = Number(p.balanceAmountUsd ?? p.balanceAmount ?? 0);
-    const rawKhr = Number(p.balanceAmountKhr ?? 0);
-    const fallbackUsd = Math.max(
-      0,
-      Number(p.grandTotalUsd ?? p.grandTotal ?? 0) - Number(p.paidAmountUsd ?? p.paidAmount ?? 0)
-    );
-    const fallbackKhr = Math.max(0, Number(p.grandTotalKhr ?? 0) - Number(p.paidAmountKhr ?? 0));
-
-    return {
-      usd: hasServerBalanceUsd ? rawUsd : fallbackUsd,
-      khr: hasServerBalanceKhr ? rawKhr : fallbackKhr,
-    };
-  };
-
-  const hasPurchasePaymentBalance = (p = {}) => {
-    const balance = getPurchasePaymentBalance(p);
-    return balance.usd > 0.01 || balance.khr > 1;
-  };
-
-  // Both functions below check EACH RETURN ITEM's own resolutionType/status, not the return's own
-  // rollup fields — a mixed claim's rollup resolutionType reads "mixed" and would never match
-  // "refund"/"credit_note", silently hiding a still-outstanding money item on a mixed claim from
-  // partial_prepaid balance/payment-flow logic. Falls back to the return's own aggregate fields
-  // when `items` is empty (old data with no per-item resolution recorded).
-  const hasPartialPrepaidMoneyClaimReceivable = (purchase = {}) => {
-    if (String(purchase.paymentMode || "").toLowerCase() !== "partial_prepaid") return false;
-
-    return getRelatedPurchaseReturns(purchase).some((ret) => {
-      const items = Array.isArray(ret.items) ? ret.items : [];
-      const checkOne = (source) => {
-        const status = normalizeReturnStatusLabel(source.status || source.resolutionStatus || source.resolution_status);
-        if ([RETURN_STATUS.CANCELLED, RETURN_STATUS.REJECTED].includes(status)) return false;
-
-        const resolutionType = normalizeClaimResolutionType(source.resolutionType || source.resolution_type || "");
-        if (!["refund", "credit_note"].includes(resolutionType)) return false;
-
-        const usdKey = resolutionType === "credit_note" ? "creditAmountUsd" : "refundAmountUsd";
-        const usdApiKey = resolutionType === "credit_note" ? "credit_amount_usd" : "refund_amount_usd";
-        const khrKey = resolutionType === "credit_note" ? "creditAmountKhr" : "refundAmountKhr";
-        const khrApiKey = resolutionType === "credit_note" ? "credit_amount_khr" : "refund_amount_khr";
-
-        return Number(source[usdKey] ?? source[usdApiKey] ?? 0) > 0.01 ||
-          Number(source[khrKey] ?? source[khrApiKey] ?? 0) > 1;
-      };
-      return items.length > 0 ? items.some((item) => checkOne(item)) : checkOne(ret);
-    });
-  };
-
-  const hasActivePartialPrepaidMoneyClaim = (purchase = {}) => {
-    if (String(purchase.paymentMode || "").toLowerCase() !== "partial_prepaid") return false;
-
-    return getRelatedPurchaseReturns(purchase).some((ret) => {
-      const items = Array.isArray(ret.items) ? ret.items : [];
-      const checkOne = (source) => {
-        const status = normalizeReturnStatusLabel(source.status || source.resolutionStatus || source.resolution_status);
-        if ([RETURN_STATUS.COMPLETED, RETURN_STATUS.CANCELLED, RETURN_STATUS.REJECTED, "resolved", "completed", "cancelled", "canceled", "rejected"].includes(status)) return false;
-
-        const resolutionType = normalizeClaimResolutionType(source.resolutionType || source.resolution_type || "");
-        return ["refund", "credit_note"].includes(resolutionType);
-      };
-      return items.length > 0 ? items.some((item) => checkOne(item)) : checkOne(ret);
-    });
-  };
-
-  const shouldShowInPaymentFlow = (purchase = {}) =>
-    hasPurchasePaymentBalance(purchase) &&
-    !hasActivePartialPrepaidMoneyClaim(purchase) &&
-    !hasPartialPrepaidMoneyClaimReceivable(purchase);
-
   const goToPaymentTab = (purchase) => {
     setPaymentViewFilter("outstanding");
     setPaymentSearchTerm(purchase?.purchaseNo || purchase?.supplierName || "");
     setActiveTab("payments");
   };
 
-  const unpaidCount = allPurchases.filter(
-    (p) =>
-      p.status !== STATUS.CANCELLED &&
-      hasPurchasePaymentBalance(p) &&
-      isPaymentReady(p) &&
-      shouldShowInPaymentFlow(p)
-  ).length;
+  const { unpaidCount, totalOutstandingUsd } = useMemo(() => {
+    const outstanding = allPurchases.filter(
+      (p) =>
+        p.status !== STATUS.CANCELLED &&
+        hasPurchasePaymentBalance(p) &&
+        isPaymentReady(p) &&
+        shouldShowInPaymentFlow(p)
+    );
+    return {
+      unpaidCount: outstanding.length,
+      totalOutstandingUsd: outstanding.reduce((sum, p) => sum + getPurchasePaymentBalance(p).usd, 0),
+    };
+  }, [allPurchases, purchaseReturnsByPurchaseId]);
 
-  const totalOutstandingUsd = allPurchases
-    .filter((p) => p.status !== STATUS.CANCELLED && hasPurchasePaymentBalance(p) && isPaymentReady(p) && shouldShowInPaymentFlow(p))
-    .reduce((sum, p) => sum + getPurchasePaymentBalance(p).usd, 0);
-
-  const receiveFilteredList = (() => {
+  // Tab-scoped filtered lists below were plain IIFEs computed on every render regardless of which
+  // tab was active — switching to "orders" still redid the receive/returns/payments scans every
+  // keystroke. Wrapped in useMemo so each only recomputes when its own inputs actually change.
+  const receiveFilteredList = useMemo(() => {
     const base = allPurchases.filter((p) => {
       const eff = getEffectivePurchaseStatus(p);
       if (eff === STATUS.PENDING_RECEIVE) return true;
@@ -1124,14 +730,14 @@ export default function Purchases() {
             (item.variantName || "").toLowerCase().includes(q)
         )
     );
-  })();
+  }, [allPurchases, receiveSearchTerm, purchaseReturnsByPurchaseId]);
   const receiveLastPage = Math.max(1, Math.ceil(receiveFilteredList.length / CLIENT_TAB_PAGE_SIZE));
   const receivePageItems = receiveFilteredList.slice(
     (receivePage - 1) * CLIENT_TAB_PAGE_SIZE,
     receivePage * CLIENT_TAB_PAGE_SIZE
   );
 
-  const returnFilteredList = (() => {
+  const returnFilteredList = useMemo(() => {
     let list = purchaseReturns;
     if (returnStatusFilter === "open")
       list = list.filter((r) =>
@@ -1151,18 +757,22 @@ export default function Purchases() {
         (r.purchaseNo || "").toLowerCase().includes(q) ||
         (r.supplierName || "").toLowerCase().includes(q)
     );
-  })();
+  }, [purchaseReturns, returnStatusFilter, returnSearchTerm]);
   const returnsLastPage = Math.max(1, Math.ceil(returnFilteredList.length / CLIENT_TAB_PAGE_SIZE));
   const returnPageItems = returnFilteredList.slice(
     (returnsPage - 1) * CLIENT_TAB_PAGE_SIZE,
     returnsPage * CLIENT_TAB_PAGE_SIZE
   );
 
-  const eligibleForReturn = allPurchases.filter((p) =>
-    [STATUS.RECEIVED, STATUS.PENDING_STOCK_IN, STATUS.PENDING_CLAIM].includes(getEffectivePurchaseStatus(p))
+  const eligibleForReturn = useMemo(
+    () =>
+      allPurchases.filter((p) =>
+        [STATUS.RECEIVED, STATUS.PENDING_STOCK_IN, STATUS.PENDING_CLAIM].includes(getEffectivePurchaseStatus(p))
+      ),
+    [allPurchases, purchaseReturnsByPurchaseId]
   );
 
-  const newReturnEligible = (() => {
+  const newReturnEligible = useMemo(() => {
     const q = newReturnSearchTerm.trim().toLowerCase();
     if (!q) return eligibleForReturn;
     return eligibleForReturn.filter(
@@ -1170,9 +780,9 @@ export default function Purchases() {
         (p.purchaseNo || "").toLowerCase().includes(q) ||
         (p.supplierName || "").toLowerCase().includes(q)
     );
-  })();
+  }, [eligibleForReturn, newReturnSearchTerm]);
 
-  const paymentFilteredList = (() => {
+  const paymentFilteredList = useMemo(() => {
     let list;
     if (paymentViewFilter === "outstanding")
       list = allPurchases.filter(
@@ -1193,82 +803,12 @@ export default function Purchases() {
         (p.purchaseNo || "").toLowerCase().includes(q) ||
         (p.supplierName || "").toLowerCase().includes(q)
     );
-  })();
+  }, [allPurchases, paymentViewFilter, paymentSearchTerm, purchaseReturnsByPurchaseId]);
   const paymentsLastPage = Math.max(1, Math.ceil(paymentFilteredList.length / CLIENT_TAB_PAGE_SIZE));
   const paymentPageItems = paymentFilteredList.slice(
     (paymentsPage - 1) * CLIENT_TAB_PAGE_SIZE,
     paymentsPage * CLIENT_TAB_PAGE_SIZE
   );
-
-  // Checked per ITEM within the return, not the return's own aggregate resolutionType — a claim
-  // can now mix resolution types across its items, so the return-level field reads "mixed" and
-  // would never match either "replacement" or ["refund","credit_note"] on its own. Still returns
-  // the whole return object (existing callers — ReceiveReplacementModal via buildReplacementItems,
-  // ResolveMoneyClaimModal — already filter to the relevant items themselves).
-  // Extracted so the Returns-tab list row (which renders each `ret` directly, not via a purchase
-  // scan) can gate its own action buttons on the same per-item logic instead of the return-level
-  // rollup's resolutionType, which reads "mixed" for a mixed claim and would never equal either
-  // "replacement" or "refund"/"credit_note" on its own.
-  const returnHasOpenReplacementItem = (ret) => {
-    const items = Array.isArray(ret.items) ? ret.items : [];
-    return items.some((item) => {
-      const itemStatus = normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status);
-      const resolutionType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type);
-      if (resolutionType !== "replacement" || itemStatus === RETURN_STATUS.CANCELLED) return false;
-      // Whether there's still something to physically receive is independent of the decision
-      // status — an item whose resolution_status was never explicitly flipped to "resolved"
-      // (e.g. left at "submitted" throughout, since receiving doesn't itself change that field)
-      // must not be treated as perpetually "open" once it's actually been fully received. Bug:
-      // this used to read `itemStatus !== COMPLETED || receivedQty < claimedQty`, which stayed
-      // true forever for a never-"resolved" item regardless of receivedQty.
-      const claimedQty = Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? 0);
-      const receivedQty = Number(item.replacementReceivedQty ?? item.replacement_received_qty ?? 0);
-      return receivedQty < claimedQty;
-    });
-  };
-
-  const returnHasOpenMoneyItem = (ret) => {
-    const items = Array.isArray(ret.items) ? ret.items : [];
-    return items.some((item) => {
-      const itemStatus = normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status);
-      const resolutionType = normalizeReturnResolutionType(item.resolutionType || item.resolution_type);
-      return ["refund", "credit_note"].includes(resolutionType) && itemStatus !== RETURN_STATUS.COMPLETED && itemStatus !== RETURN_STATUS.CANCELLED;
-    });
-  };
-
-  const getOpenReplacementClaim = (purchase) => getRelatedPurchaseReturns(purchase).find(returnHasOpenReplacementItem);
-
-  const getOpenMoneyClaim = (purchase) => getRelatedPurchaseReturns(purchase).find(returnHasOpenMoneyItem);
-
-  const getReturnItemResolution = (item, resolutionType, ret = {}) => {
-    // Item-level amounts/qty take priority over the return-level rollup — a mixed claim's rollup
-    // fields aggregate across ALL of the return's same-type items, which would misreport this
-    // specific item's own figure once a return has more than one item of that type. The `ret.*`
-    // fallback only matters for legacy data with no per-item resolution recorded at all.
-    // A nonzero refund_amount_usd/credit_amount_usd only means the settlement has been
-    // CALCULATED (done immediately at claim creation, before the supplier has actually paid) —
-    // it does not by itself mean the money has been confirmed received/issued. Without checking
-    // the item's own resolution_status here, this line reads identically ("សង $32.00") both
-    // while still waiting on the supplier AND after clicking "resolve", which is exactly the
-    // ambiguity a user asked about live. Mirror the replacement branch below, which already shows
-    // a "✓" only once actually complete.
-    const itemStatus = normalizeReturnStatusLabel(item.resolutionStatus || item.resolution_status);
-    const isMoneyResolved = itemStatus === RETURN_STATUS.COMPLETED;
-    if (resolutionType === "refund") {
-      const amt = Number(item.refund_amount_usd ?? item.refundAmountUsd ?? ret.refundAmountUsd ?? 0);
-      if (amt <= 0) return "រង់ចាំការសង";
-      return isMoneyResolved ? `សង $${amt.toFixed(2)} ✓` : `សង $${amt.toFixed(2)} (រង់ចាំបញ្ជាក់)`;
-    }
-    if (resolutionType === "credit_note") {
-      const amt = Number(item.credit_amount_usd ?? item.creditAmountUsd ?? ret.creditAmountUsd ?? 0);
-      if (amt <= 0) return "រង់ចាំកាត់លុយលើកក្រោយ";
-      return isMoneyResolved ? `កាត់លុយលើកក្រោយ $${amt.toFixed(2)} ✓` : `កាត់លុយលើកក្រោយ $${amt.toFixed(2)} (រង់ចាំបញ្ជាក់)`;
-    }
-    const received = Number(item.replacement_received_qty ?? item.replacementReceivedQty ?? ret.replacementReceivedQty ?? 0);
-    const total = Number(item.qty ?? item.qty_returned ?? item.qtyReturned ?? item.replacement_qty ?? item.replacementQty ?? ret.replacementQty ?? 0);
-    if (total === 0) return "រង់ចាំ";
-    return received >= total ? `${received}/${total} បានទទួល ✓` : `${received}/${total} បានទទួល`;
-  };
 
   // Only the replacement-claim progress nuance (agreed but not fully received/stocked yet) —
   // used on its own in the Receive tab row, which already has its own separate ខូច/claim pill
@@ -3096,14 +2636,6 @@ export default function Purchases() {
     return "no_stock_change";
   };
 
-  // Hoisted function declaration (not a const arrow fn): hasPendingReplacementStockIn
-  // calls this during render, before this point in the component body would otherwise
-  // execute — a const/let here is in the temporal dead zone and throws.
-  function normalizeReturnResolutionType(value = "replacement") {
-    if (value === "credit") return "credit_note";
-    return value || "replacement";
-  }
-
   const roundCurrency = (value) => Math.round(Number(value || 0) * 100) / 100;
 
   // Each item in a claim can carry its own resolutionType (mixed refund/credit_note/replacement
@@ -3465,8 +2997,8 @@ export default function Purchases() {
   };
 
   return (
-    <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <section className="space-y-4 sm:space-y-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         <SummaryCard theme={theme} title={invoiceTotalTitle} value={fmtUsd(isDateFiltered ? filteredTotalUsd : totalGrandUsd)} subValue={`${isDateFiltered ? filteredCount : totalPurchasesCount} ការទិញ`} subValueColor="text-violet-500" icon={<FiShoppingCart className="text-[34px] text-violet-500" />} iconBg="bg-violet-500/10" />
         <SummaryCard theme={theme} title="រង់ចាំទទួល" value={pendingReceiveCount + pendingStockInCount} subValue={pendingReceiveCount > 0 ? `${pendingReceiveCount} រង់ចាំ · ${pendingStockInCount} ស្តុកចូល` : "ទទួលរួចទាំងអស់"} subValueColor={pendingReceiveCount + pendingStockInCount > 0 ? "text-amber-500" : "text-emerald-500"} icon={<FiTruck className="text-[34px] text-blue-500" />} iconBg="bg-blue-500/10" />
         <SummaryCard theme={theme} title="ប្រាក់មិនទាន់បង់" value={fmtUsd(totalOutstandingUsd)} subValue={unpaidCount > 0 ? `${unpaidCount} ការទិញមិនទាន់បង់` : "បានទូទាត់ទាំងអស់"} subValueColor={unpaidCount > 0 ? "text-amber-500" : "text-emerald-500"} icon={<FiCreditCard className="text-[34px] text-amber-500" />} iconBg="bg-amber-500/10" />
@@ -3476,7 +3008,7 @@ export default function Purchases() {
       <div className={`rounded-2xl border px-4 py-3 shadow-sm ${theme.tableWrap}`}>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-sm font-bold">សង្ខេបចំណាយ</p>
+            <p className={`text-sm font-bold ${theme.pageTitle}`}>សង្ខេបចំណាយ</p>
             <p className={`mt-1 text-xs ${theme.muted}`}>ចំណាយពិតដកតែតម្លៃសងដែលដោះស្រាយរួច។</p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:min-w-[480px]">
@@ -3489,7 +3021,11 @@ export default function Purchases() {
                 {formatCurrencyPair(summaryClaimDeduction.usd, summaryClaimDeductionKhr)}
               </p>
             </div>
-            <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+            <div className={`rounded-xl border px-3 py-2 ${
+              isDark
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                : "border-emerald-300 bg-emerald-50 text-emerald-700"
+            }`}>
               <div className="flex items-center gap-2 text-xs font-bold">
                 <FiDollarSign />
                 <span>ចំណាយពិត</span>
@@ -3501,10 +3037,10 @@ export default function Purchases() {
       </div>
 
       {/* ── Tab Card ── */}
-      <div className={`overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}>
+      <div className={`mx-auto w-full max-w-[1280px] overflow-hidden rounded-2xl border shadow-sm ${theme.tableWrap}`}>
 
         {/* Tab bar */}
-        <div className="flex items-center gap-0 border-b border-zinc-200 px-4 dark:border-white/10">
+        <div className={`grid grid-cols-2 border-b px-2 sm:grid-cols-4 sm:px-4 ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
           {[
             { key: "orders",   label: "បញ្ជាទិញ",    count: totalPurchasesCount,                        icon: <FiShoppingCart /> },
             { key: "receive",  label: "ទទួលទំនិញ",  count: pendingReceiveCount + pendingStockInCount,   icon: <FiTruck /> },
@@ -3516,7 +3052,7 @@ export default function Purchases() {
               || (tab.key === "payments" && unpaidCount > 0);
             return (
               <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
-                className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-3.5 text-xs font-bold transition ${
+                className={`-mb-px flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-2 py-3.5 text-xs font-bold transition sm:px-3 ${
                   activeTab === tab.key
                     ? "border-red-500 text-red-500"
                     : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
@@ -3536,7 +3072,7 @@ export default function Purchases() {
         {/* ── Orders Tab ── */}
         {activeTab === "orders" && (
           <>
-            <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-4 dark:border-white/10 xl:flex-row xl:items-center xl:justify-between">
+            <div className={`flex flex-col gap-3 border-b px-4 py-4 xl:flex-row xl:items-center xl:justify-between ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
               <div className="grid flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_200px_200px_160px_160px]">
                 <div className="relative">
                   <FiSearch className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`} />
@@ -3566,13 +3102,13 @@ export default function Purchases() {
               </div>
               <PermissionGate permission="purchases.create">
                 <button type="button" onClick={openAddModal}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:shrink-0">
+                  className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 active:translate-y-0 xl:shrink-0">
                   <FiPlusCircle className="text-lg" /> បន្ថែមការទិញ
                 </button>
               </PermissionGate>
             </div>
             {dateFilter === "custom" && (
-              <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-white/10">
+              <div className={`flex flex-wrap items-center gap-2 border-b px-4 py-3 ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
                 <span className={`text-xs font-semibold ${theme.muted}`}>ចាប់ពី</span>
                 <input type="date" value={dateFrom} max={dateTo || undefined}
                   onChange={(e) => setDateFrom(e.target.value)}
@@ -3593,7 +3129,7 @@ export default function Purchases() {
                     type="button"
                     disabled={exportPurchases.length === 0}
                     onClick={() => exportPurchases.length > 0 && setExportMenuOpen((open) => !open)}
-                    className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:border-red-400 hover:text-red-500`}
+                    className={`table-icon-3d inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:border-red-400 hover:text-red-500`}
                   >
                     <FiDownload />
                     Export
@@ -3628,7 +3164,7 @@ export default function Purchases() {
 
             <div className="hidden xl:block">
               {allPurchasesQuery.isLoading ? (
-                <table className="w-full"><tbody><TableLoading theme={theme} colSpan={5} text="រង់ចាំបន្តិច..." /></tbody></table>
+                <table className="w-full"><tbody><Purchase3DLoading theme={theme} colSpan={5} /></tbody></table>
               ) : (
                 <PurchaseTable purchases={filteredPurchases} purchaseReturns={purchaseReturns} theme={theme}
                   getEffectivePurchaseStatus={getEffectivePurchaseStatus}
@@ -3657,7 +3193,7 @@ export default function Purchases() {
 
             <div className="grid grid-cols-1 gap-4 p-4 xl:hidden">
               {allPurchasesQuery.isLoading ? (
-                <table className="w-full"><tbody><TableLoading theme={theme} colSpan={1} text="រង់ចាំបន្តិច..." /></tbody></table>
+                <table className="w-full"><tbody><Purchase3DLoading theme={theme} colSpan={1} /></tbody></table>
               ) : filteredPurchases.length === 0 ? (
                 <EmptyState theme={theme} icon={<FiSearch />} title="រកមិនឃើញការទិញ" description="ព្យាយាមប្តូរការស្វែងរក ឬតម្រង។" />
               ) : (
@@ -3684,21 +3220,21 @@ export default function Purchases() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button type="button" disabled={page <= 1}
                     onClick={() => setPage((c) => Math.max(1, c - 1))}
-                    className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+                    className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
                     <FiChevronLeft /> មុន
                   </button>
                   {pageNumbers.map((item) => item === "..." ? (
                     <span key={item} className={`px-2 text-sm font-semibold ${theme.muted}`}>...</span>
                   ) : (
                     <button key={item} type="button" onClick={() => setPage(item)}
-                      className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                        item === pagination.currentPage ? "bg-red-600 text-white" : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                      className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
+                        item === pagination.currentPage ? "quick-action-icon-3d bg-red-600 text-white" : "table-icon-3d border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
                       }`}>{item}
                     </button>
                   ))}
                   <button type="button" disabled={page >= pagination.lastPage}
                     onClick={() => setPage((c) => Math.min(pagination.lastPage, c + 1))}
-                    className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+                    className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
                     បន្ទាប់ <FiChevronRight />
                   </button>
                 </div>
@@ -3736,7 +3272,7 @@ export default function Purchases() {
               </div>
             </div>
             {allPurchasesQuery.isLoading ? (
-              <table className="w-full"><tbody><TableLoading theme={theme} colSpan={7} text="រង់ចាំបន្តិច..." /></tbody></table>
+              <table className="w-full"><tbody><Purchase3DLoading theme={theme} colSpan={7} /></tbody></table>
             ) : receiveFilteredList.length === 0 ? (
               receiveSearchTerm.trim() ? (
                 <EmptyState theme={theme} icon={<FiSearch />} title={`រកមិនឃើញ "${receiveSearchTerm}"`} description="សាកល្បងស្វែងរកពាក្យផ្សេង ឬលុបចេញដើម្បីមើលទាំងអស់។" />
@@ -3745,8 +3281,8 @@ export default function Purchases() {
               )
             ) : (
               <>
-                <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
-                  <table className="w-full min-w-200 text-sm">
+                <div className={`overflow-hidden rounded-xl border ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
+                  <table className="responsive-card-table w-full min-w-200 text-sm">
                     <thead className="bg-blue-600 text-white">
                       <tr>
                         <th className="px-4 py-3 text-left">លេខការទិញ</th>
@@ -3788,11 +3324,11 @@ export default function Purchases() {
                                 ? "បានបង់"
                                 : "បានបង់មុន";
                           return (
-                            <tr key={purchase.id} className={`border-t border-zinc-200 dark:border-white/10 ${theme.row}`}>
-                              <td className="px-4 py-3 font-semibold">{purchase.purchaseNo}</td>
-                              <td className="px-4 py-3">{purchase.supplierName}</td>
-                              <td className="px-4 py-3">{purchase.purchaseDate}</td>
-                              <td className="px-4 py-3">
+                            <tr key={purchase.id} className={`border-t transition ${isDark ? "border-white/[0.06] hover:bg-white/[0.025]" : "border-zinc-200 hover:bg-zinc-50"} ${theme.row}`}>
+                              <td data-label="លេខការទិញ" className="px-4 py-3 font-semibold">{purchase.purchaseNo}</td>
+                              <td data-label="អ្នកផ្គត់ផ្គង់" className="px-4 py-3">{purchase.supplierName}</td>
+                              <td data-label="កាលបរិច្ឆេទ" className="px-4 py-3">{purchase.purchaseDate}</td>
+                              <td data-label="សរុប" className="px-4 py-3">
                                 <div className="flex flex-col gap-1">
                                   <span className="font-semibold">{formatCurrencyPair(purchase.grandTotalUsd || 0, purchase.grandTotalKhr || 0)}</span>
                                   {hasPaymentContext && paidUsd > 0 && (
@@ -3803,7 +3339,7 @@ export default function Purchases() {
                                   )}
                                 </div>
                               </td>
-                              <td className="px-4 py-3">
+                              <td data-label="ទំនិញ / ខូច" className="px-4 py-3">
                                 {(() => {
                                   // Just the plain damaged count here — the status column already shows a
                                   // specific badge/sub-line for the claim's own progress, so an extra
@@ -3828,7 +3364,7 @@ export default function Purchases() {
                                   );
                                 })()}
                               </td>
-                              <td className="px-4 py-3">
+                              <td data-label="ស្ថានភាព" className="px-4 py-3">
                                 {(() => {
                                   const statusBadge = getPurchaseStatusBadge(purchase);
                                   // Narrower than getPurchaseProblemLabel: this row already has its own separate
@@ -3985,7 +3521,7 @@ export default function Purchases() {
                                   );
                                 })()}
                               </td>
-                              <td className="px-4 py-3">
+                              <td data-label="សកម្មភាព" className="px-4 py-3">
                                 <div className="flex items-center justify-center gap-2">
                                   {getEffectivePurchaseStatus(purchase) === STATUS.PENDING_RECEIVE && (
                                     <Tooltip label="ទទួលទំនិញ">
@@ -4025,7 +3561,7 @@ export default function Purchases() {
                                   {shouldShowInPaymentFlow(purchase) && isPaymentReady(purchase) && (
                                     <Tooltip label="ទៅការទូទាត់">
                                       <button type="button" onClick={() => goToPaymentTab(purchase)}
-                                        className={`${PURCHASE_ACTION_ICON_CLASS} bg-gradient-to-b from-cyan-500 to-blue-600 shadow-blue-600/20 hover:from-cyan-600 hover:to-blue-700 hover:shadow-blue-600/25 focus:ring-blue-500/20`}>
+                                        className={`${PURCHASE_ACTION_ICON_CLASS} ${PURCHASE_ACTION_TONE.payment}`}>
                                         <FiArrowRightCircle size={17} />
                                       </button>
                                     </Tooltip>
@@ -4160,14 +3696,14 @@ export default function Purchases() {
             )}
 
             {purchaseReturnsQuery.isLoading ? (
-              <table className="w-full"><tbody><TableLoading theme={theme} colSpan={8} text="រង់ចាំបន្តិច..." /></tbody></table>
+              <table className="w-full"><tbody><Purchase3DLoading theme={theme} colSpan={8} /></tbody></table>
             ) : returnFilteredList.length === 0 ? (
               <EmptyState theme={theme} icon={<FiRotateCcw />}
                 title={returnStatusFilter === "open" ? "គ្មានការត្រឡប់បើក" : returnStatusFilter === "resolved" ? "គ្មានការត្រឡប់ដោះស្រាយ" : "គ្មានការត្រឡប់"}
                 description={returnStatusFilter === "open" ? "ការត្រឡប់ទាំងអស់បានដោះស្រាយ។ ចុច + ត្រឡប់ថ្មីដើម្បីបង្កើត។" : "គ្មានការត្រឡប់ អ្នកផ្គត់ផ្គង់ ត្រូវបានកត់ទុករឿន។"} />
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
-                <table className="w-full min-w-4xl text-sm">
+              <div className={`overflow-hidden rounded-xl border ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
+                <table className="responsive-card-table w-full min-w-4xl text-sm">
                   <thead className="bg-red-600 text-white">
                     <tr>
                       <th className="w-8 px-3 py-3" />
@@ -4232,18 +3768,18 @@ export default function Purchases() {
                       return (
                         <React.Fragment key={ret.id}>
                           <tr
-                            className={`border-t border-zinc-200 dark:border-white/10 cursor-pointer transition ${theme.row} ${isExpanded ? (isDark ? "bg-white/5" : "bg-zinc-50") : ""}`}
+                            className={`cursor-pointer border-t transition ${isDark ? "border-white/[0.06] hover:bg-white/[0.025]" : "border-zinc-200 hover:bg-zinc-50"} ${theme.row} ${isExpanded ? (isDark ? "bg-white/[0.04]" : "bg-zinc-50") : ""}`}
                             onClick={() => setExpandedReturnId(isExpanded ? null : ret.id)}
                           >
-                            <td className="px-3 py-3 text-center">
+                            <td data-label="" className="px-3 py-3 text-center">
                               <FiChevronRight className={`inline-block transition-transform duration-200 ${isExpanded ? "rotate-90" : ""} ${theme.muted}`} />
                             </td>
-                            <td className="px-4 py-3 font-semibold">{ret.purchaseReturnNo || "-"}</td>
-                            <td className="px-4 py-3">{purchaseNo}</td>
-                            <td className="px-4 py-3">{ret.supplierName || "-"}</td>
-                            <td className="px-4 py-3">{ret.returnDate || "-"}</td>
-                            <td className="px-4 py-3">{{ replacement: "ជំនួសទំនិញថ្មី", refund: "សងលុយ", credit_note: "កាត់លុយលើវិក្កយបត្រក្រោយ", none: "មិនដោះស្រាយ", mixed: "ចម្រុះ" }[ret.resolutionType] ?? (ret.resolutionType || "-")}</td>
-                            <td className="px-4 py-3">
+                            <td data-label="លេខត្រឡប់" className="px-4 py-3 font-semibold">{ret.purchaseReturnNo || "-"}</td>
+                            <td data-label="លេខការទិញ" className="px-4 py-3">{purchaseNo}</td>
+                            <td data-label="អ្នកផ្គត់ផ្គង់" className="px-4 py-3">{ret.supplierName || "-"}</td>
+                            <td data-label="កាលបរិច្ឆេទ" className="px-4 py-3">{ret.returnDate || "-"}</td>
+                            <td data-label="ដំណោះស្រាយ" className="px-4 py-3">{{ replacement: "ជំនួសទំនិញថ្មី", refund: "សងលុយ", credit_note: "កាត់លុយលើវិក្កយបត្រក្រោយ", none: "លះបង់ការទាមទារ", mixed: "ចម្រុះ" }[ret.resolutionType] ?? (ret.resolutionType || "-")}</td>
+                            <td data-label="ស្ថានភាព" className="px-4 py-3">
                               <div className="flex flex-col items-start gap-1.5">
                                 {/* retStatus is "completed" as soon as the supplier agrees to replace — that's the
                                     resolution *decision*, not physical receipt, so an incomplete replacement gets
@@ -4299,7 +3835,7 @@ export default function Purchases() {
                                 })()}
                               </div>
                             </td>
-                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <td data-label="សកម្មភាព" className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-2">
                                 {canReceiveReplacement && (
                                   <Tooltip label="ទទួលជំនួស">
@@ -4353,7 +3889,7 @@ export default function Purchases() {
                           </tr>
 
                           {isExpanded && (
-                            <tr className={`border-t border-zinc-200 dark:border-white/10 ${isDark ? "bg-white/5" : "bg-zinc-50"}`}>
+                            <tr className={`border-t ${theme.pageTitle} ${isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-zinc-200 bg-zinc-50"}`}>
                               <td colSpan={8} className="px-6 pb-5 pt-2">
                                 <div className={`rounded-xl border p-4 ${theme.tableWrap}`}>
                                   {/* Return meta */}
@@ -4377,9 +3913,9 @@ export default function Purchases() {
 
                                   {/* Items table */}
                                   {retItems.length > 0 ? (
-                                    <table className="w-full text-xs">
+                                    <table className={`w-full text-xs ${theme.pageTitle}`}>
                                       <thead>
-                                        <tr className={`text-left ${theme.muted} border-b border-zinc-200 dark:border-white/10`}>
+                                        <tr className={`border-b text-left ${theme.muted} ${isDark ? "border-white/[0.06]" : "border-zinc-200"}`}>
                                           <th className="pb-2 font-semibold pr-4">ផលិតផល</th>
                                           <th className="pb-2 font-semibold pr-4">ចំនួនត្រឡប់</th>
                                           <th className="pb-2 font-semibold pr-4">មូលហេតុ</th>
@@ -4408,7 +3944,7 @@ export default function Purchases() {
                                             itemStatus !== RETURN_STATUS.COMPLETED &&
                                             itemStatus !== RETURN_STATUS.CANCELLED;
                                           return (
-                                            <tr key={idx} className="border-t border-zinc-200/60 dark:border-white/10">
+                                            <tr key={idx} className={`border-t ${isDark ? "border-white/[0.05]" : "border-zinc-200/60"}`}>
                                               <td className="py-2 pr-4 font-medium">{name}</td>
                                               <td className="py-2 pr-4">{qty} {unit}</td>
                                               <td className="py-2 pr-4">{condition || "-"}</td>
@@ -4459,7 +3995,7 @@ export default function Purchases() {
             {totalOutstandingUsd > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-500/8 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/8">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15">
+                  <div className="table-icon-3d flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15">
                     <FiCreditCard className="text-amber-500" />
                   </div>
                   <div>
@@ -4506,14 +4042,14 @@ export default function Purchases() {
             </div>
 
             {allPurchasesQuery.isLoading ? (
-              <table className="w-full"><tbody><TableLoading theme={theme} colSpan={8} text="រង់ចាំបន្តិច..." /></tbody></table>
+              <table className="w-full"><tbody><Purchase3DLoading theme={theme} colSpan={8} /></tbody></table>
             ) : paymentFilteredList.length === 0 ? (
               <EmptyState theme={theme} icon={<FiCheckCircle />}
                 title={paymentViewFilter === "outstanding" ? "ការទូទាត់ទាំងអស់បានបញ្ចប់" : paymentViewFilter === "paid" ? "គ្មានការទិញបានបង់" : "គ្មានការទិញ"}
                 description={paymentViewFilter === "outstanding" ? "គ្មានសមតុល្យជំពាក់លើការទិញណាមួយ។" : "រកមិនឃើញទំនាក់ទំនង។"} />
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
-                <table className="w-full min-w-200 text-sm">
+              <div className={`overflow-hidden rounded-xl border ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
+                <table className="responsive-card-table w-full min-w-200 text-sm">
                   <thead className="bg-amber-500 text-white">
                     <tr>
                       <th className="px-4 py-3 text-left">លេខការទិញ</th>
@@ -4531,17 +4067,17 @@ export default function Purchases() {
                       const balance = getPurchasePaymentBalance(purchase);
                       const hasBalance = hasPurchasePaymentBalance(purchase);
                       return (
-                        <tr key={purchase.id} className={`border-t border-zinc-200 dark:border-white/10 ${theme.row}`}>
-                          <td className="px-4 py-3 font-semibold">{purchase.purchaseNo}</td>
-                          <td className="px-4 py-3">{purchase.supplierName}</td>
-                          <td className="px-4 py-3">{purchase.purchaseDate || "-"}</td>
-                          <td className="px-4 py-3">{fmtUsd(purchase.grandTotalUsd || 0)}</td>
-                          <td className="px-4 py-3 text-emerald-600 dark:text-emerald-400">{fmtUsd(purchase.paidAmountUsd || 0)}</td>
-                          <td className={`px-4 py-3 font-semibold ${hasBalance ? "text-amber-500" : "text-emerald-500"}`}>
+                        <tr key={purchase.id} className={`border-t transition ${isDark ? "border-white/[0.06] hover:bg-white/[0.025]" : "border-zinc-200 hover:bg-zinc-50"} ${theme.row}`}>
+                          <td data-label="លេខការទិញ" className="px-4 py-3 font-semibold">{purchase.purchaseNo}</td>
+                          <td data-label="អ្នកផ្គត់ផ្គង់" className="px-4 py-3">{purchase.supplierName}</td>
+                          <td data-label="កាលបរិច្ឆេទ" className="px-4 py-3">{purchase.purchaseDate || "-"}</td>
+                          <td data-label="សរុប" className="px-4 py-3">{fmtUsd(purchase.grandTotalUsd || 0)}</td>
+                          <td data-label="បានបង់" className="px-4 py-3 text-emerald-600 dark:text-emerald-400">{fmtUsd(purchase.paidAmountUsd || 0)}</td>
+                          <td data-label="នៅសល់" className={`px-4 py-3 font-semibold ${hasBalance ? "text-amber-500" : "text-emerald-500"}`}>
                             {fmtUsd(balance.usd)}
                           </td>
-                          <td className="px-4 py-3">{paymentModeOptions.find(o => o.value === purchase.paymentMode)?.label ?? (purchase.paymentMode || "-")}</td>
-                          <td className="px-4 py-3">
+                          <td data-label="របៀប" className="px-4 py-3">{paymentModeOptions.find(o => o.value === purchase.paymentMode)?.label ?? (purchase.paymentMode || "-")}</td>
+                          <td data-label="សកម្មភាព" className="px-4 py-3">
                             <div className="flex items-center justify-center gap-2">
                               {hasBalance && isPaymentReady(purchase) && (
                                 <Tooltip label="កត់ការទូទាត់">
@@ -4701,6 +4237,52 @@ export default function Purchases() {
   );
 }
 
+function Purchase3DLoading({ theme, colSpan }) {
+  return (
+    <tr className={`border-t ${theme.row}`}>
+      <td colSpan={colSpan} className="px-4 py-16 text-center">
+        <div
+          className="flex min-h-[230px] flex-col items-center justify-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="relative flex h-32 w-32 items-center justify-center"
+            style={{ perspective: "700px" }}
+          >
+            <div className="absolute bottom-1 h-5 w-20 animate-pulse rounded-[50%] bg-blue-500/25 blur-md" />
+
+            <div className="absolute inset-2 animate-spin rounded-full border border-dashed border-blue-400/50 [animation-duration:3s]" />
+            <div className="absolute inset-5 animate-spin rounded-full border-2 border-transparent border-l-sky-300 border-r-indigo-600 [animation-direction:reverse] [animation-duration:1.8s]" />
+
+            <div
+              className="relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-white/40 bg-gradient-to-br from-sky-300 via-blue-500 to-indigo-700 text-white"
+              style={{
+                transform: "rotateX(12deg) rotateY(-18deg) translateZ(18px)",
+                boxShadow:
+                  "14px 18px 24px rgba(30, 64, 175, 0.3), inset 4px 4px 10px rgba(255,255,255,0.38), inset -5px -7px 12px rgba(49,46,129,0.3)",
+              }}
+            >
+              <div className="absolute inset-1 rounded-[16px] border border-white/20" />
+              <FiShoppingCart className="relative text-3xl drop-shadow-md" />
+              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-400 text-[11px] font-black text-emerald-950 shadow-lg shadow-emerald-400/40">
+                +
+              </span>
+            </div>
+          </div>
+
+          <p className={`mt-3 text-sm font-bold ${theme.pageTitle}`}>
+            រង់ចាំបន្តិច...
+          </p>
+          <p className={`mt-1 text-xs ${theme.muted}`}>
+            កំពុងរៀបចំបញ្ជីការទិញ
+          </p>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function getPageNumbers(currentPage, totalPages) {
   const current = Number(currentPage || 1);
   const total = Number(totalPages || 1);
@@ -4742,21 +4324,21 @@ function ListPagination({ theme, currentPage, lastPage, onPageChange }) {
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" disabled={currentPage <= 1}
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-          className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+          className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
           <FiChevronLeft /> មុន
         </button>
         {pageNumbers.map((item) => item === "..." ? (
           <span key={item} className={`px-2 text-sm font-semibold ${theme.muted}`}>...</span>
         ) : (
           <button key={item} type="button" onClick={() => onPageChange(item)}
-            className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition ${
-              item === currentPage ? "bg-red-600 text-white" : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+            className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition hover:-translate-y-0.5 ${
+              item === currentPage ? "quick-action-icon-3d bg-red-600 text-white" : "table-icon-3d border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
             }`}>{item}
           </button>
         ))}
         <button type="button" disabled={currentPage >= lastPage}
           onClick={() => onPageChange(Math.min(lastPage, currentPage + 1))}
-          className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+          className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
           បន្ទាប់ <FiChevronRight />
         </button>
       </div>

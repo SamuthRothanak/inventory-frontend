@@ -417,6 +417,7 @@ export default function VariantSetupFormModal({
 
   return (
     <ModalShell
+      mobileFullScreen
       title="បន្ថែមមុខទំនិញ"
       subtitle={`ផលិតផល: ${product?.name || product?.productName || "-"}`}
       theme={theme}
@@ -425,11 +426,11 @@ export default function VariantSetupFormModal({
       footer={
         <>
           <button type="button" onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
             បោះបង់
           </button>
           <button type="submit" form="variant-setup-form" disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
             <FiSave />
             {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកមុខទំនិញ"}
           </button>
@@ -571,12 +572,12 @@ export default function VariantSetupFormModal({
         <Section theme={theme} icon={<FiLayers />} title="២. ខ្នាតទំនិញ & តម្លៃ">
           <div className="mb-4 flex flex-wrap justify-end gap-2">
             <button type="button" onClick={() => setQuickUnitOpen(true)}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-500 px-4 text-sm font-semibold text-white hover:bg-zinc-600">
+              className="quick-action-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-zinc-600">
               <FiSettings />
               ប្រភេទខ្នាតទំនិញ
             </button>
             <button type="button" onClick={addUnit}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600">
+              className="quick-action-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600">
               <FiPlus />
               បន្ថែមខ្នាតទំនិញ
             </button>
@@ -632,7 +633,7 @@ export default function VariantSetupFormModal({
                     </div>
                     {unitRows.length > 1 && (
                       <button type="button" onClick={() => removeUnit(unitIndex)}
-                        className="inline-flex h-8 items-center gap-1 rounded-lg bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
+                        className="quick-action-icon-3d inline-flex h-8 items-center gap-1 rounded-lg bg-red-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">
                         <FiTrash2 />
                         លុបខ្នាតទំនិញ
                       </button>
@@ -685,7 +686,7 @@ export default function VariantSetupFormModal({
                     <div className="mb-3 flex items-center justify-between">
                       <p className="text-xs font-bold">តម្លៃសម្រាប់ {unitLabel(unit, unitIndex)}</p>
                       <button type="button" onClick={() => addPriceForUnit(unit.local_key)}
-                        className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-500 px-3 text-xs font-semibold text-white hover:bg-emerald-600">
+                        className="quick-action-icon-3d inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600">
                         <FiPlus />
                         បន្ថែមតម្លៃ
                       </button>
@@ -743,7 +744,7 @@ export default function VariantSetupFormModal({
                                 : "គ្មានអត្រាប្ដូររូបិយប័ណ្ណ"}
                             </p>
                             <button type="button" onClick={() => removePriceRule(idx)}
-                              className="inline-flex h-7 items-center gap-1 rounded-lg bg-red-500 px-2.5 text-[11px] font-semibold text-white hover:bg-red-600">
+                              className="quick-action-icon-3d inline-flex h-7 items-center gap-1 rounded-lg bg-red-500 px-2.5 text-[11px] font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">
                               <FiTrash2 />
                               លុបតម្លៃ
                             </button>
@@ -853,7 +854,7 @@ function Section({ theme, icon, title, subtitle, children }) {
   return (
     <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
       <div className="mb-4 flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+        <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
           {icon}
         </div>
         <div>
@@ -936,7 +937,7 @@ function ImageInput({ label, theme, previewFile, onChange }) {
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
       <div className="rounded-2xl border border-dashed border-zinc-300 bg-white/0 p-4 transition hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
+          <div className="summary-icon-3d flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
             {previewUrl ? <img src={previewUrl} alt="Selected variant" className="h-full w-full object-cover" /> : <FiImage className="text-3xl text-red-500" />}
           </div>
           <div className="min-w-0 flex-1">
@@ -944,12 +945,12 @@ function ImageInput({ label, theme, previewFile, onChange }) {
               onChange={(e) => onChange(e.target.files?.[0] || null)} />
             <div className="flex flex-wrap gap-2">
               <label htmlFor={inputId}
-                className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700">
+                className="quick-action-icon-3d inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-700">
                 <FiImage className="text-lg" /> {previewUrl ? "ប្ដូររូបភាព" : "ជ្រើសរូបភាព"}
               </label>
               {previewUrl && (
                 <button type="button" onClick={handleRemoveImage}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+                  className="table-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
                   <FiXCircle className="text-base" /> លុប
                 </button>
               )}

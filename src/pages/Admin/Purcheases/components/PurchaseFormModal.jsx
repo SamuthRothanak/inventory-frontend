@@ -90,7 +90,7 @@ function DeliveryChoiceCards({ theme, value, onChange, options, error = "" }) {
                   : `${theme.input} ${theme.text} hover:border-emerald-300 hover:bg-emerald-50/40 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10`
               }`}
             >
-              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selected ? "bg-emerald-600 text-white" : "bg-zinc-100 text-zinc-500 dark:bg-white/10 dark:text-zinc-300"}`}>
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selected ? "quick-action-icon-3d bg-emerald-600 text-white" : "table-icon-3d bg-zinc-100 text-zinc-500 dark:bg-white/10 dark:text-zinc-300"}`}>
                 {iconMap[option.value] || <FiTruck />}
               </span>
               <span className="min-w-0">
@@ -130,7 +130,7 @@ function DeliveryFeeChoice({ theme, value, onChange }) {
                 : `${theme.input} ${theme.text} hover:border-emerald-300 hover:bg-emerald-50/40 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10`
             }`}
           >
-            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selected ? "bg-emerald-600 text-white" : "bg-zinc-100 text-zinc-500 dark:bg-white/10 dark:text-zinc-300"}`}>
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selected ? "quick-action-icon-3d bg-emerald-600 text-white" : "table-icon-3d bg-zinc-100 text-zinc-500 dark:bg-white/10 dark:text-zinc-300"}`}>
               {choice.value === "free" ? <FiCheckCircle /> : <FiDollarSign />}
             </span>
             <span className="min-w-0">
@@ -295,6 +295,7 @@ export function PurchaseFormModal({
   return (
 
     <ModalShell
+      mobileFullScreen
 
       title={title}
 
@@ -310,9 +311,9 @@ export function PurchaseFormModal({
 
         <>
 
-          <button type="button" onClick={onClose} className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">បោះបង់</button>
+          <button type="button" onClick={onClose} className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">បោះបង់</button>
 
-          <button type="button" disabled={isSaving} onClick={handleSubmit(() => onSavePrimary())} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"><FiCheckCircle />{isSaving ? "កំពុងរក្សាទុក..." : primarySaveLabel}</button>
+          <button type="button" disabled={isSaving} onClick={handleSubmit(() => onSavePrimary())} className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"><FiCheckCircle />{isSaving ? "កំពុងរក្សាទុក..." : primarySaveLabel}</button>
 
         </>
 
@@ -376,7 +377,7 @@ export function PurchaseFormModal({
 
             </div>
 
-            {!isReceiveMode && <button type="button" onClick={onAddItem} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600"><FiPlus />បន្ថែមទំនិញ</button>}
+            {!isReceiveMode && <button type="button" onClick={onAddItem} className="quick-action-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600"><FiPlus />បន្ថែមទំនិញ</button>}
 
           </div>
 
@@ -453,7 +454,7 @@ export function PurchaseFormModal({
                         })()}
                       </td>
 
-                      <td className="px-3 py-3"><div className="flex items-center justify-center gap-2"><button type="button" onClick={() => onEditItem(item, index)} className="flex h-8 items-center justify-center gap-1 rounded-lg bg-blue-600 px-2 text-xs font-semibold text-white hover:bg-blue-700"><FiEdit2 size={14} />{isReceiveMode ? "ទទួល" : "កែ"}</button>{!isReceiveMode && <button type="button" onClick={() => onRemoveItem(index)} className="flex h-8 items-center justify-center gap-1 rounded-lg bg-red-500 px-2 text-xs font-semibold text-white hover:bg-red-600"><FiTrash size={14} />លុប</button>}</div></td>
+                      <td className="px-3 py-3"><div className="flex items-center justify-center gap-2"><button type="button" onClick={() => onEditItem(item, index)} className="quick-action-icon-3d flex h-8 items-center justify-center gap-1 rounded-lg bg-blue-600 px-2 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700"><FiEdit2 size={14} />{isReceiveMode ? "ទទួល" : "កែ"}</button>{!isReceiveMode && <button type="button" onClick={() => onRemoveItem(index)} className="quick-action-icon-3d flex h-8 items-center justify-center gap-1 rounded-lg bg-red-500 px-2 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600"><FiTrash size={14} />លុប</button>}</div></td>
 
                     </tr>
 
@@ -620,7 +621,7 @@ export function PurchaseFormModal({
                           លុយកាត់លើកក្រោយនៅសល់: {formatCurrencyPair(availableCreditUsd, availableCreditKhr)}
                         </p>
                       </div>
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+                      <div className="table-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
                         <FiCreditCard />
                       </div>
                     </div>
@@ -722,7 +723,7 @@ export function PurchaseFormModal({
                     <p className={`text-base font-extrabold ${theme.text}`}>សង្ខេបការទូទាត់</p>
                     <p className={`mt-0.5 text-xs ${theme.muted}`}>ពិនិត្យចំនួនមុនរក្សាទុក</p>
                   </div>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+                  <div className="summary-icon-3d flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
                     <FiCreditCard />
                   </div>
                 </div>
@@ -804,7 +805,7 @@ export function FlowHelper({ mode, theme }) {
 
       <div className="flex items-start gap-3">
 
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500"><FiInfo /></div>
+        <div className="summary-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500"><FiInfo /></div>
 
         <div>
 

@@ -26,7 +26,7 @@ export function ReceiveReplacementModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បោះបង់
           </button>
@@ -34,7 +34,7 @@ export function ReceiveReplacementModal({
             type="button"
             disabled={isSaving}
             onClick={onSave}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FiSave /> {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទំនិញជំនួស"}
           </button>
@@ -44,7 +44,7 @@ export function ReceiveReplacementModal({
       <div className="space-y-5">
         <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
+            <div className="summary-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
               <FiRotateCcw />
             </div>
             <div className="grid flex-1 grid-cols-1 gap-3 text-sm md:grid-cols-3">
@@ -158,7 +158,7 @@ export function ReceiveReplacementModal({
 
         <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+            <div className="summary-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
               <FiCheckCircle />
             </div>
             <div>

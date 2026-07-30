@@ -177,6 +177,8 @@ export function PurchaseTable({
   onContinuePayment,
   simplified = false,
 }) {
+  const isDark = String(theme?.tableWrap || "").includes("bg-zinc-900");
+
   if (purchases.length === 0) {
     return (
       <div className={`border-t px-4 py-14 text-center ${theme.row}`}>
@@ -200,7 +202,7 @@ export function PurchaseTable({
         <div className="text-center">សកម្មភាព</div>
       </div>
 
-      <div className="divide-y divide-zinc-200 dark:divide-white/10">
+      <div className={`divide-y ${isDark ? "divide-zinc-800" : "divide-zinc-200"}`}>
         {purchases.map((purchase) => {
           const effectiveStatus = getEffectivePurchaseStatus?.(purchase) || purchase.status;
           const itemSummary = getPurchaseItemSummary(purchase);
@@ -303,7 +305,7 @@ export function PurchaseTable({
               className={`grid grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,1.45fr)_minmax(0,1.15fr)_11rem] items-center gap-4 px-5 py-4 transition ${theme.row}`}
             >
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                <div className="table-icon-3d flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
                   <FiShoppingCart size={21} />
                 </div>
                 <div className="min-w-0">
@@ -622,7 +624,7 @@ export function ActionButtons({
   compact = false,
   simplified = false,
 }) {
-  const iconButton = "inline-flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-md ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-4 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40";
+  const iconButton = "quick-action-icon-3d inline-flex h-9 w-9 items-center justify-center rounded-xl text-white ring-1 ring-white/30 transition hover:-translate-y-0.5 focus:outline-none focus:ring-4 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40";
   const paymentStatus = String(purchase.paymentStatus || "").toLowerCase();
   const canEdit =
     [STATUS.DRAFT, STATUS.PENDING_RECEIVE].includes(effectiveStatus) &&
@@ -762,7 +764,7 @@ export function ActionButtons({
   return (
     <div className={`flex flex-wrap items-center ${compact ? "justify-end gap-2" : "gap-2"}`}>
       <Tooltip label="មើលការទិញ">
-        <button type="button" onClick={() => openViewModal(purchase)} className={`${iconButton} bg-gradient-to-b from-amber-400 to-orange-500 shadow-orange-500/20 hover:from-amber-500 hover:to-orange-600 hover:shadow-orange-500/25 focus:ring-orange-500/20`}>
+        <button type="button" onClick={() => openViewModal(purchase)} className={`${iconButton} bg-orange-500 shadow-orange-500/20 hover:bg-orange-600 hover:shadow-orange-500/25 focus:ring-orange-500/20`}>
           <FiEye size={17} />
         </button>
       </Tooltip>
@@ -770,7 +772,7 @@ export function ActionButtons({
       {canEdit && (
         <PermissionGate permission="purchases.update">
           <Tooltip label="កែការទិញ">
-            <button type="button" onClick={() => openEditModal(purchase)} className={`${iconButton} bg-gradient-to-b from-blue-500 to-blue-700 shadow-blue-600/20 hover:from-blue-600 hover:to-blue-800 hover:shadow-blue-600/25 focus:ring-blue-500/20`}>
+            <button type="button" onClick={() => openEditModal(purchase)} className={`${iconButton} bg-blue-600 shadow-blue-600/20 hover:bg-blue-700 hover:shadow-blue-600/25 focus:ring-blue-500/20`}>
               <FiEdit2 size={17} />
             </button>
           </Tooltip>
@@ -779,7 +781,7 @@ export function ActionButtons({
 
       {!simplified && effectiveStatus === STATUS.PENDING_RECEIVE && (
         <Tooltip label="ទទួលទំនិញ">
-          <button type="button" onClick={() => openReceiveGoodsModal(purchase)} className={`${iconButton} bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-indigo-600/20 hover:from-indigo-600 hover:to-indigo-800 hover:shadow-indigo-600/25 focus:ring-indigo-500/20`}>
+          <button type="button" onClick={() => openReceiveGoodsModal(purchase)} className={`${iconButton} bg-indigo-600 shadow-indigo-600/20 hover:bg-indigo-700 hover:shadow-indigo-600/25 focus:ring-indigo-500/20`}>
             <FiTruck size={17} />
           </button>
         </Tooltip>
@@ -787,7 +789,7 @@ export function ActionButtons({
 
       {!simplified && canOpenInventory && (
         <Tooltip label="បញ្ជាក់ស្តុកចូល">
-          <button type="button" onClick={() => handleConfirmStockIn(purchase)} className={`${iconButton} bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-emerald-600/20 hover:from-emerald-500 hover:to-emerald-700 hover:shadow-emerald-600/25 focus:ring-emerald-500/20`}>
+          <button type="button" onClick={() => handleConfirmStockIn(purchase)} className={`${iconButton} bg-emerald-500 shadow-emerald-600/20 hover:bg-emerald-600 hover:shadow-emerald-600/25 focus:ring-emerald-500/20`}>
             <FiCheckCircle size={17} />
           </button>
         </Tooltip>
@@ -795,7 +797,7 @@ export function ActionButtons({
 
       {canContinuePayment && (
         <Tooltip label="ទៅការទូទាត់">
-          <button type="button" onClick={() => onContinuePayment(purchase)} className={`${iconButton} bg-gradient-to-b from-cyan-500 to-blue-600 shadow-blue-600/20 hover:from-cyan-600 hover:to-blue-700 hover:shadow-blue-600/25 focus:ring-blue-500/20`}>
+          <button type="button" onClick={() => onContinuePayment(purchase)} className={`${iconButton} bg-blue-600 shadow-blue-600/20 hover:bg-blue-700 hover:shadow-blue-600/25 focus:ring-blue-500/20`}>
             <FiArrowRightCircle size={17} />
           </button>
         </Tooltip>
@@ -803,7 +805,7 @@ export function ActionButtons({
 
       {!simplified && replacementClaim && (
         <Tooltip label="ទទួលជំនួស អ្នកផ្គត់ផ្គង់">
-          <button type="button" onClick={() => handleReceiveReplacement?.(purchase, replacementClaim)} className={`${iconButton} bg-gradient-to-b from-indigo-500 to-indigo-700 shadow-indigo-600/20 hover:from-indigo-600 hover:to-indigo-800 hover:shadow-indigo-600/25 focus:ring-indigo-500/20`}>
+          <button type="button" onClick={() => handleReceiveReplacement?.(purchase, replacementClaim)} className={`${iconButton} bg-indigo-600 shadow-indigo-600/20 hover:bg-indigo-700 hover:shadow-indigo-600/25 focus:ring-indigo-500/20`}>
             <FiTruck size={17} />
           </button>
         </Tooltip>
@@ -811,7 +813,7 @@ export function ActionButtons({
 
       {!simplified && moneyClaim && openMoneyItemsInClaim.length === 1 && (
         <Tooltip label={normalizeResolutionType(openMoneyItemsInClaim[0].resolutionType || openMoneyItemsInClaim[0].resolution_type) === "refund" ? "ប្រាក់ត្រូវបានសង" : "ដោះស្រាយកាត់លុយលើកក្រោយ"}>
-          <button type="button" onClick={() => handleResolveSupplierClaim?.(purchase, moneyClaim, openMoneyItemsInClaim[0])} className={`${iconButton} bg-gradient-to-b from-emerald-500 to-emerald-700 shadow-emerald-600/20 hover:from-emerald-600 hover:to-emerald-800 hover:shadow-emerald-600/25 focus:ring-emerald-500/20`}>
+          <button type="button" onClick={() => handleResolveSupplierClaim?.(purchase, moneyClaim, openMoneyItemsInClaim[0])} className={`${iconButton} bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700 hover:shadow-emerald-600/25 focus:ring-emerald-500/20`}>
             <FiDollarSign size={17} />
           </button>
         </Tooltip>
@@ -819,7 +821,7 @@ export function ActionButtons({
 
       {!simplified && canClaim && (
         <Tooltip label="បង្កើតការទាមទារ អ្នកផ្គត់ផ្គង់">
-          <button type="button" onClick={() => openPurchaseReturnModal(purchase)} className={`${iconButton} bg-gradient-to-b from-purple-500 to-purple-700 shadow-purple-600/20 hover:from-purple-600 hover:to-purple-800 hover:shadow-purple-600/25 focus:ring-purple-500/20`}>
+          <button type="button" onClick={() => openPurchaseReturnModal(purchase)} className={`${iconButton} bg-purple-600 shadow-purple-600/20 hover:bg-purple-700 hover:shadow-purple-600/25 focus:ring-purple-500/20`}>
             <FiRotateCcw size={17} />
           </button>
         </Tooltip>
@@ -827,7 +829,7 @@ export function ActionButtons({
 
       {canCancel && (
         <Tooltip label="លុបការទិញ">
-          <button type="button" onClick={() => handleCancelPurchase(purchase)} className={`${iconButton} bg-gradient-to-b from-red-500 to-red-700 shadow-red-600/20 hover:from-red-600 hover:to-red-800 hover:shadow-red-600/25 focus:ring-red-500/20`}>
+          <button type="button" onClick={() => handleCancelPurchase(purchase)} className={`${iconButton} bg-red-600 shadow-red-600/20 hover:bg-red-700 hover:shadow-red-600/25 focus:ring-red-500/20`}>
             <FiXCircle size={17} />
           </button>
         </Tooltip>
