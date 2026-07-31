@@ -18,7 +18,12 @@ import {
 import ModalShell from "./ModalShell";
 import SearchableDropdown from "./SearchableDropdown";
 import { CreatableOptionSelect, SizeUnitSelect } from "./SizeUnitSelect";
-import { QuickCreateUnitBox } from "./ProductSetupFormModal";
+import {
+  QuickCreateUnitBox,
+  generateUnitCode,
+  findMatchingUnit,
+  detectUnitType,
+} from "./ProductSetupFormModal";
 
 const DEFAULT_EXCHANGE_RATE = 0;
 const makeLocalKey = (prefix) => `${prefix}_${Date.now()}_${Math.random()}`;
@@ -178,6 +183,12 @@ export default function VariantSetupFormModal({
   const [quickUnit, setQuickUnit] = useState({
     unit_code: "", unit_name: "", unit_type: "piece", allow_decimal: false, status: "active",
   });
+  const quickUnitBoxRef = useRef(null);
+  useEffect(() => {
+    if (quickUnitOpen) {
+      quickUnitBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [quickUnitOpen]);
 
   const [variantForm, setVariantForm] = useState({
     product_id: product?.id || "",
@@ -526,13 +537,38 @@ export default function VariantSetupFormModal({
               <p className={`mt-0.5 text-xs ${theme.muted}`}>សណ្ឋាន ទំហំ ពណ៌ និងរូបភាពសម្រាប់មុខទំនិញនេះ។</p>
             </div>
             <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-            <PackageTypeCombobox
-              label="សណ្ឋានទំនិញ"
-              required
-              theme={theme}
-              value={variantForm.package_type}
-              onChange={(v) => updateVariant("package_type", v)}
-            />
+            <div>
+              <PackageTypeCombobox
+                label="សណ្ឋានទំនិញ"
+                required
+                theme={theme}
+                value={variantForm.package_type}
+                onChange={(v) => updateVariant("package_type", v)}
+              />
+              {variantForm.package_type &&
+                !findMatchingUnit(units, variantForm.package_type) &&
+                !(quickUnitOpen && quickUnit.unit_name.trim().toLowerCase() === variantForm.package_type.trim().toLowerCase()) && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                  <span>&quot;{variantForm.package_type}&quot; មិនទាន់ជាខ្នាតទំនិញនៅឡើយ</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickUnit({
+                        unit_code: generateUnitCode(variantForm.package_type),
+                        unit_name: variantForm.package_type,
+                        unit_type: detectUnitType(variantForm.package_type),
+                        allow_decimal: false,
+                        status: "active",
+                      });
+                      setQuickUnitOpen(true);
+                    }}
+                    className="shrink-0 rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-bold text-white transition hover:-translate-y-0.5 hover:bg-amber-600"
+                  >
+                    បង្កើតជាខ្នាតទំនិញ
+                  </button>
+                </div>
+              )}
+            </div>
             <div>
               <label className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
                 ទំហំ <span className="font-normal">(ស្រេចចិត្ត)</span>
@@ -584,6 +620,7 @@ export default function VariantSetupFormModal({
           </div>
 
           {quickUnitOpen && (
+            <div ref={quickUnitBoxRef}>
             <QuickCreateUnitBox
               theme={theme}
               units={units}
@@ -601,6 +638,7 @@ export default function VariantSetupFormModal({
                 setQuickUnitOpen(false);
               }}
             />
+            </div>
           )}
 
           <div className="space-y-4">

@@ -7,6 +7,7 @@ import {
   formatDateTime,
   formatJsonPreview,
   moduleLabel,
+  refTableLabel,
   translateDescription,
 } from "../utils/auditLogFormat";
 
@@ -111,7 +112,7 @@ export default function AuditLogTable({
                           <p
                             className={`truncate text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-600"}`}
                           >
-                            {row.ref_table}
+                            {refTableLabel(row.ref_table)}
                           </p>
                           <p className={`mt-1 text-xs ${muted}`}>
                             {extractRefLabel(row.description) || `#${row.ref_id}`}

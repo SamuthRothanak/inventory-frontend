@@ -103,7 +103,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "dashboard.view",
     "products.view", "product-variants.view",
     "categories.view", "units.view",
-    "stock.view", "stock-balances.view",
+    "stock-balances.view",
     "stock-movements.view", "inventory-batches.view",
   ],
 };

@@ -340,6 +340,12 @@ export default function ProductManageModal({
                       >
                         ស្តុកក្រោម: {formatLowStockThreshold(variant)}
                       </span>
+
+                      {variant.status !== "active" && (
+                        <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-500">
+                          មិនដំណើរការ
+                        </span>
+                      )}
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -451,7 +457,11 @@ export default function ProductManageModal({
                                   {unit.isBaseUnit ? "ខ្នាតស្តុក" : "ខ្នាតដូរ"}
                                   {unit.isDefaultSaleUnit ? " · លក់ក្នុង POS" : ""}
                                   {unit.isDefaultPurchaseUnit ? " · ទិញពីអ្នកលក់" : ""}
+                                  {unit.status && unit.status !== "active" ? " · អសកម្ម" : ""}
                                 </p>
+                                {unit.barcode && (
+                                  <p className={`mt-1 text-xs ${theme.muted}`}>បាកូដ: {unit.barcode}</p>
+                                )}
                               </div>
                               <div className="flex shrink-0 gap-1">
                                 <button type="button"

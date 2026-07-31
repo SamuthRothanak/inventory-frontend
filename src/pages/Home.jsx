@@ -44,7 +44,7 @@ const mainMenus = [
   { label: "គ្រប់គ្រងផលិតផល",       icon: FiBox,          path: "/home/products",       permission: "products.view" },
   { label: "គ្រប់គ្រងអ្នកផ្គត់ផ្គង់", icon: FiTruck,        path: "/home/suppliers",      permission: "suppliers.view" },
   { label: "គ្រប់គ្រងការទិញ",       icon: FiShoppingCart, path: "/home/purchases",      permission: "purchases.view" },
-  { label: "គ្រប់គ្រងស្តុក",         icon: FiArchive,      path: "/home/inventory",      permission: "stock.view" },
+  { label: "គ្រប់គ្រងស្តុក",         icon: FiArchive,      path: "/home/inventory",      permission: "stock-balances.view" },
   { label: "គ្រប់គ្រងអតិថិជន",       icon: FiUsers,        path: "/home/customer",       permission: "customers.view" },
   { label: "គ្រប់គ្រងការលក់",       icon: FiDollarSign,   path: "/home/sales",          permission: "sales.view" },
   { label: "របាយការណ៍",             icon: FiFileText,     path: "/home/reports",        permission: "reports.sales" },
@@ -56,7 +56,7 @@ const adminMenus = [
 ];
 
 const systemMenus = [
-  { label: "ការកំណត់",          icon: FiSettings,   path: "/home/settings",       permission: "settings.view" },
+  { label: "ការកំណត់",          icon: FiSettings,   path: "/home/settings",       permission: "exchange-rate.view" },
   { label: "អត្រាប្តូរប្រាក់",  icon: FiRefreshCcw, path: "/home/exchange-rate",  permission: "exchange-rate.view" },
   { label: "បម្រុងទុកទិន្ន័យ", icon: FiDatabase,   path: "/home/backup-data",    permission: "backups.view" },
   { label: "កំណត់ហេតុ",         icon: FiActivity,   path: "/home/audit-log",      permission: "audit-log.view" },

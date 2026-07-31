@@ -74,6 +74,28 @@ function sanitizeUnitNameInput(value) {
   return String(value || "").replace(/[^\p{L}\p{M}\s]/gu, "");
 }
 
+// Module-level (not inside QuickCreateUnitBox) and exported so the package-type "create
+// matching unit" nudge — in this file's VariantSetupCard, and in ProductVariantFormModal.jsx's
+// edit-existing-variant form — generates the same code a user typing directly into
+// QuickCreateUnitBox would get. One code-generation rule, not several copies that could drift.
+export function generateUnitCode(unitName) {
+  return transliterateKhmer(String(unitName || "").trim())
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+// Shared by the existing "auto-assign matching unit" effect, the new-product-wizard nudge, and
+// the edit-existing-variant nudge (ProductVariantFormModal.jsx) — one comparison rule everywhere
+// this correlation is checked, not several copies that could drift apart.
+export function findMatchingUnit(units, name) {
+  const target = String(name || "").trim().toLowerCase();
+  if (!target) return null;
+  return units.find(
+    (u) => (u.unit_name || u.unitName || u.unit_code || "").toLowerCase() === target
+  ) || null;
+}
+
 const PACKAGE_TYPES = [
   "ដុំ", "កញ្ចប់", "កញ្ចប់តូច", "ថង់", "ប្រអប់",
   "កេស", "កាតុង", "កំប៉ុង", "ដប", "ដុំរមូរ",
@@ -113,7 +135,7 @@ function cleanNamePart(value) {
     .replace(/[\s\u00A0\u1680\u180E\u2000-\u200D\u202F\u205F\u3000]+/g, " ");
 }
 
-function detectUnitType(unitName) {
+export function detectUnitType(unitName) {
   const value = String(unitName || "").trim().toLowerCase();
   const exactWeightKeywords = ["kg", "kgs", "g"];
   const exactVolumeKeywords = ["ml", "l"];
@@ -573,6 +595,12 @@ function VariantSetupCard({
 }) {
   const confirm = useConfirm();
   const [quickUnitOpen, setQuickUnitOpen] = useState(false);
+  const quickUnitBoxRef = useRef(null);
+  useEffect(() => {
+    if (quickUnitOpen) {
+      quickUnitBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [quickUnitOpen]);
   const [quickUnit, setQuickUnit] = useState({
     unit_code: "",
     unit_name: "",
@@ -645,9 +673,7 @@ function VariantSetupCard({
       .findIndex((u) => u.is_base_unit);
     if (baseUnitIndex === -1) return;
     if (!packageTypeVal) return;
-    const matched = units.find(
-      (u) => (u.unit_name || u.unitName || u.unit_code || "").toLowerCase() === packageTypeVal.toLowerCase()
-    );
+    const matched = findMatchingUnit(units, packageTypeVal);
     if (matched) {
       setValue(`variants.${variantIndex}.units.${baseUnitIndex}.unit_id`, String(matched.id), { shouldValidate: true });
     }
@@ -792,7 +818,7 @@ function VariantSetupCard({
         {/* Variant Code — read-only style, auto-generated */}
         <div>
           <label className={`mb-2 flex h-7 items-center text-xs font-semibold ${theme.muted}`}>
-            លេខកូដមុខទំនិញ <span className="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-500 dark:bg-white/10">auto</span>
+            លេខកូដមុខទំនិញ <span className="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-500 dark:bg-white/10">ស្វ័យប្រវត្តិ</span>
           </label>
           <div className="relative">
             <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
@@ -888,6 +914,29 @@ function VariantSetupCard({
               value={watch(`variants.${variantIndex}.package_type`) || ""}
               onChange={(v) => setValue(`variants.${variantIndex}.package_type`, v, { shouldValidate: true })}
             />
+            {packageTypeVal &&
+              !findMatchingUnit(units, packageTypeVal) &&
+              !(quickUnitOpen && quickUnit.unit_name.trim().toLowerCase() === packageTypeVal.trim().toLowerCase()) && (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                <span>&quot;{packageTypeVal}&quot; មិនទាន់ជាខ្នាតទំនិញនៅឡើយ</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickUnit({
+                      unit_code: generateUnitCode(packageTypeVal),
+                      unit_name: packageTypeVal,
+                      unit_type: detectUnitType(packageTypeVal),
+                      allow_decimal: false,
+                      status: "active",
+                    });
+                    setQuickUnitOpen(true);
+                  }}
+                  className="shrink-0 rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-bold text-white transition hover:-translate-y-0.5 hover:bg-amber-600"
+                >
+                  បង្កើតជាខ្នាតទំនិញ
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
@@ -962,23 +1011,25 @@ function VariantSetupCard({
         </div>
 
         {quickUnitOpen && (
-          <QuickCreateUnitBox
-            theme={theme}
-            units={units}
-            quickUnit={quickUnit}
-            setQuickUnit={setQuickUnit}
-            isCreatingUnit={isCreatingUnit}
-            isUpdatingUnit={isUpdatingUnit}
-            isDeletingUnit={isDeletingUnit}
-            onCreateUnit={onCreateUnit}
-            onUpdateUnit={onUpdateUnit}
-            onDeleteUnit={onDeleteUnit}
-            onClose={() => setQuickUnitOpen(false)}
-            onCreated={() => {
-              setQuickUnit({ unit_code: "", unit_name: "", unit_type: "piece", allow_decimal: false, status: "active" });
-              setQuickUnitOpen(false);
-            }}
-          />
+          <div ref={quickUnitBoxRef}>
+            <QuickCreateUnitBox
+              theme={theme}
+              units={units}
+              quickUnit={quickUnit}
+              setQuickUnit={setQuickUnit}
+              isCreatingUnit={isCreatingUnit}
+              isUpdatingUnit={isUpdatingUnit}
+              isDeletingUnit={isDeletingUnit}
+              onCreateUnit={onCreateUnit}
+              onUpdateUnit={onUpdateUnit}
+              onDeleteUnit={onDeleteUnit}
+              onClose={() => setQuickUnitOpen(false)}
+              onCreated={() => {
+                setQuickUnit({ unit_code: "", unit_name: "", unit_type: "piece", allow_decimal: false, status: "active" });
+                setQuickUnitOpen(false);
+              }}
+            />
+          </div>
         )}
 
         {variantErrors?.units?.message && (
@@ -1277,11 +1328,6 @@ export function QuickCreateUnitBox({
   const [editingUnitId, setEditingUnitId] = useState(null);
   const [unitError, setUnitError] = useState("");
 
-  const generateUnitCode = (unitName) =>
-    transliterateKhmer(String(unitName || "").trim())
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
 
   const getSuggestedUnitType = (unitName = quickUnit.unit_name) =>
     detectUnitType(unitName);

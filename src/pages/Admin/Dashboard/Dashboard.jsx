@@ -28,11 +28,11 @@ const PAYMENT_METHOD_META = {
 // ── Static nav links ──────────────────────────────────────────────
 const QUICK_ACTIONS = [
   { label: "បើក POS",          icon: FiZap,         to: "/pos",                bg: "bg-red-500 hover:bg-red-600 text-white",                                              permission: "sales.create"   },
-  { label: "ស្តុក",            icon: FiArchive,      to: "/home/inventory",     bg: "bg-emerald-600 hover:bg-emerald-700 text-white",                                      permission: "stock.view"     },
+  { label: "ស្តុក",            icon: FiArchive,      to: "/home/inventory",     bg: "bg-emerald-600 hover:bg-emerald-700 text-white",                                      permission: "stock-balances.view" },
   { label: "បន្ថែមការទិញ",     icon: FiShoppingCart, to: "/home/purchases",     bg: "bg-blue-600 hover:bg-blue-700 text-white",                                            permission: "purchases.view" },
   { label: "បន្ថែមទំនិញ",      icon: FiBox,          to: "/home/products",      bg: "bg-violet-600 hover:bg-violet-700 text-white",                                        permission: "products.view"  },
   { label: "របាយការណ៍",        icon: FiBarChart2,    to: "/home/reports",       bg: "bg-amber-500 hover:bg-amber-600 text-white",                                          permission: "reports.sales"  },
-  { label: "អត្រាប្តូរប្រាក់", icon: FiRefreshCw,    to: "/home/exchange-rate", bg: "bg-zinc-600 hover:bg-zinc-700 text-white dark:bg-zinc-700 dark:hover:bg-zinc-600",   permission: "settings.view"  },
+  { label: "អត្រាប្តូរប្រាក់", icon: FiRefreshCw,    to: "/home/exchange-rate", bg: "bg-zinc-600 hover:bg-zinc-700 text-white dark:bg-zinc-700 dark:hover:bg-zinc-600",   permission: "exchange-rate.view" },
 ];
 
 const ACTIVITY_META = {

@@ -1704,7 +1704,7 @@
               />
             </div>
 
-            <PermissionGate permission="stock.receive">
+            <PermissionGate permission="purchases.stock-in">
               <button
                 type="button"
                 onClick={openConfirmStockInModal}
@@ -1718,7 +1718,7 @@
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <PermissionGate permission="stock.receive">
+          <PermissionGate permission="purchases.stock-in">
             <ActionCard
               theme={theme}
               icon={<FiTruck className="text-4xl text-emerald-500" />}
@@ -1789,7 +1789,7 @@
             </div>
           </div>
 
-          <PermissionGate permission="stock.receive">
+          <PermissionGate permission="purchases.stock-in">
             <button
               type="button"
               disabled={pendingPurchases.length === 0}

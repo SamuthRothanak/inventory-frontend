@@ -210,6 +210,12 @@ export default function ProductDetailModal({
                     >
                       ស្តុកក្រោម: {formatLowStockThreshold(variant)}
                     </span>
+
+                    {variant.status !== "active" && (
+                      <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-500">
+                        មិនដំណើរការ
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -241,7 +247,14 @@ export default function ProductDetailModal({
                         {unit.isDefaultPurchaseUnit
                           ? " · ទិញស្វ័យប្រវត្ដិ"
                           : ""}
+                        {unit.status && unit.status !== "active" ? " · អសកម្ម" : ""}
                       </p>
+
+                      {unit.barcode && (
+                        <p className={`mt-1 text-xs ${theme.muted}`}>
+                          បាកូដ: {unit.barcode}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -267,6 +280,11 @@ export default function ProductDetailModal({
                           <div>
                             <p className="font-semibold">
                               {({ retail: "លក់រាយ", wholesale: "លក់ដុំ", all: "ទាំងអស់" }[String(rule.appliesTo).toLowerCase()] ?? rule.appliesTo)}
+                              {rule.status && rule.status !== "active" && (
+                                <span className="ml-2 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-500">
+                                  អសកម្ម
+                                </span>
+                              )}
                             </p>
                             <p className={`mt-1 text-xs ${theme.muted}`}>
                               ខ្នាតទំនិញ: {rule.unitName || "-"} · លក់ចាប់ពីចំនួន:{" "}

@@ -1,8 +1,25 @@
 import React from "react";
 import { FiActivity, FiDatabase, FiMonitor, FiUser, FiX } from "react-icons/fi";
-import { actionLabel, actionTone, changeFieldLabel, extractRefLabel, formatAuditValue, formatDateTime, moduleLabel, translateDescription } from "../utils/auditLogFormat";
+import { actionLabel, actionTone, changeFieldLabel, extractRefLabel, formatAuditValue, formatDateTime, moduleLabel, refTableLabel, translateDescription } from "../utils/auditLogFormat";
 
-function JsonPanel({ title, value, isDark }) {
+// old_values/new_values can differ in raw type (e.g. "40" vs 40, or 1 vs true) without
+// representing a real change, so compare their string form rather than the raw values.
+function valuesEqual(a, b) {
+  return String(a ?? "") === String(b ?? "");
+}
+
+function getChangedKeys(oldValues, newValues) {
+  const oldObj = oldValues && typeof oldValues === "object" ? oldValues : {};
+  const newObj = newValues && typeof newValues === "object" ? newValues : {};
+  const keys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
+  const changed = new Set();
+  keys.forEach((key) => {
+    if (!valuesEqual(oldObj[key], newObj[key])) changed.add(key);
+  });
+  return changed;
+}
+
+function JsonPanel({ title, value, isDark, changedKeys }) {
   const keys = value && typeof value === "object" ? Object.keys(value) : [];
 
   return (
@@ -11,14 +28,32 @@ function JsonPanel({ title, value, isDark }) {
       {keys.length === 0 ? (
         <p className={`text-xs ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>-</p>
       ) : (
-        <div className="space-y-2 text-xs leading-6">
+        <div className="space-y-1 text-xs leading-6">
           {keys.map((key) => {
             const fieldValue = value[key];
             const displayValue = formatAuditValue(key, fieldValue);
+            const isChanged = changedKeys?.has(key);
             return (
-              <div key={key} className="flex items-baseline justify-between gap-3">
+              <div
+                key={key}
+                className={`flex items-baseline justify-between gap-3 rounded-lg px-2 py-1 ${
+                  isChanged ? (isDark ? "bg-amber-500/10" : "bg-amber-50") : ""
+                }`}
+              >
                 <span className={isDark ? "text-zinc-400" : "text-zinc-500"}>{changeFieldLabel(key)}</span>
-                <span className={`font-semibold ${isDark ? "text-zinc-200" : "text-zinc-700"}`}>{displayValue}</span>
+                <span
+                  className={`font-semibold ${
+                    isChanged
+                      ? isDark
+                        ? "text-amber-400"
+                        : "text-amber-700"
+                      : isDark
+                        ? "text-zinc-200"
+                        : "text-zinc-700"
+                  }`}
+                >
+                  {displayValue}
+                </span>
               </div>
             );
           })}
@@ -31,6 +66,7 @@ function JsonPanel({ title, value, isDark }) {
 export default function AuditLogDetailModal({ log, isDark = false, onClose }) {
   if (!log) return null;
 
+  const changedKeys = getChangedKeys(log.old_values, log.new_values);
   const tone = actionTone(log.action);
   const toneClass = {
     emerald: "bg-emerald-500/10 text-emerald-500",
@@ -77,7 +113,7 @@ export default function AuditLogDetailModal({ log, isDark = false, onClose }) {
                 <FiDatabase />
               </div>
               <p className={`text-xs font-bold uppercase ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>ឯកសារ</p>
-              <p className="mt-1 font-bold">{log.ref_table || "-"} {extractRefLabel(log.description) || `#${log.ref_id || "-"}`}</p>
+              <p className="mt-1 font-bold">{log.ref_table ? refTableLabel(log.ref_table) : "-"} {extractRefLabel(log.description) || `#${log.ref_id || "-"}`}</p>
             </div>
             <div className={`rounded-2xl border p-4 ${isDark ? "border-white/10 bg-[#202023]" : "border-zinc-200 bg-white"}`}>
               <div className="table-icon-3d mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10 text-xl text-emerald-500">
@@ -92,9 +128,15 @@ export default function AuditLogDetailModal({ log, isDark = false, onClose }) {
             <p className={`text-sm font-bold ${isDark ? "text-zinc-300" : "text-zinc-600"}`}>ការពិពណ៌នា</p>
             <p className="mt-2 leading-7">{translateDescription(log.description)}</p>
           </div>
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <JsonPanel title="តម្លៃមុន" value={log.old_values} isDark={isDark} />
-            <JsonPanel title="តម្លៃក្រោយ" value={log.new_values} isDark={isDark} />
+          {changedKeys.size > 0 && (
+            <p className={`mt-5 text-xs ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+              <span className={`mr-1 inline-block h-2 w-2 rounded-full align-middle ${isDark ? "bg-amber-400" : "bg-amber-500"}`} />
+              បន្ទាត់ពណ៌លឿង គឺជាទិន្នន័យដែលពិតជាបានផ្លាស់ប្តូរ
+            </p>
+          )}
+          <div className={`grid gap-4 md:grid-cols-2 ${changedKeys.size > 0 ? "mt-2" : "mt-5"}`}>
+            <JsonPanel title="តម្លៃមុន" value={log.old_values} isDark={isDark} changedKeys={changedKeys} />
+            <JsonPanel title="តម្លៃក្រោយ" value={log.new_values} isDark={isDark} changedKeys={changedKeys} />
           </div>
         </div>
         <div className={`flex justify-end border-t p-4 sm:p-5 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
