@@ -14,7 +14,7 @@ import {
 } from "../../Reports/utils/reportFormat";
 
 export default function SalesActivityChart({ theme, isDark, data, period, onPeriodChange }) {
-  const periods = ["សប្ដាហ៍", "ខែ", "ឆ្នាំ"];
+  const periods = ["ថ្ងៃនេះ", "សប្ដាហ៍", "ខែ", "ឆ្នាំ"];
   const chartScale = buildMoneyChartScale(
     data.map((item) => ({
       received: Number(item.received || 0),
@@ -22,6 +22,7 @@ export default function SalesActivityChart({ theme, isDark, data, period, onPeri
     }))
   );
   const periodDetail = {
+    "ថ្ងៃនេះ": "បែងចែកតាមម៉ោង 00:00 ដល់ 23:00",
     "សប្ដាហ៍": "ចាប់ពីថ្ងៃចន្ទ ដល់ថ្ងៃអាទិត្យ",
     "ខែ": "បែងចែកជា ៤ សប្ដាហ៍ក្នុងខែ",
     "ឆ្នាំ": "បែងចែកតាមខែ មករា ដល់ធ្នូ",

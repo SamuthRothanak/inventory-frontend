@@ -391,6 +391,8 @@ export default function Report() {
   const purchaseDetails = d?.purchase_details ?? EMPTY_LIST;
   const purchasesBySupplier = d?.purchases_by_supplier ?? EMPTY_LIST;
   const purchaseReturns = d?.purchase_returns ?? EMPTY_LIST;
+  const salesReturnItems = d?.sales_return_items ?? EMPTY_LIST;
+  const salesReturnItemsByProduct = d?.sales_return_items_by_product ?? EMPTY_LIST;
   const paymentTransactions = d?.payment_transactions ?? EMPTY_LIST;
   const lowStock      = d?.low_stock      ?? EMPTY_LIST;
   const recentActs    = d?.recent_activities ?? EMPTY_LIST;
@@ -1828,11 +1830,17 @@ export default function Report() {
             <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>សង្ខេបការលក់</h2>
             <p className={`mt-1 text-sm ${theme.muted}`}>លក់បានសរុប ប្រាក់លក់បានពិត និងការត្រឡប់/សងទឹកប្រាក់</p>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {/* "ត្រឡប់/សងទឹកប្រាក់" split into cash vs non-cash as 2 plain cards (not sub-rows
+              inside one dense card) — a replacement/store-credit return keeps the customer's
+              original payment (no cash moves), so blending it into one figure titled with
+              "ប្រាក់" (money) overstated how much cash actually left the register. Same simple
+              card shape as the other two so all four read at a glance. */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {[
               ["លក់បានសរុប", fmtUsd(stats.total_sales_usd), formatKhr(stats.total_sales_khr), "text-emerald-600", "តម្លៃវិក្កយបត្រលក់ទាំងអស់ក្នុងរយៈពេលនេះ"],
               ["ប្រាក់លក់បានពិត", fmtUsd(realSalesUsd), formatKhr(realSalesKhr), "text-blue-600", "លុយបានទទួលជាក់ស្តែង (ក្រោយដកសងវិញរួច)"],
-              ["ត្រឡប់/សងទឹកប្រាក់", fmtUsd(stats.sales_returns_usd), formatKhr(stats.sales_returns_khr), "text-amber-600", "ការទាមទារត្រឡប់សរុប (មិនទាន់ដកចេញពីលុយទទួល)"],
+              ["ត្រឡប់ - សងលុយ", fmtUsd(stats.sales_returns_cash_usd), formatKhr(stats.sales_returns_cash_khr), "text-red-500", "លុយពិតដែលបានចេញឲ្យអតិថិជនវិញ"],
+              ["ត្រឡប់ - ដូរទំនិញ/ក្រេឌីត", fmtUsd(stats.sales_returns_non_cash_usd), formatKhr(stats.sales_returns_non_cash_khr), "text-amber-600", "គ្មានលុយចេញពីហាង គ្រាន់តែដូរទំនិញ/ផ្តល់ក្រេឌីត"],
             ].map(([label, value, khrValue, valueClass, hint]) => (
               <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
                 <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
@@ -1972,7 +1980,7 @@ export default function Report() {
           { key: "date", label: "ថ្ងៃ/ម៉ោង" },
           { key: "saleNo", label: "វិក្កយបត្រ" },
           { key: "customerName", label: "អតិថិជន" },
-          { key: "method", label: "វិធី" },
+          { key: "method", label: "វិធី", render: (row) => METHOD_LABEL[row.method] || row.method },
           { key: "provider", label: "ប្រភព" },
           { key: "receivedAmount", label: "បានទទួល", render: (row) => `${Number(row.receivedAmount || 0).toLocaleString("en-US")} ${row.currency || ""}` },
           { key: "amountUsd", label: "ស្មើ USD", render: (row) => fmtUsd(row.amountUsd), className: "font-bold text-emerald-600" },
@@ -1998,6 +2006,36 @@ export default function Report() {
             </div>
           </div>
         </div>
+      )}
+
+      {!suppressReport && reportTab === "sales" && showReportType("return") && renderReportTable(
+        "សង្ខេបតាមផលិតផល",
+        "ផលិតផលណាខ្លះត្រូវបានត្រឡប់ញឹកញាប់ និងដោះស្រាយបែបណា",
+        [
+          { key: "productName", label: "ផលិតផល" },
+          { key: "returnCount", label: "ចំនួនដងត្រឡប់" },
+          { key: "refundQty", label: "ចំនួនសងលុយ" },
+          { key: "refundUsd", label: "តម្លៃសងលុយ", render: (row) => fmtUsd(row.refundUsd), className: "font-bold text-red-500" },
+          { key: "replacementQty", label: "ចំនួនដូរទំនិញ" },
+          { key: "replacementUsd", label: "តម្លៃដូរទំនិញ", render: (row) => fmtUsd(row.replacementUsd), className: "font-bold text-amber-600" },
+        ],
+        salesReturnItemsByProduct
+      )}
+
+      {!suppressReport && reportTab === "sales" && showReportType("return") && renderReportTable(
+        "លម្អិតការត្រឡប់ការលក់",
+        "បញ្ជីទំនិញត្រឡប់ម្តងមួយៗក្នុងរយៈពេលដែលបានជ្រើស",
+        [
+          { key: "returnNo", label: "លេខត្រឡប់" },
+          { key: "date", label: "ថ្ងៃ/ម៉ោង" },
+          { key: "productName", label: "ផលិតផល" },
+          { key: "qty", label: "ចំនួន" },
+          { key: "condition", label: "ស្ថានភាពទំនិញ", render: (row) => formatCondition(row.condition) },
+          { key: "resolutionType", label: "ដំណោះស្រាយ", render: (row) => formatResolutionType(row.resolutionType) },
+          { key: "amountUsd", label: "តម្លៃ", render: (row) => fmtUsd(row.amountUsd), className: "font-bold text-amber-600" },
+          { key: "status", label: "ស្ថានភាព", render: (row) => statusLabel(row.status) },
+        ],
+        salesReturnItems
       )}
 
       {!suppressReport && reportTab === "purchases" && showReportType("return") && (

@@ -537,16 +537,24 @@ export default function Purchases() {
 
   const handleExport = (type) => {
     setExportMenuOpen(false);
+    const exportFilters = {
+      search: searchTerm.trim(),
+      status: statusFilter,
+      paymentStatus: paymentStatusFilter,
+      dateFilter,
+      dateFrom,
+      dateTo,
+    };
     if (type === "pdf") {
-      const opened = exportPurchasesPdf(exportPurchases);
+      const opened = exportPurchasesPdf(exportPurchases, exportFilters);
       if (!opened) window.alert("PDF export was blocked. Please allow pop-ups and try again.");
       return;
     }
     if (type === "excel") {
-      exportPurchasesExcel(exportPurchases);
+      exportPurchasesExcel(exportPurchases, exportFilters);
       return;
     }
-    exportPurchasesCsv(exportPurchases);
+    exportPurchasesCsv(exportPurchases, exportFilters);
   };
 
   // Client-computed pagination meta over exportPurchases (the full filtered list) — replaces the
@@ -3121,7 +3129,7 @@ export default function Purchases() {
             )}
 
             <div className="flex items-center justify-between px-5 py-3">
-              <p className={`text-xs ${theme.muted}`}>បង្ហាញ {pagination.from || 0}–{pagination.to || filteredPurchases.length} នៃ {pagination.total || purchases.length} ការទិញ</p>
+              <p className={`text-xs ${theme.muted}`}>បង្ហាញ {pagination.from}–{pagination.to} នៃ {pagination.total} ការទិញ</p>
               <div className="flex items-center gap-2">
                 <span className={`text-xs ${theme.muted}`}>ចំនួនទាមទារ: {formatMoney(totalPurchaseReturnAmount)}</span>
                 <div className="relative">

@@ -51,14 +51,16 @@ const CONDITION_LABEL_KH = {
   good:          "ល្អ",
   over_supplied: "ដឹកលើស",
   quality_issue: "បញ្ហាគុណភាព",
+  defective:     "គ្មានគុណភាព",
   other:         "ផ្សេងទៀត",
 };
 
 const RESOLUTION_LABEL_KH = {
-  replacement: "ជំនួសទំនិញថ្មី",
-  refund:      "សងលុយ",
-  credit_note: "កាត់លុយលើវិក្កយបត្រក្រោយ",
-  none:        "លះបង់ការទាមទារ",
+  replacement:  "ជំនួសទំនិញថ្មី",
+  refund:       "សងលុយ",
+  credit_note:  "កាត់លុយលើវិក្កយបត្រក្រោយ",
+  store_credit: "ក្រេឌីតហាង",
+  none:         "លះបង់ការទាមទារ",
 };
 
 export function formatCondition(value = "") {

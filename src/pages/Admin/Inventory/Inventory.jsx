@@ -1049,16 +1049,17 @@
 
     const handleInventoryExport = (type) => {
       setExportMenuOpen(false);
+      const exportFilters = { search: searchTerm.trim(), status: statusFilter };
       if (type === "pdf") {
-        const opened = exportInventoryPdf(filteredInventory);
+        const opened = exportInventoryPdf(filteredInventory, exportFilters);
         if (!opened) window.alert("Browser បាន block popup។ សូមអនុញ្ញាត popup រួច Export ម្តងទៀត។");
         return;
       }
       if (type === "excel") {
-        exportInventoryExcel(filteredInventory);
+        exportInventoryExcel(filteredInventory, exportFilters);
         return;
       }
-      exportInventoryCsv(filteredInventory);
+      exportInventoryCsv(filteredInventory, exportFilters);
     };
 
     const inventoryPageNumbers = useMemo(
@@ -1462,6 +1463,67 @@
       closeModal();
     };
 
+    // Shared by validateAdjustment() (on submit) and the live-preview effect below (as the
+    // user types) — one rule, not two copies that could silently drift apart.
+    const getAdjustmentQtyError = (item, form) => {
+      if (!item || form.adjustmentType !== "decrease") return "";
+
+      const selectedUnit =
+        item.units.find((unit) => unit.unitName === form.unitName) ||
+        item.units.find((unit) => unit.isBaseUnit) ||
+        item.units[0];
+
+      const baseQty =
+        Number(form.qty || 0) * Number(selectedUnit?.conversionQty || 1);
+
+      if (baseQty > Number(item.stockBaseQty || 0)) {
+        return `មិនអាចដកចេញច្រើនជាង ${Number(
+          item.stockBaseQty || 0
+        ).toLocaleString()} ${item.baseUnit} ទេ`;
+      }
+
+      if (form.inventoryBatchId) {
+        const selectedBatch = item.batches.find(
+          (batch) => String(batch.id) === String(form.inventoryBatchId)
+        );
+
+        if (selectedBatch && baseQty > Number(selectedBatch.qtyRemainingBase || 0)) {
+          return `Batch ដែលជ្រើសមានតែ ${Number(
+            selectedBatch.qtyRemainingBase || 0
+          ).toLocaleString()} ${item.baseUnit} ប៉ុណ្ណោះ`;
+        }
+      }
+
+      return "";
+    };
+
+    // Live feedback while the stock-out modal is open — re-checks the qty-vs-available rule on
+    // every keystroke (qty/unit/batch change) instead of only at submit time, so a user typing a
+    // quantity that exceeds the selected batch (or the item's total stock) sees the warning
+    // immediately rather than after clicking "រក្សាទុក".
+    useEffect(() => {
+      if (modalMode !== "adjustment_in" && modalMode !== "adjustment_out") return;
+
+      const item = inventory.find(
+        (inventoryItem) => String(inventoryItem.id) === String(adjustmentForm.inventoryId)
+      );
+
+      const qtyError = getAdjustmentQtyError(item, adjustmentForm);
+
+      setErrors((previous) =>
+        (previous.qty || "") === qtyError ? previous : { ...previous, qty: qtyError }
+      );
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+      modalMode,
+      inventory,
+      adjustmentForm.inventoryId,
+      adjustmentForm.unitName,
+      adjustmentForm.qty,
+      adjustmentForm.inventoryBatchId,
+      adjustmentForm.adjustmentType,
+    ]);
+
     const validateAdjustment = () => {
       const nextErrors = {};
       const parsedForm = stockAdjustmentFormSchema.safeParse(adjustmentForm);
@@ -1484,33 +1546,9 @@
         nextErrors.inventoryId = "សូមជ្រើសទំនិញស្តុក";
       }
 
-      if (item && adjustmentForm.adjustmentType === "decrease") {
-        const selectedUnit =
-          item.units.find((unit) => unit.unitName === adjustmentForm.unitName) ||
-          item.units.find((unit) => unit.isBaseUnit) ||
-          item.units[0];
-
-        const baseQty =
-          Number(adjustmentForm.qty || 0) *
-          Number(selectedUnit?.conversionQty || 1);
-
-        if (baseQty > Number(item.stockBaseQty || 0)) {
-          nextErrors.qty = `មិនអាចដកចេញច្រើនជាង ${Number(
-            item.stockBaseQty || 0
-          ).toLocaleString()} ${item.baseUnit} ទេ`;
-        }
-
-        if (adjustmentForm.inventoryBatchId) {
-          const selectedBatch = item.batches.find(
-            (batch) => String(batch.id) === String(adjustmentForm.inventoryBatchId)
-          );
-
-          if (selectedBatch && baseQty > Number(selectedBatch.qtyRemainingBase || 0)) {
-            nextErrors.qty = `Batch ដែលជ្រើសមានតែ ${Number(
-              selectedBatch.qtyRemainingBase || 0
-            ).toLocaleString()} ${item.baseUnit} ប៉ុណ្ណោះ`;
-          }
-        }
+      const qtyError = getAdjustmentQtyError(item, adjustmentForm);
+      if (qtyError) {
+        nextErrors.qty = qtyError;
       }
 
       setErrors(nextErrors);

@@ -24,3 +24,8 @@ export const completeSalesReturnApi = async (id) => {
   const response = await api.post(`/sales-returns/${id}/complete`);
   return response.data;
 };
+
+export const recordSalesReturnRefundApi = async (id, payload) => {
+  const response = await api.post(`/sales-returns/${id}/refund`, payload);
+  return response.data;
+};

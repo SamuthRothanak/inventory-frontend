@@ -32,7 +32,9 @@ import { ReturnSaleModal } from "./components/ReturnSaleModal";
 import { ViewSaleModal } from "./components/ViewSaleModal";
 import SalePrintModal from "./components/SalePrintModal";
 import PendingReturnsPanel from "./components/PendingReturnsPanel";
+import UnrefundedReturnsPanel from "./components/UnrefundedReturnsPanel";
 import ViewPendingReturnModal from "./components/ViewPendingReturnModal";
+import RecordRefundModal from "./components/RecordRefundModal";
 import PermissionGate from "../../../components/PermissionGate";
 import { useConfirm } from "../../../components/ConfirmDialog";
 import { defaultReturnForm, validateSaleReturn } from "./schemas/saleReturnSchema";
@@ -45,6 +47,7 @@ import {
   approveSalesReturnApi,
   rejectSalesReturnApi,
   completeSalesReturnApi,
+  recordSalesReturnRefundApi,
 } from "../../../services/salesReturn.service";
 
 // Calendar-day key in the *local* timezone (not UTC) — staff run this app physically in
@@ -73,6 +76,7 @@ function transformSale(s) {
     invoiceCurrency: s.invoice_currency,
     exchangeRateKhrPerUsd: s.exchange_rate_khr_per_usd,
     saleDate: toLocalDateKey(soldAt),
+    soldAtHour: soldAt.getHours(),
     displayDate: soldAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
     subtotal: roundUsd(s.subtotal_usd),
     discountTotal: roundUsd(s.discount_total_usd),
@@ -161,6 +165,23 @@ export default function Sale() {
     return [];
   }, [pendingReturnsQuery.data]);
 
+  // Returns that already went through complete() (stock already restocked) but resolved as
+  // "refund" and never had recordRefund() called for them — before RecordRefundModal existed,
+  // completing a refund-type return had literally no follow-up step anywhere in the app, so
+  // every one of these silently stayed refund_status="pending" forever and vanished from
+  // pendingReturnsQuery above (it only fetches pending_approval/approved). Surfacing them here
+  // is what lets a cashier go back and record a refund that was already paid out by hand.
+  const unrefundedReturnsQuery = useQuery({
+    queryKey: ["sales-returns", "unrefunded"],
+    queryFn: () => getSalesReturnsApi({ status: "completed", refund_status: "pending", per_page: 100 }),
+  });
+
+  const unrefundedReturns = useMemo(() => {
+    const res = unrefundedReturnsQuery.data;
+    const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.data?.data) ? res.data.data : [];
+    return list.filter((ret) => ret.resolution_type === "refund");
+  }, [unrefundedReturnsQuery.data]);
+
   // sale_item_id -> qty already claimed by a return still pending_approval/approved (not yet
   // completed/rejected) — nothing else marks these items as unreturnable, so without this the
   // return modal would let staff submit a duplicate for the same item and only find out it's
@@ -231,6 +252,15 @@ export default function Sale() {
   const [toast, setToast] = useState(null);
   const [processingReturnId, setProcessingReturnId] = useState(null);
   const [viewingReturn, setViewingReturn] = useState(null);
+  const [refundTarget, setRefundTarget] = useState(null); // { ret, needsApprove }
+  const [refundForm, setRefundForm] = useState({
+    refund_method: "cash",
+    refund_provider_name: "",
+    refund_reference_no: "",
+    refund_currency: "USD",
+    refund_amount_input: "",
+    refund_exchange_rate_used: "",
+  });
 
   const showToast = (msg) => {
     setToast(msg);
@@ -409,6 +439,32 @@ export default function Sale() {
 
   const [chartPeriod, setChartPeriod] = useState("សប្ដាហ៍");
 
+  const todayChartData = useMemo(() => {
+    // Shop opens at 06:00 — hours before that never have sales, so starting the axis there
+    // (instead of 00:00) keeps the chart from being mostly a flat empty line before opening.
+    const OPEN_HOUR = 6;
+    const totals = Array.from({ length: 24 - OPEN_HOUR }, () => ({ received: 0, deferred: 0 }));
+
+    for (const sale of sales) {
+      if (
+        sale.saleDate === today &&
+        sale.saleStatus === "completed" &&
+        sale.paymentStatus !== "refunded" &&
+        sale.soldAtHour >= OPEN_HOUR
+      ) {
+        const idx = sale.soldAtHour - OPEN_HOUR;
+        totals[idx].received += Number(sale.paidTotal || 0);
+        totals[idx].deferred += Number(sale.balanceTotal || 0);
+      }
+    }
+
+    return totals.map((t, idx) => ({
+      day: `${String(idx + OPEN_HOUR).padStart(2, "0")}:00`,
+      received: t.received,
+      deferred: t.deferred,
+    }));
+  }, [sales, today]);
+
   const weeklyChartData = useMemo(() => {
     const DAYS = ["ច័ន្ទ", "អង្គារ", "ពុធ", "ព្រ.ហ", "សុក្រ", "សៅរ៏", "អាទិត្យ"];
     const totals = Object.fromEntries(DAYS.map((d) => [d, { received: 0, deferred: 0 }]));
@@ -486,6 +542,7 @@ export default function Sale() {
   }, [sales]);
 
   const activeChartData =
+    chartPeriod === "ថ្ងៃនេះ" ? todayChartData :
     chartPeriod === "ខែ" ? monthlyChartData :
     chartPeriod === "ឆ្នាំ" ? yearlyChartData :
     weeklyChartData;
@@ -859,7 +916,10 @@ export default function Sale() {
     mutationFn: (payload) => createSalesReturnApi(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-sales"] });
-      queryClient.invalidateQueries({ queryKey: ["sales-returns", "pending_approval"] });
+      // Must match pendingReturnsQuery's actual key ("pending_review") — this used to say
+      // "pending_approval", a key nothing was ever registered under, so submitting a new
+      // return never refreshed the "រង់ចាំអនុម័ត" tab/count; only a manual page reload did.
+      queryClient.invalidateQueries({ queryKey: ["sales-returns", "pending_review"] });
       closeModal();
       showToast(
         returnForm.status === "completed"
@@ -933,7 +993,83 @@ export default function Sale() {
     onSettled: () => setProcessingReturnId(null),
   });
 
+  // resolution_type === "refund" returns need one more step than replacement/store_credit —
+  // completing them doesn't itself record that cash actually left the register (that's a
+  // separate call the app previously had no UI for at all: every refund-type return silently
+  // stayed refund_status="pending" forever, so "ប្រាក់លក់បានពិត" in Reports never reflected
+  // real refunds paid out). This mutation chains whatever backend calls are still needed
+  // (approve+complete, or just complete, depending on where the return already was) with the
+  // refund record itself, so from the cashier's side it's one action same as the plain button.
+  const refundReturnMutation = useMutation({
+    mutationFn: async ({ ret, needsApprove, payload }) => {
+      if (needsApprove) {
+        await approveSalesReturnApi(ret.id);
+      }
+      // Already-completed returns (the "unrefunded" list below) must NOT go through
+      // complete() again — it requires status==="approved" and 422s otherwise.
+      if (ret.status !== "completed") {
+        await completeSalesReturnApi(ret.id);
+      }
+      return recordSalesReturnRefundApi(ret.id, payload);
+    },
+    onSuccess: () => {
+      invalidatePendingReturns();
+      queryClient.invalidateQueries({ queryKey: ["sales-returns", "unrefunded"] });
+      showToast("បានកត់ត្រាការសងប្រាក់រួចរាល់!");
+      setRefundTarget(null);
+    },
+    onError: (err) => {
+      alert(getReturnActionErrorMessage(err, "ការកត់ត្រាការសងប្រាក់បរាជ័យ។ សូមព្យាយាមម្តងទៀត។"));
+    },
+    onSettled: () => setProcessingReturnId(null),
+  });
+
+  const openRefundModal = (ret, needsApprove) => {
+    setRefundTarget({ ret, needsApprove });
+    setRefundForm({
+      refund_method: "cash",
+      refund_provider_name: "",
+      refund_reference_no: "",
+      refund_currency: "USD",
+      refund_amount_input: String(ret.total_amount_usd || ""),
+      refund_exchange_rate_used: String(ret.exchange_rate_used || ""),
+    });
+  };
+
+  const handleRefundFormChange = (key, value) => {
+    setRefundForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSubmitRefund = () => {
+    if (!refundTarget) return;
+    const { ret, needsApprove } = refundTarget;
+    setProcessingReturnId(ret.id);
+    refundReturnMutation.mutate({
+      ret,
+      needsApprove,
+      payload: {
+        refund_method: refundForm.refund_method,
+        refund_provider_name: refundForm.refund_provider_name || undefined,
+        refund_reference_no: refundForm.refund_reference_no || undefined,
+        refund_currency: refundForm.refund_currency,
+        refund_amount_input: Number(refundForm.refund_amount_input || 0),
+        refund_exchange_rate_used:
+          refundForm.refund_currency === "KHR"
+            ? Number(refundForm.refund_exchange_rate_used || 0) || undefined
+            : undefined,
+      },
+    });
+  };
+
   const handleApprovePendingReturn = async (ret) => {
+    // resolution_type "refund" needs cash-refund details recorded, not just a plain
+    // confirm — route through the refund modal instead (it does approve+complete+refund
+    // together on submit, same one-click feel as every other return type still gets below).
+    if (ret.resolution_type === "refund") {
+      openRefundModal(ret, true);
+      return;
+    }
+
     const ok = await confirm(
       `តើអ្នកប្រាកដថាចង់អនុម័តការត្រឡប់ ${ret.sales_return_no} សម្រាប់ ${ret.original_sale_no_snapshot}? ស្តុក/ការសងប្រាក់ នឹងប៉ះពាល់ភ្លាមៗ។`,
       { title: "អនុម័តការត្រឡប់", confirmLabel: "អនុម័ត", cancelLabel: "បោះបង់" }
@@ -944,6 +1080,11 @@ export default function Sale() {
   };
 
   const handleCompletePendingReturn = async (ret) => {
+    if (ret.resolution_type === "refund") {
+      openRefundModal(ret, false);
+      return;
+    }
+
     const ok = await confirm(
       `តើទំនិញចូលស្តុករួចហើយឬ? ការត្រឡប់ ${ret.sales_return_no} សម្រាប់ ${ret.original_sale_no_snapshot} នឹងចូលជាបញ្ចប់ ស្តុក/ការសងប្រាក់ នឹងប៉ះពាល់ភ្លាមៗ។`,
       { title: "បញ្ចប់ការត្រឡប់", confirmLabel: "បញ្ចប់", cancelLabel: "បោះបង់" }
@@ -1052,6 +1193,7 @@ export default function Sale() {
             { id: "all",      label: "ទាំងអស់",       icon: <FiShoppingCart />, count: sales.length,                                                                                        alert: false },
             { id: "pending",  label: "មិនទាន់ទូទាត់", icon: <FiClock />,        count: sales.filter((s) => s.paymentStatus === "unpaid" || s.paymentStatus === "partial").length,           alert: true  },
             { id: "pending_returns", label: "រង់ចាំអនុម័ត", icon: <FiInbox />,   count: pendingReturns.length,                                                                              alert: true  },
+            { id: "unrefunded_returns", label: "រង់ចាំសងប្រាក់", icon: <FiDollarSign />, count: unrefundedReturns.length,                                                                    alert: true  },
             { id: "refunded", label: "ដោះស្រាយរួច",     icon: <FiRefreshCcw />,   count: sales.filter((s) => s.paymentStatus === "refunded" || s.returnsCount > 0).length,               alert: false },
           ].map((tab) => (
             <button
@@ -1089,6 +1231,14 @@ export default function Sale() {
             onReject={handleRejectPendingReturn}
             onView={setViewingReturn}
             processingId={processingReturnId}
+          />
+        ) : activeTab === "unrefunded_returns" ? (
+          <UnrefundedReturnsPanel
+            theme={theme}
+            returns={unrefundedReturns}
+            isLoading={unrefundedReturnsQuery.isLoading}
+            onRefund={(ret) => openRefundModal(ret, false)}
+            onView={setViewingReturn}
           />
         ) : (
         <>
@@ -1512,12 +1662,32 @@ export default function Sale() {
                       getStatusClass={getSaleStatusClass}
                       getStatusIcon={getSaleStatusIcon}
                     />
-                    {sale.returnsCount > 0 && (
-                      <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-500">
-                        <FiRotateCcw size={9} />
-                        {sale.returnsCount} ត្រឡប់
-                      </span>
-                    )}
+                    {sale.returnsCount > 0 && (() => {
+                      // returnsTotalUsd is every completed return regardless of resolution
+                      // (refund/replacement/store_credit); returnsRefundTotalUsd is only the
+                      // portion actually paid back in cash. Their difference is product swapped
+                      // or store-credit issued — money that never left the register. Without
+                      // this split the badge just said "1 ត្រឡប់ $3.00" for a replacement exactly
+                      // the same way it would for a cash refund, with no way to tell which.
+                      const refundUsd = Number(sale.returnsRefundTotalUsd || 0);
+                      const totalUsd = Number(sale.returnsTotalUsd || 0);
+                      const nonCashUsd = Math.max(totalUsd - refundUsd, 0);
+                      const isMixed = refundUsd > 0.001 && nonCashUsd > 0.001;
+                      const isCashOnly = refundUsd > 0.001 && !isMixed;
+                      const label = isMixed
+                        ? `សងលុយ $${refundUsd.toFixed(2)} + ដូរទំនិញ $${nonCashUsd.toFixed(2)}`
+                        : isCashOnly
+                          ? `សងលុយ $${refundUsd.toFixed(2)}`
+                          : `ដូរទំនិញ $${totalUsd.toFixed(2)}`;
+                      return (
+                        <span className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          isCashOnly ? "bg-red-500/10 text-red-500" : isMixed ? "bg-purple-500/10 text-purple-600" : "bg-orange-500/10 text-orange-500"
+                        }`}>
+                          <FiRotateCcw size={9} />
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </td>
 
                   <td className="px-5 py-4">
@@ -1687,6 +1857,18 @@ export default function Sale() {
           salesReturn={viewingReturn}
           theme={theme}
           onClose={() => setViewingReturn(null)}
+        />
+      )}
+
+      {refundTarget && (
+        <RecordRefundModal
+          salesReturn={refundTarget.ret}
+          form={refundForm}
+          onChange={handleRefundFormChange}
+          onClose={() => setRefundTarget(null)}
+          onSubmit={handleSubmitRefund}
+          isLoading={refundReturnMutation.isPending}
+          theme={theme}
         />
       )}
 

@@ -56,6 +56,37 @@ const paymentStatusLabel = (value) => ({
   unpaid: "មិនទាន់បង់",
 }[key(value)] ?? value ?? "");
 
+// Filter state on Purchases.jsx uses a different vocabulary than the raw persisted values above
+// (Title Case with spaces, e.g. "Pending Receive", coming from purchaseConstants.js's STATUS map)
+// — kept as a separate lookup rather than reusing statusLabel() to avoid silently matching the
+// wrong key if the two vocabularies ever diverge further.
+const statusFilterLabel = (value) => ({
+  All: "ទាំងអស់",
+  Draft: "ព្រាង",
+  "Pending Receive": "រង់ចាំទទួលទំនិញ",
+  "Pending Stock In": "រង់ចាំបញ្ចូលក្នុងស្តុក",
+  "Pending Claim": "រង់ចាំការទាមទារ",
+  Received: "ស្តុកចូលរួចរាល់អស់",
+  Cancelled: "បានលុបចោល",
+}[value] ?? value ?? "ទាំងអស់");
+
+const paymentStatusFilterLabel = (value) => ({
+  All: "ទាំងអស់",
+  unpaid: "មិនទាន់បង់",
+  partial: "មួយផ្នែក",
+  paid: "បានបង់",
+}[value] ?? value ?? "ទាំងអស់");
+
+const dateFilterLabel = (filters) => {
+  switch (filters.dateFilter) {
+    case "today": return "ថ្ងៃនេះ";
+    case "week": return "អាទិត្យនេះ";
+    case "month": return "ខែនេះ";
+    case "custom": return `ពី ${filters.dateFrom || "?"} ដល់ ${filters.dateTo || "?"}`;
+    default: return "ទាំងអស់";
+  }
+};
+
 // Prefer the effective status the on-screen table/badges already show (a resolved claim reads
 // "ស្តុកចូលរួចរាល់អស់" even while the raw persisted status still lags at "មានបញ្ហា") — Purchases.jsx
 // attaches this onto each row before handing the list to export since the effective-status
@@ -176,37 +207,7 @@ const buildNumericRows = (purchases) => purchases.map((purchase) => {
   ];
 });
 
-const filenameBase = () => `purchases-${new Date().toISOString().slice(0, 10)}`;
-
-export const exportPurchasesCsv = (purchases) => {
-  const rows = buildNumericRows(purchases);
-  const csv = [
-    numericHeaders.map(csvCell).join(","),
-    ...rows.map((row) => row.map(csvCell).join(",")),
-  ].join("\r\n");
-
-  downloadBlob(`\uFEFF${csv}`, `${filenameBase()}.csv`, "text/csv;charset=utf-8;");
-};
-
-export const exportPurchasesExcel = (purchases) => {
-  const rows = buildNumericRows(purchases);
-  const html = `
-    <html>
-      <head><meta charset="UTF-8" /></head>
-      <body>
-        <table border="1">
-          <thead><tr>${numericHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
-          <tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>
-        </table>
-      </body>
-    </html>
-  `;
-
-  downloadBlob(`\uFEFF${html}`, `${filenameBase()}.xls`, "application/vnd.ms-excel;charset=utf-8;");
-};
-
-export const exportPurchasesPdf = (purchases) => {
-  const rows = buildDisplayRows(purchases);
+const purchaseTotals = (purchases) => {
   const total = purchases.reduce((sum, item) => sum + Number(item.grandTotalUsd || 0), 0);
   const paidUsd = purchases.reduce((sum, item) => {
     if (item.paymentStatus === "unpaid") return sum;
@@ -219,7 +220,103 @@ export const exportPurchasesPdf = (purchases) => {
     return currency === "KHR" ? sum + Number(item.paidAmount || item.paidAmountKhr || 0) : sum;
   }, 0);
   const balance = purchases.reduce((sum, item) => sum + Number(item.balanceAmountUsd || 0), 0);
+  return { total, paidUsd, paidKhr, balance };
+};
+
+const filenameBase = () => `purchases-${new Date().toISOString().slice(0, 10)}`;
+
+// Bundles rows together with what filter actually produced them and a quick stat summary, so a
+// reader opening the file later (or forwarding it to someone else) doesn't have to guess what
+// was selected when it was generated — matches the pattern in productExport.js/supplierExport.js.
+// Previously this info only partly existed in the PDF's stat cards; CSV/Excel had no summary at
+// all, and even the PDF never showed which filter (search/status/payment/date) was active.
+export const buildPurchaseExport = (purchases, filters = {}) => {
   const generatedAt = new Date().toLocaleString("en-US");
+  const { total, paidUsd, paidKhr, balance } = purchaseTotals(purchases);
+
+  const filterSummary = [
+    `ស្វែងរក: ${filters.search || "ទាំងអស់"}`,
+    `ស្ថានភាព: ${statusFilterLabel(filters.status)}`,
+    `ការទូទាត់: ${paymentStatusFilterLabel(filters.paymentStatus)}`,
+    `កាលបរិច្ឆេទ: ${dateFilterLabel(filters)}`,
+  ].join(" | ");
+
+  const statRows = [
+    ["វិក្កយបត្រទិញសរុប", purchases.length],
+    ["សរុបលុយទិញ (USD)", Number(total.toFixed(2))],
+    ["បានបង់ពិត (USD)", Number(paidUsd.toFixed(2))],
+    ["បានបង់ពិត (KHR)", Math.round(paidKhr)],
+    ["មិនទាន់បង់ (USD)", Number(balance.toFixed(2))],
+  ];
+
+  return {
+    title: "ការទិញ",
+    filenameBase: filenameBase(),
+    generatedAt,
+    filterSummary,
+    statRows,
+    displayRows: buildDisplayRows(purchases),
+    numericRows: buildNumericRows(purchases),
+  };
+};
+
+export const exportPurchasesCsv = (purchases, filters = {}) => {
+  const report = buildPurchaseExport(purchases, filters);
+  const csv = [
+    report.title,
+    `បង្កើតនៅ,${csvCell(report.generatedAt)}`,
+    `តម្រង,${csvCell(report.filterSummary)}`,
+    "",
+    "សង្ខេប",
+    "ប្រភេទទិន្នន័យ,តម្លៃ",
+    ...report.statRows.map((row) => row.map(csvCell).join(",")),
+    "",
+    "បញ្ជីការទិញ",
+    report.filterSummary,
+    numericHeaders.map(csvCell).join(","),
+    ...(report.numericRows.length ? report.numericRows.map((row) => row.map(csvCell).join(",")) : ["គ្មានទិន្នន័យ"]),
+  ].join("\r\n");
+
+  downloadBlob(`\uFEFF${csv}`, `${report.filenameBase}.csv`, "text/csv;charset=utf-8;");
+};
+
+export const exportPurchasesExcel = (purchases, filters = {}) => {
+  const report = buildPurchaseExport(purchases, filters);
+  const tableHtml = (title, note, tableHeaders, rows) => `
+    <section>
+      <h2>${escapeHtml(title)}</h2>
+      ${note ? `<p>${escapeHtml(note)}</p>` : ""}
+      <table border="1">
+        <thead><tr>${tableHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${rows.length
+            ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")
+            : `<tr><td colspan="${tableHeaders.length}">គ្មានទិន្នន័យ</td></tr>`}
+        </tbody>
+      </table>
+    </section>
+  `;
+
+  const html = `
+    <html>
+      <head><meta charset="UTF-8" /></head>
+      <body>
+        <h1>${escapeHtml(report.title)}</h1>
+        <p>បង្កើតនៅ: ${escapeHtml(report.generatedAt)}</p>
+        <p>តម្រង: ${escapeHtml(report.filterSummary)}</p>
+        ${tableHtml("សង្ខេប", null, ["ប្រភេទទិន្នន័យ", "តម្លៃ"], report.statRows)}
+        ${tableHtml("បញ្ជីការទិញ", report.filterSummary, numericHeaders, report.numericRows)}
+      </body>
+    </html>
+  `;
+
+  downloadBlob(`\uFEFF${html}`, `${report.filenameBase}.xls`, "application/vnd.ms-excel;charset=utf-8;");
+};
+
+export const exportPurchasesPdf = (purchases, filters = {}) => {
+  const report = buildPurchaseExport(purchases, filters);
+  const rows = report.displayRows;
+  const { total, paidUsd, paidKhr, balance } = purchaseTotals(purchases);
 
   const html = `
     <!doctype html>
@@ -252,11 +349,12 @@ export const exportPurchasesPdf = (purchases) => {
         <div class="header">
           <div>
             <h1>ការទិញ</h1>
-            <p>បញ្ជីទិញតាម filter បច្ចុប្បន្ន</p>
+            <p>បញ្ជីទិញតាមតម្រងបច្ចុប្បន្ន</p>
           </div>
           <div class="meta">
             <p>ចំនួន: ${purchases.length.toLocaleString("en-US")} វិក្កយបត្រទិញ</p>
-            <p>ពេលបង្កើត: ${escapeHtml(generatedAt)}</p>
+            <p>តម្រង: ${escapeHtml(report.filterSummary)}</p>
+            <p>ពេលបង្កើត: ${escapeHtml(report.generatedAt)}</p>
           </div>
         </div>
         <div class="summary">

@@ -433,16 +433,17 @@ export default function Supplier() {
 
   const handleExport = (type) => {
     setExportMenuOpen(false);
+    const exportFilters = { search: searchTerm, status: statusFilter };
     if (type === "pdf") {
-      const opened = exportSuppliersPdf(exportSuppliers);
+      const opened = exportSuppliersPdf(exportSuppliers, exportFilters);
       if (!opened) window.alert("Browser បាន block popup។ សូមអនុញ្ញាត popup រួច Export ម្តងទៀត។");
       return;
     }
     if (type === "excel") {
-      exportSuppliersExcel(exportSuppliers);
+      exportSuppliersExcel(exportSuppliers, exportFilters);
       return;
     }
-    exportSuppliersCsv(exportSuppliers);
+    exportSuppliersCsv(exportSuppliers, exportFilters);
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;

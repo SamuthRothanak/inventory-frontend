@@ -3,7 +3,22 @@ const money = (value) => Number(value || 0).toLocaleString("en-US", {
   maximumFractionDigits: 2,
 });
 
-const number = (value) => Number(value || 0).toLocaleString("en-US");
+// CSV/Excel need a real number (so a reader can SUM/AVERAGE a column, and Excel right-aligns
+// and math-formats it correctly) — money() above inserts a thousands-separator comma and (for
+// fmtMoney) a currency prefix, which makes the cell text, not a number, once Excel or a
+// spreadsheet parses it. PDF is print-only, so the comma/currency-formatted version there is
+// actually the more readable choice — hence a mode flag instead of one shared formatter.
+const fmtNum = (value, numeric, decimals = 0) => {
+  const n = Number(value || 0);
+  return numeric
+    ? Number(n.toFixed(decimals))
+    : n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+};
+
+const fmtMoney = (value, numeric) => {
+  const n = Number(value || 0);
+  return numeric ? Number(n.toFixed(2)) : `$${money(value)}`;
+};
 
 const plain = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 
@@ -68,18 +83,27 @@ const currencyLabel = (value) => filterValueLabel(value, {
   khr: "KHR",
 });
 
-const priceRange = (product) => {
+// In numeric mode: plain numbers (or null when unpriced) rather than a formatted
+// "$3.00 - $5.00" string — a spreadsheet reader can filter/sort/average a numeric column, but
+// never a range rendered as text. Min/max are shown as two separate columns instead of one
+// combined range for the same reason (and it's honestly clearer read on its own merits, not
+// just for Excel). In display mode (PDF), format each bound the same $-prefixed, comma-grouped
+// way every other money figure in this export gets, for visual consistency on the printed page.
+const priceBounds = (product, numeric) => {
   const min = product.min_price_usd ?? product.minPriceUsd ?? product.minPrice ?? null;
   const max = product.max_price_usd ?? product.maxPriceUsd ?? product.maxPrice ?? null;
   const minNumber = min !== null ? Number(min) : null;
   const maxNumber = max !== null ? Number(max) : null;
 
   if (minNumber === null || maxNumber === null || Number.isNaN(minNumber) || Number.isNaN(maxNumber)) {
-    return "អត់តម្លៃ";
+    return { min: numeric ? null : "-", max: numeric ? null : "-" };
   }
 
-  if (minNumber === maxNumber) return `$${money(minNumber)}`;
-  return `$${money(minNumber)} - $${money(maxNumber)}`;
+  if (!numeric) {
+    return { min: `$${money(minNumber)}`, max: `$${money(maxNumber)}` };
+  }
+
+  return { min: Number(minNumber.toFixed(2)), max: Number(maxNumber.toFixed(2)) };
 };
 
 const tableHtml = (section) => `
@@ -110,6 +134,7 @@ export const buildProductExport = ({
   productStats = {},
   pagination = {},
   filters = {},
+  numeric = false,
 }) => {
   const generatedAt = new Date().toLocaleString("en-US");
   const filterSummary = [
@@ -122,28 +147,32 @@ export const buildProductExport = ({
   ].join(" | ");
 
   const statRows = [
-    ["ផលិតផលសរុប", number(productStats.total)],
-    ["ផលិតផលដំណើរការ", number(productStats.active)],
-    ["ផលិតផលមិនដំណើរការ", number(productStats.inactive)],
-    ["មុខទំនិញ/Variants", number(productStats.variants)],
-    ["កំណត់តម្លៃលក់", number(productStats.priceRules)],
-    ["ផលិតផលគ្មាន Variant", number(productStats.noVariant)],
-    ["សរុបតាមតម្រង", number(pagination.total ?? products.length)],
-    ["ចំនួនបាន Export", number(products.length)],
+    ["ផលិតផលសរុប", fmtNum(productStats.total, numeric)],
+    ["ផលិតផលដំណើរការ", fmtNum(productStats.active, numeric)],
+    ["ផលិតផលមិនដំណើរការ", fmtNum(productStats.inactive, numeric)],
+    ["ចំនួនមុខទំនិញសរុប", fmtNum(productStats.variants, numeric)],
+    ["កំណត់តម្លៃលក់", fmtNum(productStats.priceRules, numeric)],
+    ["ផលិតផលគ្មានមុខទំនិញ", fmtNum(productStats.noVariant, numeric)],
+    ["សរុបតាមតម្រង", fmtNum(pagination.total ?? products.length, numeric)],
+    ["ចំនួនបានទាញយក", fmtNum(products.length, numeric)],
   ];
 
-  const productRows = products.map((product, index) => [
-    index + 1,
-    product.id,
-    product.name,
-    product.categoryName || product.category_name || product.category?.name || "-",
-    number(product.variantsCount ?? product.variants_count ?? product.variants?.length),
-    product.unitsText || product.units_text || "-",
-    number(product.priceRulesCount ?? product.price_rules_count),
-    priceRange(product),
-    statusLabel(product.status),
-    plain(product.description || ""),
-  ]);
+  const productRows = products.map((product, index) => {
+    const { min, max } = priceBounds(product, numeric);
+    return [
+      index + 1,
+      product.id,
+      product.name,
+      product.categoryName || product.category_name || product.category?.name || "-",
+      fmtNum(product.variantsCount ?? product.variants_count ?? product.variants?.length, numeric),
+      product.unitsText || product.units_text || "-",
+      fmtNum(product.priceRulesCount ?? product.price_rules_count, numeric),
+      min,
+      max,
+      statusLabel(product.status),
+      plain(product.description || ""),
+    ];
+  });
 
   const variantRows = products.flatMap((product) => {
     const variants = Array.isArray(product.variants) ? product.variants : [];
@@ -154,7 +183,7 @@ export const buildProductExport = ({
       variant.packageType || variant.package_type || "-",
       variant.color || "-",
       [variant.sizeValue || variant.size_value, variant.sizeUnit || variant.size_unit].filter(Boolean).join(" ") || "-",
-      number(variant.lowStockThreshold ?? variant.low_stock_threshold),
+      fmtNum(variant.lowStockThreshold ?? variant.low_stock_threshold, numeric),
       statusLabel(variant.status),
     ]);
   });
@@ -168,7 +197,7 @@ export const buildProductExport = ({
         variant.variantName || variant.variant_name || "-",
         unit.unitName || unit.unit_name || "-",
         unit.unitCode || unit.unit_code || "-",
-        number(unit.conversionQty ?? unit.conversion_qty ?? 1),
+        fmtNum(unit.conversionQty ?? unit.conversion_qty ?? 1, numeric, 2),
         yesNoLabel(unit.isBaseUnit || unit.is_base_unit),
         yesNoLabel(unit.isDefaultSaleUnit || unit.is_default_sale_unit),
         yesNoLabel(unit.isDefaultPurchaseUnit || unit.is_default_purchase_unit),
@@ -185,11 +214,13 @@ export const buildProductExport = ({
         variant.variantName || variant.variant_name || "-",
         rule.unitName || rule.unit_name || "-",
         appliesToLabel(rule.appliesTo || rule.applies_to || "-"),
-        number(rule.minQty ?? rule.min_qty ?? 1),
-        `$${money(rule.usd ?? rule.unit_price_usd)}`,
-        number(rule.khr ?? rule.unit_price_khr),
+        fmtNum(rule.minQty ?? rule.min_qty ?? 1, numeric, 2),
+        fmtMoney(rule.usd ?? rule.unit_price_usd, numeric),
+        fmtNum(rule.khr ?? rule.unit_price_khr, numeric, 2),
         currencyLabel(rule.inputCurrency || rule.input_currency || "-"),
-        money(rule.inputPrice ?? rule.input_price),
+        // Not fmtMoney() — inputPrice can be either USD or KHR (see the currency column right
+        // before it), so a hardcoded "$" prefix would be wrong on every KHR-input row.
+        fmtNum(rule.inputPrice ?? rule.input_price, numeric, 2),
         statusLabel(rule.status),
       ]);
     });
@@ -200,12 +231,12 @@ export const buildProductExport = ({
     {
       title: "បញ្ជីផលិតផល",
       note: filterSummary,
-      headers: ["ល.រ", "ID", "ផលិតផល", "ប្រភេទ", "មុខទំនិញ", "ខ្នាតទំនិញ", "ចំនួនកំណត់តម្លៃ", "ជួរតម្លៃ", "ស្ថានភាព", "ពិពណ៌នា"],
+      headers: ["ល.រ", "លេខសម្គាល់", "ផលិតផល", "ប្រភេទ", "ចំនួនមុខទំនិញ", "ខ្នាតទំនិញ", "ចំនួនកំណត់តម្លៃ", "តម្លៃអប្បបរមា (USD)", "តម្លៃអតិបរមា (USD)", "ស្ថានភាព", "ពិពណ៌នា"],
       rows: productRows,
     },
-    { title: "Variants", headers: ["ផលិតផល", "Variant", "លេខកូដ", "ប្រភេទកញ្ចប់", "ពណ៌", "ទំហំ", "កម្រិតស្តុកទាប", "ស្ថានភាព"], rows: variantRows },
-    { title: "ខ្នាតទំនិញ Variant", headers: ["ផលិតផល", "Variant", "ខ្នាតទំនិញ", "លេខកូដ", "បម្លែង", "ខ្នាតគោល", "លក់លំនាំដើម", "ទិញលំនាំដើម"], rows: unitRows },
-    { title: "កំណត់តម្លៃលក់", headers: ["ផលិតផល", "Variant", "ខ្នាតទំនិញ", "អនុវត្តលើ", "ចំនួនអប្បបរមា", "USD", "KHR", "រូបិយប័ណ្ណបញ្ចូល", "តម្លៃបញ្ចូល", "ស្ថានភាព"], rows: priceRows },
+    { title: "មុខទំនិញ", headers: ["ផលិតផល", "ឈ្មោះមុខទំនិញ", "លេខកូដ", "ប្រភេទកញ្ចប់", "ពណ៌", "ទំហំ", "កម្រិតស្តុកទាប", "ស្ថានភាព"], rows: variantRows },
+    { title: "ខ្នាតទំនិញនៃមុខទំនិញ", headers: ["ផលិតផល", "ឈ្មោះមុខទំនិញ", "ខ្នាតទំនិញ", "លេខកូដ", "បម្លែង", "ខ្នាតគោល", "លក់លំនាំដើម", "ទិញលំនាំដើម"], rows: unitRows },
+    { title: "កំណត់តម្លៃលក់", headers: ["ផលិតផល", "ឈ្មោះមុខទំនិញ", "ខ្នាតទំនិញ", "អនុវត្តលើ", "ចំនួនអប្បបរមា", "តម្លៃ (USD)", "តម្លៃ (KHR)", "រូបិយប័ណ្ណបញ្ចូល", "តម្លៃបញ្ចូល", "ស្ថានភាព"], rows: priceRows },
   ].filter((section) => section.title === "សង្ខេប" || section.title === "បញ្ជីផលិតផល" || section.rows.length > 0);
 
   return {

@@ -204,6 +204,18 @@ export default function StockAdjustmentModal({
                 searchable={reasonOptions.length > 6}
               />
 
+              <div className="md:col-span-2">
+                <FormSelect
+                  label="បាច់ / លេខបាច់"
+                  value={form.inventoryBatchId}
+                  onChange={(value) => onChange("inventoryBatchId", value)}
+                  theme={theme}
+                  icon={<FiClipboard />}
+                  options={batchOptions}
+                  searchable
+                />
+              </div>
+
               <FormSelect
                 label="ខ្នាតទំនិញ"
                 value={form.unitName}
@@ -233,17 +245,7 @@ export default function StockAdjustmentModal({
                 icon={<FiHash />}
               />
 
-              <FormSelect
-                label="បាច់ / លេខបាច់"
-                value={form.inventoryBatchId}
-                onChange={(value) => onChange("inventoryBatchId", value)}
-                theme={theme}
-                icon={<FiClipboard />}
-                options={batchOptions}
-                searchable
-              />
-
-              <div className={`rounded-xl border p-3 text-sm ${theme.softCard}`}>
+              <div className={`md:col-span-2 rounded-xl border p-3 text-sm ${theme.softCard}`}>
                 <p className={`text-xs font-semibold ${theme.muted}`}>
                   ចំនួនគណនាជាមូលដ្ឋាន
                 </p>

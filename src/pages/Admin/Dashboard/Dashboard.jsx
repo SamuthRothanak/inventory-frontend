@@ -538,9 +538,9 @@ export default function Dashboard() {
           <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
             <HeroCard
               theme={theme}
-              title="ការលក់ថ្ងៃនេះ"
+              title="លក់បានសរុប"
               value={`$${fmtUsd(d?.today.sales_total_usd)}`}
-              sub={`${fmtInt(d?.today.sales_count)} វិក្កយបត្រលក់`}
+              sub={`${fmtInt(d?.today.sales_count)} វិក្កយបត្រលក់ក្នុងថ្ងៃនេះ`}
               icon={FiDollarSign}
               iconBg="bg-emerald-500/10 text-emerald-500"
               trend={salesTrend}
@@ -551,9 +551,9 @@ export default function Dashboard() {
             />
             <HeroCard
               theme={theme}
-              title="ប្រមូលបានពិតថ្ងៃនេះ"
+              title="ប្រាក់លក់បានពិត"
               value={`$${fmtUsd(d?.payment_breakdown.total_collected_usd)}`}
-              sub="ក្រោយដកលុយអាប់"
+              sub="លុយបានទទួលជាក់ស្តែង (ក្រោយដកសងវិញ)"
               icon={FiDollarSign}
               iconBg="bg-emerald-500/10 text-emerald-500"
               trend={null}
@@ -791,7 +791,7 @@ export default function Dashboard() {
           </div>
           <div className={`mt-4 rounded-2xl border p-4 ${theme.softCard}`}>
             <div className="flex items-center justify-between">
-              <p className={`text-sm font-bold ${theme.pageTitle}`}>សរុបប្រមូលបានពិតថ្ងៃនេះ</p>
+              <p className={`text-sm font-bold ${theme.pageTitle}`}>ប្រាក់លក់បានពិត</p>
               <p className="text-lg font-extrabold text-emerald-500">
                 {isLoading ? "-" : `$${fmtUsd(d?.payment_breakdown.total_collected_usd)}`}
               </p>

@@ -389,7 +389,7 @@ export default function Products() {
   }, [productStatsQuery.data, pagination.total]);
 
   const selectedCategoryLabel = useMemo(() => {
-    if (categoryFilter === "All") return "All";
+    if (categoryFilter === "All") return "ទាំងអស់";
     const category = activeCategories.find((item) => String(item.id) === String(categoryFilter));
     return category?.name || categoryFilter;
   }, [activeCategories, categoryFilter]);
@@ -1128,6 +1128,9 @@ export default function Products() {
           ? "active"
           : "inactive",
     price_status: priceFilter === "All" ? undefined : priceFilter,
+    // Only the export flow needs full variant/unit/price-rule detail — the regular table
+    // never sets this, so normal browsing stays on the lighter counts-only query.
+    with_variants: 1,
   });
 
   const fetchAllProductsForExport = async () => {
@@ -1163,8 +1166,8 @@ export default function Products() {
     return {
       products: allProducts,
       pagination: {
-        ...exportPagination, 
-        currentPage: "All",
+        ...exportPagination,
+        currentPage: "ទាំងអស់",
         perPage: allProducts.length,
         total: exportPagination.total || allProducts.length,
         from: allProducts.length > 0 ? 1 : 0,
@@ -1193,6 +1196,9 @@ export default function Products() {
         productStats,
         pagination: exportData.pagination,
         filters: productExportFilters,
+        // CSV/Excel get plain numbers (summable in a spreadsheet); PDF is print-only, where the
+        // comma/currency-formatted version reads better.
+        numeric: type !== "pdf",
       });
 
       if (type === "pdf") {
