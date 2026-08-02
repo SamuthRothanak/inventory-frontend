@@ -63,6 +63,7 @@ const CHANGE_FIELD_LABELS = {
   refund_exchange_rate_used: "អត្រាប្តូរប្រាក់ដែលប្រើ",
   username: "ឈ្មោះប្រើប្រាស់",
   email: "អ៊ីមែល",
+  role: "តួនាទី",
   permissions: "សិទ្ធិប្រើប្រាស់",
   rate_date: "កាលបរិច្ឆេទអត្រា",
   usd_to_khr_rate: "អត្រា USD ទៅ KHR",
@@ -89,6 +90,101 @@ const CHANGE_FIELD_LABELS = {
   movement_type: "ប្រភេទចលនា",
   qty_base: "ចំនួន",
   note: "កំណត់ចំណាំ",
+  adjustment_no: "លេខការកែតម្រូវស្តុក",
+  adjustment_type: "ប្រភេទការកែតម្រូវ",
+  reason: "មូលហេតុ",
+  shop_name: "ឈ្មោះហាង",
+  contact_name: "ឈ្មោះទំនាក់ទំនង",
+  address: "អាសយដ្ឋាន",
+  category_id: "ប្រភេទ",
+  images: "រូបភាព",
+  description: "ការពិពណ៌នា",
+  // Added covering the wide audit-log field-coverage sweep (see project_audit_log_field_coverage)
+  // — SaleController
+  customer_id: "អតិថិជន",
+  sale_type: "ប្រភេទការលក់",
+  sale_channel: "មធ្យោបាយលក់",
+  invoice_currency: "រូបិយប័ណ្ណវិក្កយបត្រ",
+  exchange_rate_khr_per_usd: "អត្រាប្តូរប្រាក់ (USD ទៅ KHR)",
+  khr_rounding: "ការបង្គត់ KHR",
+  subtotal_usd: "សរុបរង (USD)",
+  discount_total_usd: "បញ្ចុះតម្លៃសរុប (USD)",
+  delivery_option: "ជម្រើសដឹកជញ្ជូន",
+  delivery_fee_usd: "ថ្លៃដឹកជញ្ជូន (USD)",
+  delivery_paid_by: "អ្នកបង់ថ្លៃដឹកជញ្ជូន",
+  delivery_status: "ស្ថានភាពដឹកជញ្ជូន",
+  delivery_address: "អាសយដ្ឋានដឹកជញ្ជូន",
+  paid_total_usd: "បានបង់សរុប (USD)",
+  balance_total_usd: "នៅខ្វះសរុប (USD)",
+  sale_status: "ស្ថានភាពការលក់",
+  sold_at: "ពេលវេលាលក់",
+  cancel_reason: "មូលហេតុបោះបង់",
+  customer_name_snapshot: "ឈ្មោះអតិថិជន (ពេលនោះ)",
+  customer_phone_snapshot: "លេខទូរស័ព្ទអតិថិជន (ពេលនោះ)",
+  qty: "ចំនួន",
+  unit_price: "តម្លៃឯកតា",
+  // SalesReturnController
+  verification_type: "វិធីផ្ទៀងផ្ទាត់",
+  exchange_rate_used: "អត្រាប្តូរប្រាក់ដែលប្រើ",
+  replacement_sale_id: "ការលក់ជំនួស",
+  returned_at: "ពេលវេលាត្រឡប់",
+  // PurchaseController / PurchaseItemController
+  supplier_id: "អ្នកផ្គត់ផ្គង់",
+  purchase_date: "កាលបរិច្ឆេទទិញ",
+  input_currency: "រូបិយប័ណ្ណបញ្ចូល",
+  exchange_rate_source: "ប្រភពអត្រាប្តូរប្រាក់",
+  exchange_rate_note: "កំណត់ចំណាំអត្រាប្តូរប្រាក់",
+  discount_currency: "រូបិយប័ណ្ណបញ្ចុះតម្លៃ",
+  discount_amount_input: "ចំនួនបញ្ចុះតម្លៃ",
+  delivery_fee_currency: "រូបិយប័ណ្ណថ្លៃដឹកជញ្ជូន",
+  delivery_fee_input: "ចំនួនថ្លៃដឹកជញ្ជូន",
+  paid_currency: "រូបិយប័ណ្ណបង់ប្រាក់",
+  paid_amount_input: "ចំនួនបង់ប្រាក់",
+  input_unit_cost: "ថ្លៃដើមឯកតាបញ្ចូល",
+  line_total_khr: "តម្លៃជួរ (KHR)",
+  // PurchaseReturnController
+  refund_amount_usd: "ចំនួនសងប្រាក់ (USD)",
+  refund_amount_khr: "ចំនួនសងប្រាក់ (KHR)",
+  refunded_at: "ពេលវេលាសងប្រាក់",
+  replacement_purchase_id: "ការទិញជំនួស",
+  replacement_stocked_in_qty: "ចំនួនជំនួសបានបញ្ចូលស្តុក",
+  credit_note_no: "លេខបណ្ណលុយកាត់លើកក្រោយ",
+  credit_amount_usd: "ចំនួនលុយកាត់ (USD)",
+  credit_amount_khr: "ចំនួនលុយកាត់ (KHR)",
+  resolved_at: "ពេលវេលាដោះស្រាយ",
+  // InventoryBatchController
+  product_variant_id: "ម៉ូដែលផលិតផល",
+  purchase_item_id: "ទំនិញទិញ",
+  lot_no: "លេខឡូត៍",
+  unit_cost_khr: "ថ្លៃដើមឯកតា (KHR)",
+  unit_cost_base: "ថ្លៃដើមឯកតាមូលដ្ឋាន",
+  unit_cost_base_usd: "ថ្លៃដើមឯកតាមូលដ្ឋាន (USD)",
+  unit_cost_base_khr: "ថ្លៃដើមឯកតាមូលដ្ឋាន (KHR)",
+  received_at: "ពេលវេលាទទួល",
+  // PriceRuleController
+  input_price: "តម្លៃបញ្ចូល",
+  // ProductVariantController
+  product_id: "ផលិតផល",
+  package_type: "ប្រភេទវេចខ្ចប់",
+  color: "ពណ៌",
+  size_value: "ទំហំ",
+  size_unit: "ខ្នាតទំហំ",
+  low_stock_threshold: "កម្រិតស្តុកទាប",
+  // PurchaseReturnItemController
+  base_qty: "ចំនួនមូលដ្ឋាន",
+  condition: "ស្ថានភាពទំនិញ",
+  stock_action: "សកម្មភាពស្តុក",
+  // SupplierController
+  contact_person: "អ្នកទំនាក់ទំនង",
+  // UnitController
+  allow_decimal: "អនុញ្ញាតទសភាគ",
+  // ProductVariantUnitController
+  barcode: "បាកូដ",
+  is_base_unit: "ជាឯកតាមូលដ្ឋាន",
+  is_default_sale_unit: "ជាឯកតាលក់លំនាំដើម",
+  is_default_purchase_unit: "ជាឯកតាទិញលំនាំដើម",
+  // StockAdjustmentController
+  line_cost: "ថ្លៃដើមជួរ",
 };
 
 export function changeFieldLabel(key) {
@@ -111,6 +207,10 @@ const AUDIT_VALUE_LABELS = {
   unpaid: "មិនទាន់បង់",
   partial: "បានបង់ខ្លះ",
   refunded: "បានសងប្រាក់",
+  // Role names (matches src/pages/Admin/Users/utils/userUtils.js's ROLE_LABELS exactly)
+  admin: "អ្នកគ្រប់គ្រង",
+  cashier: "អ្នកគិតលុយ",
+  staff: "បុគ្គលិក",
   prepaid: "បង់មុន",
   partial_prepaid: "បង់មុនខ្លះ",
   pay_after_check: "បង់ក្រោយពិនិត្យ",
@@ -121,8 +221,8 @@ const AUDIT_VALUE_LABELS = {
   submitted: "បានដាក់ស្នើ",
   issued: "បានចេញ",
   used: "បានប្រើ",
-  active: "សកម្ម",
-  inactive: "អសកម្ម",
+  active: "ដំណើរការ",
+  inactive: "មិនដំណើរការ",
   retail: "លក់រាយ",
   wholesale: "លក់ដុំ",
   both: "ទាំងពីរ",
@@ -142,6 +242,54 @@ const AUDIT_VALUE_LABELS = {
   lost_out: "បាត់ចេញ",
   transfer_in: "ផ្ទេរចូល",
   transfer_out: "ផ្ទេរចេញ",
+  // StockAdjustmentType (adjustment_type field)
+  increase: "បង្កើន",
+  decrease: "បន្ថយ",
+  // StockAdjustmentReason (reason field) — "damaged"/"expired" also double as SalesReturn item
+  // conditions elsewhere in the app; same Khmer word applies in both contexts, no override needed.
+  damaged: "ខូច",
+  expired: "ផុតកំណត់",
+  internal_use: "ប្រើប្រាស់ខ្លួនឯង",
+  lost: "បាត់",
+  stock_count: "រាប់ស្តុក",
+  correction: "កែតម្រូវ",
+  other: "ផ្សេងទៀត",
+  // Currency codes (input_currency/paid_currency/discount_currency/... on Purchase-side
+  // records use lowercase "usd"/"khr"; Sale-side invoice_currency uses uppercase — both
+  // normalize to the same lowercased key here).
+  usd: "ដុល្លារ (USD)",
+  khr: "រៀល (KHR)",
+  // SaleChannel (sale_channel field)
+  pos: "តាមហាង (POS)",
+  web: "គេហទំព័រ",
+  app: "កម្មវិធី",
+  phone: "ទូរស័ព្ទ",
+  // SaleStatus (sale_status field) — draft/completed/cancelled already covered above
+  confirmed: "បានបញ្ជាក់",
+  // SaleType (sale_type field) — retail/wholesale already covered above
+  online: "អនឡាញ",
+  // PurchaseDeliveryOption (delivery_option field) — "none" handled via FIELD_VALUE_OVERRIDES
+  supplier_delivery: "អ្នកផ្គត់ផ្គង់ដឹកជញ្ជូន",
+  self_pickup: "មកយកដោយខ្លួនឯង",
+  third_party: "ភ្នាក់ងារដឹកជញ្ជូន",
+  // PurchaseDeliveryPaidBy (delivery_paid_by field)
+  buyer: "អ្នកទិញ",
+  supplier: "អ្នកផ្គត់ផ្គង់",
+  // Sales\DeliveryStatus (delivery_status field) — "pending" already covered above
+  preparing: "កំពុងរៀបចំ",
+  shipped: "កំពុងដឹកជញ្ជូន",
+  delivered: "បានដឹកជញ្ជូនរួច",
+  failed: "បរាជ័យ",
+  // SalesReturnVerificationType (verification_type field)
+  receipt: "ប្រៀបធៀបវិក្កយបត្រ",
+  system_lookup: "ស្វែងរកក្នុងប្រព័ន្ធ",
+  verbal: "សួរផ្ទាល់មាត់",
+  photo: "រូបថត",
+  // PurchaseReturnItemCondition (condition field) — "damaged"/"expired"/"other" already covered
+  wrong_item: "ខុសទំនិញ",
+  good: "ល្អ",
+  // PurchaseReturnItemStockAction (stock_action field) — "stock_in"/"stock_out" already covered
+  no_stock_change: "មិនប៉ះពាល់ស្តុក",
 };
 
 // "partial"/"full" mean different things depending on which field they're on (payment_status:
@@ -149,7 +297,30 @@ const AUDIT_VALUE_LABELS = {
 // A single flat value→label map can't hold both — check the field-specific override first.
 const FIELD_VALUE_OVERRIDES = {
   return_type: { full: "ត្រឡប់ពេញលេញ", partial: "ត្រឡប់ខ្លះ" },
+  // Customer.status is a DB boolean (unlike its string-enum siblings elsewhere — see
+  // project_product_view_missing_fields for the same quirk on product_variant_units.status),
+  // so it serializes as the literal string "true"/"false", not one of the usual status words.
+  // ProductVariant.status has no cast at all — it comes through as the raw DB integer "1"/"0".
+  // All three shapes ("true"/"false" boolean, "1"/"0" raw int, and the string enum handled by
+  // the global map) mean the same active/inactive thing everywhere "status" is used in this
+  // app, so it's safe to fold all of them into one override scoped to this field key.
+  status: { true: "ដំណើរការ", false: "មិនដំណើរការ", "1": "ដំណើរការ", "0": "មិនដំណើរការ" },
+  // "none" already means "claim waived" globally (PurchaseReturn.resolution_type) — but on
+  // these two fields it means "no delivery option/status selected", a different concept that
+  // would otherwise collide with the global entry.
+  delivery_option: { none: "គ្មាន" },
+  delivery_status: { none: "គ្មាន" },
 };
+
+// Decimal-cast DB columns (exchange rates, costs, quantities — Laravel's `decimal:N` cast)
+// always serialize with their full fixed precision, e.g. "4000.0000" for a decimal(15,4) rate
+// that's really just a whole number. Trim insignificant trailing zeros (and a now-bare trailing
+// "." ) so "4000.0000" reads as "4000" while a genuinely fractional value like "4100.5000"
+// still reads as "4100.5" instead of losing real precision.
+function trimTrailingZeros(numericString) {
+  if (!numericString.includes(".")) return numericString;
+  return numericString.replace(/0+$/, "").replace(/\.$/, "");
+}
 
 export function formatAuditValue(key, value) {
   if (value === null || value === undefined || value === "") return "-";
@@ -158,7 +329,9 @@ export function formatAuditValue(key, value) {
   const raw = String(value).toLowerCase();
   const override = FIELD_VALUE_OVERRIDES[key];
   if (override && raw in override) return override[raw];
-  return AUDIT_VALUE_LABELS[raw] ?? String(value);
+  if (AUDIT_VALUE_LABELS[raw]) return AUDIT_VALUE_LABELS[raw];
+  if (/^-?\d+\.\d+$/.test(raw)) return trimTrailingZeros(String(value));
+  return String(value);
 }
 
 export function formatJsonPreview(value) {
@@ -383,6 +556,15 @@ export function translateDescription(text = "") {
   m = text.match(/^(\d+) products? deleted\.$/i);
   if (m) return `ផលិតផលចំនួន ${m[1]} ត្រូវបានលុប។`;
 
+  // Product "X" created with variants. — must come before the generic Product "X" created/
+  // updated/deleted match below, since that one requires the string to end right after the verb.
+  m = text.match(/^Product "(.+)" created with variants\.$/i);
+  if (m) return `ផលិតផល "${m[1]}" បានបង្កើតជាមួយម៉ូដែល។`;
+
+  // N categor(y|ies) deleted.
+  m = text.match(/^(\d+) categor(?:y|ies) deleted\.$/i);
+  if (m) return `ប្រភេទចំនួន ${m[1]} ត្រូវបានលុប។`;
+
   // User "X" created/updated/deleted.
   m = text.match(/^User "(.+)" (created|updated|deleted)\.$/i);
   if (m) return `អ្នកប្រើ "${m[1]}" ${ACTION_LABELS[m[2].toLowerCase()] ?? m[2]}។`;
@@ -426,6 +608,15 @@ export function translateDescription(text = "") {
   m = text.match(/^Refund of (.+) (USD|KHR) recorded for Sales return #(.+)\.$/i);
   if (m) return `បានកត់ត្រាការសងប្រាក់ ${m[1]} ${m[2]} សម្រាប់បណ្ណត្រឡប់ការលក់ #${m[3]}។`;
 
+  // Sales return #X resolved (approve/complete[/refund]) for Sale #Y. — the atomic "resolve"
+  // action from the pending-approval queue, added alongside the other Sales return descriptions
+  // but originally missed here (see project_pending_returns_tab_filters / today's audit-log gap).
+  m = text.match(/^Sales return #(.+) resolved \(approve\/complete(\/refund)?\) for Sale #(.+)\.$/i);
+  if (m) {
+    const steps = m[2] ? "បានអនុម័ត បញ្ចប់ និងសងប្រាក់" : "បានអនុម័ត និងបញ្ចប់";
+    return `បណ្ណត្រឡប់ការលក់ #${m[1]} ${steps} សម្រាប់វិក្កយបត្រ #${m[3]}។`;
+  }
+
   // User "X" status changed.
   m = text.match(/^User "(.+)" status changed\.$/i);
   if (m) return `ស្ថានភាពរបស់អ្នកប្រើ "${m[1]}" ត្រូវបានផ្លាស់ប្តូរ។`;
@@ -446,9 +637,13 @@ export function translateDescription(text = "") {
   m = text.match(/^Exchange rate (created|updated|deleted):\s*1 USD = (.+) KHR\.$/i);
   if (m) return `អត្រាប្តូរប្រាក់ ${ACTION_LABELS[m[1].toLowerCase()] ?? m[1]}៖ 1 USD = ${m[2]} KHR។`;
 
-  // Price rule created/updated/deleted: $X (Y).
+  // Price rule created/updated/deleted: $X (Y). — Y is applies_to (retail/wholesale/both),
+  // already in AUDIT_VALUE_LABELS but this branch was showing it raw instead of translating it.
   m = text.match(/^Price rule (created|updated|deleted):\s*\$(.+) \((.+)\)\.$/i);
-  if (m) return `កម្រិតតម្លៃ ${ACTION_LABELS[m[1].toLowerCase()] ?? m[1]}៖ $${m[2]} (${m[3]})។`;
+  if (m) {
+    const appliesTo = AUDIT_VALUE_LABELS[m[3].toLowerCase()] ?? m[3];
+    return `កម្រិតតម្លៃ ${ACTION_LABELS[m[1].toLowerCase()] ?? m[1]}៖ $${m[2]} (${appliesTo})។`;
+  }
 
   // Backup "X" created/deleted.
   m = text.match(/^Backup "(.+)" (created|deleted)\.$/i);

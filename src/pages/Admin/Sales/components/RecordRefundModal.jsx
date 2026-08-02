@@ -1,10 +1,12 @@
 import { FiDollarSign, FiFileText, FiSave } from "react-icons/fi";
 import { FormInput, FormSection, FormSelect, ModalShell, SummaryMiniBox } from "./SaleModalShared";
 
+// "store_credit" removed for the same reason as the resolution-type option — no backend
+// customer credit-balance tracking exists, and marking a refund "refunded" via a method that
+// moves no real cash and records no credit either was actively misleading.
 const REFUND_METHOD_OPTIONS = [
   { value: "cash", label: "សាច់ប្រាក់" },
   { value: "bank_transfer", label: "ធនាគារ / QR" },
-  { value: "store_credit", label: "Credit ហាង" },
 ];
 
 const CURRENCY_OPTIONS = [

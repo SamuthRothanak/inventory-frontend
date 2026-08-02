@@ -1,4 +1,4 @@
-﻿const money = (value) => Number(value || 0).toLocaleString("en-US", {
+const money = (value) => Number(value || 0).toLocaleString("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
@@ -77,6 +77,8 @@ const csvCell = (value) => {
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 };
 
+const BOM = String.fromCharCode(0xfeff);
+
 const downloadBlob = (content, filename, type) => {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -90,61 +92,66 @@ const downloadBlob = (content, filename, type) => {
 };
 
 const statusLabel = (value) => ({
-  "In Stock": "áž˜áž¶áž“ážŸáŸ’ážáž»áž€",
-  "Low Stock": "ážŸáŸ’ážáž»áž€ážŸáŸ’áž‘áž¾ážšáž¢ážŸáŸ‹",
-  "Out of Stock": "áž¢ážŸáŸ‹ážŸáŸ’ážáž»áž€",
-  received: "áž”áž¶áž“áž‘áž‘áž½áž›",
-  expiring_soon: "áž‡áž·ážáž•áž»ážáž€áŸ†ážŽážáŸ‹",
-  active: "áž€áŸ†áž–áž»áž„áž”áŸ’ážšáž¾",
-  pending: "ážšáž„áŸ‹áž…áž¶áŸ†",
-  completed: "áž”áž¶áž“áž”áž‰áŸ’áž…áž”áŸ‹",
-  cancelled: "áž”áž¶áž“áž”áŸ„áŸ‡áž”áž„áŸ‹",
-  expired: "áž•áž»ážáž€áŸ†ážŽážáŸ‹",
+  "In Stock": "មានស្តុក",
+  "Low Stock": "ស្តុកស្ទើរអស់",
+  "Out of Stock": "អស់ស្តុក",
+  received: "បានទទួល",
+  expiring_soon: "ជិតផុតកំណត់",
+  active: "កំពុងប្រើ",
+  pending: "រង់ចាំ",
+  completed: "បានបញ្ចប់",
+  cancelled: "បានបោះបង់",
+  expired: "ផុតកំណត់",
 }[String(value || "").toLowerCase()] ?? value ?? "");
 
 const paymentMethodLabel = (value) => ({
-  cash: "ážŸáž¶áž…áŸ‹áž”áŸ’ážšáž¶áž€áŸ‹",
-  bank_transfer: "áž’áž“áž¶áž‚áž¶ážš / QR",
-  qr: "áž’áž“áž¶áž‚áž¶ážš / QR",
-  card: "áž€áž¶áž",
-  other: "áž•áŸ’ážŸáŸáž„áŸ—",
-}[value] ?? value ?? "áž•áŸ’ážŸáŸáž„áŸ—");
+  cash: "សាច់ប្រាក់",
+  bank_transfer: "ធនាគារ / QR",
+  qr: "ធនាគារ / QR",
+  card: "កាត",
+  other: "ផ្សេងៗ",
+}[value] ?? value ?? "ផ្សេងៗ");
 
 const readableStatusLabel = (value) => ({
-  "in stock": "áž˜áž¶áž“ážŸáŸ’ážáž»áž€",
-  "low stock": "ážŸáŸ’ážáž»áž€ážŸáŸ’áž‘áž¾ážšáž¢ážŸáŸ‹",
-  "out of stock": "ážŸáŸ’ážáž»áž€áž¢ážŸáŸ‹",
-  in_stock: "áž˜áž¶áž“ážŸáŸ’ážáž»áž€",
-  low_stock: "ážŸáŸ’ážáž»áž€ážŸáŸ’áž‘áž¾ážšáž¢ážŸáŸ‹",
-  out_of_stock: "ážŸáŸ’ážáž»áž€áž¢ážŸáŸ‹",
-  received: "áž”áž¶áž“áž‘áž‘áž½áž›",
-  expiring_soon: "áž‡áž·ážáž•áž»ážáž€áŸ†ážŽážáŸ‹",
-  active: "áž€áŸ†áž–áž»áž„áž”áŸ’ážšáž¾",
-  pending: "ážšáž„áŸ‹áž…áž¶áŸ†",
-  completed: "áž”áž¶áž“áž”áž‰áŸ’áž…áž”áŸ‹",
-  cancelled: "áž”áž¶áž“áž”áŸ„áŸ‡áž”áž„áŸ‹",
-  expired: "áž•áž»ážáž€áŸ†ážŽážáŸ‹",
+  "in stock": "មានស្តុក",
+  "low stock": "ស្តុកស្ទើរអស់",
+  "out of stock": "អស់ស្តុក",
+  in_stock: "មានស្តុក",
+  low_stock: "ស្តុកស្ទើរអស់",
+  out_of_stock: "អស់ស្តុក",
+  received: "បានទទួល",
+  expiring_soon: "ជិតផុតកំណត់",
+  active: "កំពុងប្រើ",
+  pending: "រង់ចាំ",
+  completed: "បានបញ្ចប់",
+  cancelled: "បានបោះបង់",
+  expired: "ផុតកំណត់",
 }[String(value || "").toLowerCase()] ?? value ?? "");
 
 const paymentStatusLabel = (value) => ({
-  paid: "áž”áž¶áž“áž”áž„áŸ‹",
-  unpaid: "áž˜áž·áž“áž‘áž¶áž“áŸ‹áž”áž„áŸ‹",
-  partial: "áž”áž„áŸ‹ážáŸ’áž›áŸ‡",
-  pending: "ážšáž„áŸ‹áž…áž¶áŸ†áž”áž„áŸ‹",
-  refunded: "áž”áž¶áž“ážŸáž„áž”áŸ’ážšáž¶áž€áŸ‹",
+  paid: "បានបង់",
+  unpaid: "មិនទាន់បង់",
+  partial: "បង់ខ្លះ",
+  pending: "រង់ចាំបង់",
+  refunded: "បានសងប្រាក់",
 }[String(value || "").toLowerCase()] ?? value ?? "");
 
 const salesTypeLabel = (value) => ({
-  retail: "áž›áž€áŸ‹ážšáž¶áž™",
-  wholesale: "áž›áž€áŸ‹áž”áŸ„áŸ‡ážŠáž»áŸ†",
+  retail: "លក់រាយ",
+  wholesale: "លក់ដុំ",
+}[value] ?? value ?? "");
+
+const activityTypeLabel = (value) => ({
+  sale: "លក់",
+  purchase: "ទិញ",
 }[value] ?? value ?? "");
 
 const chartGranularityLabel = (value) => ({
-  hour: "ážáž¶áž˜áž˜áŸ‰áŸ„áž„",
-  day: "ážáž¶áž˜ážáŸ’áž„áŸƒ",
-  week: "ážáž¶áž˜ážŸáž”áŸ’ážáž¶áž áŸ",
-  month: "ážáž¶áž˜ážáŸ‚",
-  month_week: "ážáž¶áž˜ážŸáž”áŸ’ážáž¶áž áŸáž€áŸ’áž“áž»áž„ážáŸ‚",
+  hour: "តាមម៉ោង",
+  day: "តាមថ្ងៃ",
+  week: "តាមសប្ដាហ៍",
+  month: "តាមខែ",
+  month_week: "តាមសប្ដាហ៍ក្នុងខែ",
 }[value] ?? value ?? "");
 
 const tableHtml = (section) => `
@@ -215,74 +222,74 @@ export const buildReportExport = ({
 
   const closingRows = [
     [
-      "ážŸáž¶áž…áŸ‹áž”áŸ’ážšáž¶áž€áŸ‹ážáŸ’ážšáž¼ážœáž˜áž¶áž“áž€áŸ’áž“áž»áž„ážážáž›áž»áž™",
+      "សាច់ប្រាក់ត្រូវមានក្នុងថតលុយ",
       usd(paymentSummary.cashUsd),
       khr(paymentSummary.cashKhr),
       "",
-      "áž…áŸ†áž“áž½áž“ážŸáž»áž‘áŸ’áž’áž€áŸ’ážšáŸ„áž™ážŠáž€áž›áž»áž™áž¢áž¶áž”áŸ‹",
+      "ចំនួនសុទ្ធក្រោយដកលុយអាប់",
     ],
     [
-      "áž›áž»áž™áž’áž“áž¶áž‚áž¶ážš / QR ážáŸ’ážšáž¼ážœážƒáž¾áž‰áž€áŸ’áž“áž»áž„áž‚ážŽáž“áž¸",
+      "លុយធនាគារ / QR ត្រូវឃើញក្នុងគណនី",
       usd(paymentSummary.electronicUsd),
       khr(paymentSummary.electronicKhr),
       "",
-      "áž•áŸ’áž‘áŸ€áž„áž•áŸ’áž‘áž¶ážáŸ‹ážáž¶áž˜ ABA / ACLEDA / Bakong / Wing / áž•áŸ’ážŸáŸáž„áŸ—",
+      "ផ្ទេរផ្ទាត់តាម ABA / ACLEDA / Bakong / Wing / ផ្សេងៗ",
     ],
     [
-      "ážŸážšáž»áž”áž›áž€áŸ‹áž”áž¶áž“ážŸáž»áž‘áŸ’áž’",
+      "សរុបលក់បានសុទ្ធ",
       "",
       "",
       usd(paymentSummary.netEquivalentUsd),
-      "áž›áž»áž™áž‘áž‘áž½áž›ážŸážšáž»áž”áž‚áž·ážáž‡áž¶ USD",
+      "លុយទទួលសរុបគិតជា USD",
     ],
     [
-      "áž›áž»áž™áž¢áž¶áž”áŸ‹áž”áž¶áž“áž”áŸ’ážšáž‚áž›áŸ‹",
+      "លុយអាប់បានប្រគល់",
       usd(paymentSummary.changeUsd),
       khr(paymentSummary.changeKhr),
       "",
-      "áž˜áž·áž“áž˜áŸ‚áž“áž›áž»áž™áž›áž€áŸ‹áž”áž¶áž“áž‘áŸ",
+      "មិនមែនលុយលក់បានទេ",
     ],
     [
-      "ážŸáž„áž”áŸ’ážšáž¶áž€áŸ‹áž¢ážáž·ážáž·áž‡áž“",
+      "សងប្រាក់អតិថិជន",
       usd(paymentSummary.refundUsd),
       khr(paymentSummary.refundKhr),
       usd(paymentSummary.refundEquivalentUsd),
-      "áž›áž»áž™áž…áŸáž‰áž–áž¸áž€áž¶ážšážáŸ’ážšáž¡áž”áŸ‹áž‘áŸ†áž“áž·áž‰áž›áž€áŸ‹",
+      "លុយចេញពីការត្រឡប់ទំនិញលក់",
     ],
     [
-      "áž›áž»áž™áž…áŸáž‰áž–áž¸áž€áž¶ážšáž‘áž·áž‰áž”áž¶áž“áž”áž„áŸ‹",
+      "លុយចេញទិញបានបង់",
       usd(purchaseMoney.paidUsd),
       khr(purchaseMoney.paidKhr),
       usd(purchaseMoney.paidEquivalentUsd),
-      "áž•áŸ’áž‘áŸ€áž„áž•áŸ’áž‘áž¶ážáŸ‹áž‡áž¶áž˜áž½áž™áž›áž»áž™áž…áŸáž‰áž‘áŸ…áž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹",
+      "ផ្ទេរផ្ទាត់ជាមួយលុយចេញទៅអ្នកផ្គត់ផ្គង់",
     ],
     [
-      "áž¢ážáž·ážáž·áž‡áž“áž˜áž·áž“áž‘áž¶áž“áŸ‹áž‘áž¼áž‘áž¶ážáŸ‹",
+      "អតិថិជនមិនទាន់ទូទាត់",
       "",
       "",
       usd(outstanding.totalUsd ?? stats.outstanding_balance_usd),
-      "áž›áž»áž™áž˜áž·áž“áž‘áž¶áž“áŸ‹áž‘áž‘áž½áž›áž–áž¸áž€áž¶ážšáž›áž€áŸ‹",
+      "លុយមិនទាន់ទទួលពីការលក់",
     ],
     [
-      "áž™áž¾áž„áž˜áž·áž“áž‘áž¶áž“áŸ‹áž”áž„áŸ‹áž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹",
+      "យើងមិនទាន់បង់អ្នកផ្គត់ផ្គង់",
       usd(purchaseMoney.outstandingUsd),
       khr(purchaseMoney.outstandingKhr),
       usd(purchaseOutstandingEquivalentUsd),
-      "áž›áž»áž™áž‘áž·áž‰áž…áž¼áž›ážŠáŸ‚áž›áž˜áž·áž“áž‘áž¶áž“áŸ‹áž”áž„áŸ‹",
+      "លុយទិញចូលដែលមិនទាន់បង់",
     ],
   ];
 
   const summaryRows = [
-    ["áž€áž¶ážšáž›áž€áŸ‹ážŸážšáž»áž”", usd(stats.total_sales_usd), number(stats.total_sales_count), "áž›áž»áž™áž›áž€áŸ‹ážŸážšáž»áž” áž“áž·áž„áž…áŸ†áž“áž½áž“ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážšáž›áž€áŸ‹áž€áŸ’áž“áž»áž„ážšáž™áŸˆáž–áŸáž›ážŠáŸ‚áž›áž”áž¶áž“áž‡áŸ’ážšáž¾ážŸ"],
-    ["áž€áž¶ážšáž‘áž·áž‰ážŸážšáž»áž”", usd(stats.total_purchases_usd), number(stats.total_purchases_count), "ážŸážšáž»áž”áž›áž»áž™ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážšáž‘áž·áž‰áž€áŸ’áž“áž»áž„ážšáž™áŸˆáž–áŸáž›ážŠáŸ‚áž›áž”áž¶áž“áž‡áŸ’ážšáž¾ážŸ"],
-    ["áž€áž¶ážšážáŸ’ážšáž¡áž”áŸ‹áž‘áŸ†áž“áž·áž‰áž›áž€áŸ‹", usd(stats.sales_returns_usd), number(stats.sales_returns_count), "áž‘áŸ†áž“áž·áž‰ážŠáŸ‚áž›áž¢ážáž·ážáž·áž‡áž“ážáŸ’ážšáž¡áž”áŸ‹"],
-    ["áž€áž¶ážšážáŸ’ážšáž¡áž”áŸ‹áž‘áŸ†áž“áž·áž‰áž‘áž·áž‰", usd(stats.purchase_returns_usd), number(stats.purchase_returns_count), "áž€áž¶ážšáž‘áž¶áž˜áž‘áž¶ážšáž‘áŸ…áž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹"],
-    ["áž›áž»áž™ážŸáž»áž‘áŸ’áž’", usd(stats.net_cash_usd), "", "áž›áž»áž™áž‘áž‘áž½áž›áž”áž¶áž“áž–áž·áž - áž›áž»áž™áž‘áž·áž‰áž…áž¼áž›ážŠáŸ‚áž›áž”áž¶áž“áž”áž„áŸ‹"],
-    ["áž€áž¶ážšážáŸ’ážšáž¡áž”áŸ‹ážŸážšáž»áž”", usd(stats.gross_return_usd), "", "áž€áž¶ážšážáŸ’ážšáž¡áž”áŸ‹áž‘áŸ†áž“áž·áž‰áž›áž€áŸ‹ + áž€áž¶ážšážáŸ’ážšáž¡áž”áŸ‹áž‘áŸ†áž“áž·áž‰áž‘áž·áž‰"],
-    ["áž¢ážáž·ážáž·áž‡áž“áž˜áž·áž“áž‘áž¶áž“áŸ‹áž‘áž¼áž‘áž¶ážáŸ‹", usd(stats.outstanding_balance_usd), number(stats.outstanding_balance_count), "ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážšáž›áž€áŸ‹ážŠáŸ‚áž›áž¢ážáž·ážáž·áž‡áž“áž˜áž·áž“áž‘áž¶áž“áŸ‹áž”áž„áŸ‹ / áž”áž„áŸ‹ážáŸ’áž›áŸ‡"],
-    ["áž‘áŸ†áž“áž·áž‰ážŸáŸ’ážáž»áž€ážŸáŸ’áž‘áž¾ážšáž¢ážŸáŸ‹", number(stats.low_stock_count), "", "áž‘áŸ†áž“áž·áž‰áž“áŸ…áž€áž˜áŸ’ážšáž·ážáž¢áž”áŸ’áž”áž”ážšáž˜áž¶ áž¬áž€áŸ’ážšáŸ„áž˜áž€áž˜áŸ’ážšáž·áž"],
-    ["áž€áž¶ážšáž‘áž¶áž˜áž‘áž¶ážšáž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹", number(stats.pending_claims_count), "", "áž€áž¶ážšážáŸ’ážšáž¡áž”áŸ‹áž‘áŸ†áž“áž·áž‰áž‘áž·áž‰ážŠáŸ‚áž›áž˜áž·áž“áž‘áž¶áž“áŸ‹ážŠáŸ„áŸ‡ážŸáŸ’ážšáž¶áž™"],
-    ["ážŸáŸ’ážáž»áž€áž“áŸ…ážŸáž›áŸ‹", number(stats.stock_on_hand), "", "áž…áŸ†áž“áž½áž“ážŸáŸ’ážáž»áž€áž”áž…áŸ’áž…áž»áž”áŸ’áž”áž“áŸ’áž“"],
+    ["ការលក់សរុប", usd(stats.total_sales_usd), number(stats.total_sales_count), "តម្លៃលក់សរុប និងចំនួនវិក្កយបត្រក្នុងរយៈពេលដែលបានជ្រើសរើស"],
+    ["ការទិញសរុប", usd(stats.total_purchases_usd), number(stats.total_purchases_count), "សរុបលុយវិក្កយបត្រទិញក្នុងរយៈពេលដែលបានជ្រើសរើស"],
+    ["ការត្រឡប់ទំនិញលក់", usd(stats.sales_returns_usd), number(stats.sales_returns_count), "ទំនិញដែលអតិថិជនត្រឡប់"],
+    ["ការត្រឡប់ទំនិញទិញ", usd(stats.purchase_returns_usd), number(stats.purchase_returns_count), "ការទាមទារទៅអ្នកផ្គត់ផ្គង់"],
+    ["លុយសុទ្ធ", usd(stats.net_cash_usd), "", "លុយទទួលបានពិត − លុយទិញចូលដែលបានបង់"],
+    ["ការត្រឡប់សរុប", usd(stats.gross_return_usd), "", "ការត្រឡប់ទំនិញលក់ + ការត្រឡប់ទំនិញទិញ"],
+    ["អតិថិជនមិនទាន់ទូទាត់", usd(stats.outstanding_balance_usd), number(stats.outstanding_balance_count), "វិក្កយបត្រលក់ដែលអតិថិជនមិនទាន់បង់ / បង់ខ្លះ"],
+    ["ទំនិញស្តុកស្ទើរអស់", number(stats.low_stock_count), "", "ទំនិញនៅក្រិតអប្បបរមា ឬក្រោមកម្រិត"],
+    ["ការទាមទារអ្នកផ្គត់ផ្គង់", number(stats.pending_claims_count), "", "ការត្រឡប់ទំនិញទិញដែលមិនទាន់ដោះស្រាយ"],
+    ["ស្តុកនៅសល់", number(stats.stock_on_hand), "", "ចំនួនស្តុកបច្ចុប្បន្ន"],
   ];
 
   const salesByTypeRows = Object.entries(salesByType).map(([type, row]) => [
@@ -292,9 +299,9 @@ export const buildReportExport = ({
   ]);
 
   const insightRows = [
-    ["ážáŸ’áž„áŸƒáž›áž€áŸ‹áž”áž¶áž“áž…áŸ’ážšáž¾áž“", insights.best_sales_day?.day ?? "", insights.best_sales_day ? usd(insights.best_sales_day.amount) : ""],
-    ["ážáŸ’áž„áŸƒáž‘áž·áž‰áž…áž¼áž›áž…áŸ’ážšáž¾áž“", insights.best_purchase_day?.day ?? "", insights.best_purchase_day ? usd(insights.best_purchase_day.amount) : ""],
-    ["ážáŸ’áž„áŸƒážáŸ’ážšáž¡áž”áŸ‹áž…áŸ’ážšáž¾áž“", insights.most_return_day?.day ?? "", insights.most_return_day ? usd(insights.most_return_day.amount) : ""],
+    ["ថ្ងៃលក់បានច្រើន", insights.best_sales_day?.day ?? "", insights.best_sales_day ? usd(insights.best_sales_day.amount) : ""],
+    ["ថ្ងៃទិញច្រើន", insights.best_purchase_day?.day ?? "", insights.best_purchase_day ? usd(insights.best_purchase_day.amount) : ""],
+    ["ថ្ងៃត្រឡប់ច្រើន", insights.most_return_day?.day ?? "", insights.most_return_day ? usd(insights.most_return_day.amount) : ""],
   ];
 
   const chartRows = chartData.map((row) => [
@@ -318,11 +325,11 @@ export const buildReportExport = ({
   ]);
 
   const salesProfitRows = [
-    ["áž”áŸ’ážšáž¶áž€áŸ‹áž›áž€áŸ‹", usd(salesProfit.revenueUsd ?? stats.sales_revenue_usd)],
-    ["ážáŸ’áž›áŸƒážŠáž¾áž˜", usd(salesProfit.costUsd ?? stats.sales_cost_usd)],
-    ["áž”áŸ’ážšáž¶áž€áŸ‹áž…áŸ†ážŽáŸáž‰ážŠáž»áž›", usd(salesProfit.grossProfitUsd ?? stats.gross_profit_usd)],
-    ["áž•áž›áž”áŸ‰áŸ‡áž–áž¶áž›áŸ‹áž–áž¸áž€áž¶ážšážáŸ’ážšáž¡áž”áŸ‹", usd(salesProfit.returnProfitImpactUsd ?? stats.sales_return_profit_impact_usd)],
-    ["áž”áŸ’ážšáž¶áž€áŸ‹áž…áŸ†ážŽáŸáž‰ážŠáž»áž›ážŸáž»áž‘áŸ’áž’", usd(salesProfit.netGrossProfitUsd ?? stats.net_gross_profit_usd)],
+    ["ប្រាក់ចំណូល", usd(salesProfit.revenueUsd ?? stats.sales_revenue_usd)],
+    ["ថ្លៃដើម", usd(salesProfit.costUsd ?? stats.sales_cost_usd)],
+    ["ប្រាក់ចំណេញដុល", usd(salesProfit.grossProfitUsd ?? stats.gross_profit_usd)],
+    ["ផលប៉ះពាល់ពីការត្រឡប់", usd(salesProfit.returnProfitImpactUsd ?? stats.sales_return_profit_impact_usd)],
+    ["ប្រាក់ចំណេញដុលសុទ្ធ", usd(salesProfit.netGrossProfitUsd ?? stats.net_gross_profit_usd)],
   ];
 
   const salesDetailRows = salesDetails.map((item) => [
@@ -362,16 +369,16 @@ export const buildReportExport = ({
   ]);
 
   const paymentSummaryRows = [
-    ["ážŸáž¶áž…áŸ‹áž”áŸ’ážšáž¶áž€áŸ‹áž‘áž‘áž½áž› USD", usd(paymentSummary.cashReceivedUsd), "ážŸáž¶áž…áŸ‹áž”áŸ’ážšáž¶áž€áŸ‹áž‘áž‘áž½áž› KHR", khr(paymentSummary.cashReceivedKhr)],
-    ["ážŸáž¶áž…áŸ‹áž”áŸ’ážšáž¶áž€áŸ‹áž¢áž¶áž”áŸ‹ USD", usd(paymentSummary.cashChangeUsd), "ážŸáž¶áž…áŸ‹áž”áŸ’ážšáž¶áž€áŸ‹áž¢áž¶áž”áŸ‹ KHR", khr(paymentSummary.cashChangeKhr)],
-    ["ážŸáž¶áž…áŸ‹áž”áŸ’ážšáž¶áž€áŸ‹áž‘áž‘áž½áž›áž–áž·áž USD", usd(paymentSummary.cashUsd), "ážŸáž¶áž…áŸ‹áž”áŸ’ážšáž¶áž€áŸ‹áž‘áž‘áž½áž›áž–áž·áž KHR", khr(paymentSummary.cashKhr)],
-    ["áž’áž“áž¶áž‚áž¶ážš/QR áž‘áž‘áž½áž› USD", usd(paymentSummary.electronicReceivedUsd), "áž’áž“áž¶áž‚áž¶ážš/QR áž‘áž‘áž½áž› KHR", khr(paymentSummary.electronicReceivedKhr)],
-    ["áž’áž“áž¶áž‚áž¶ážš/QR áž¢áž¶áž”áŸ‹ USD", usd(paymentSummary.electronicChangeUsd), "áž’áž“áž¶áž‚áž¶ážš/QR áž¢áž¶áž”áŸ‹ KHR", khr(paymentSummary.electronicChangeKhr)],
-    ["áž’áž“áž¶áž‚áž¶ážš/QR áž‘áž‘áž½áž›áž–áž·áž USD", usd(paymentSummary.electronicUsd), "áž’áž“áž¶áž‚áž¶ážš/QR áž‘áž‘áž½áž›áž–áž·áž KHR", khr(paymentSummary.electronicKhr)],
-    ["áž›áž»áž™áž¢áž¶áž”áŸ‹ážŸážšáž»áž” USD", usd(paymentSummary.changeUsd), "áž›áž»áž™áž¢áž¶áž”áŸ‹ážŸážšáž»áž” KHR", khr(paymentSummary.changeKhr)],
-    ["ážŸáž„áž”áŸ’ážšáž¶áž€áŸ‹ USD", usd(paymentSummary.refundUsd), "ážŸáž„áž”áŸ’ážšáž¶áž€áŸ‹ KHR", khr(paymentSummary.refundKhr)],
-    ["ážŸážšáž»áž”ážŸáŸ’áž˜áž¾ USD", usd(paymentSummary.totalEquivalentUsd), "ážŸáž„áž”áŸ’ážšáž¶áž€áŸ‹ážŸáŸ’áž˜áž¾ USD", usd(paymentSummary.refundEquivalentUsd)],
-    ["áž›áž»áž™áž‘áž‘áž½áž›ážŸážšáž»áž”áž‚áž·ážáž‡áž¶ USD", usd(paymentSummary.netEquivalentUsd), "", ""],
+    ["សាច់ប្រាក់ទទួល USD", usd(paymentSummary.cashReceivedUsd), "សាច់ប្រាក់ទទួល KHR", khr(paymentSummary.cashReceivedKhr)],
+    ["សាច់ប្រាក់អាប់ USD", usd(paymentSummary.cashChangeUsd), "សាច់ប្រាក់អាប់ KHR", khr(paymentSummary.cashChangeKhr)],
+    ["សាច់ប្រាក់ទទួលពិត USD", usd(paymentSummary.cashUsd), "សាច់ប្រាក់ទទួលពិត KHR", khr(paymentSummary.cashKhr)],
+    ["ធនាគារ/QR ទទួល USD", usd(paymentSummary.electronicReceivedUsd), "ធនាគារ/QR ទទួល KHR", khr(paymentSummary.electronicReceivedKhr)],
+    ["ធនាគារ/QR អាប់ USD", usd(paymentSummary.electronicChangeUsd), "ធនាគារ/QR អាប់ KHR", khr(paymentSummary.electronicChangeKhr)],
+    ["ធនាគារ/QR ទទួលពិត USD", usd(paymentSummary.electronicUsd), "ធនាគារ/QR ទទួលពិត KHR", khr(paymentSummary.electronicKhr)],
+    ["លុយអាប់សរុប USD", usd(paymentSummary.changeUsd), "លុយអាប់សរុប KHR", khr(paymentSummary.changeKhr)],
+    ["សងប្រាក់ USD", usd(paymentSummary.refundUsd), "សងប្រាក់ KHR", khr(paymentSummary.refundKhr)],
+    ["សរុបស្មើ USD", usd(paymentSummary.totalEquivalentUsd), "សងប្រាក់ស្មើ USD", usd(paymentSummary.refundEquivalentUsd)],
+    ["លុយទទួលសរុបគិតជា USD", usd(paymentSummary.netEquivalentUsd), "", ""],
   ];
 
   const paymentRows = paymentBreakdown.map((item) => [
@@ -399,15 +406,15 @@ export const buildReportExport = ({
   ]);
 
   const purchaseRows = [
-    ["áž…áŸ†áž“áž½áž“ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážšáž‘áž·áž‰", number(purchaseMoney.count)],
-    ["ážŸážšáž»áž”áž›áž»áž™ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážš USD", usd(purchaseTotalUsd)],
-    ["ážŸážšáž»áž”áž›áž»áž™ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážš KHR", khr(purchaseTotalKhr)],
-    ["áž”áž¶áž“áž”áž„áŸ‹ USD", usd(purchaseMoney.paidUsd)],
-    ["áž”áž¶áž“áž”áž„áŸ‹ KHR", khr(purchaseMoney.paidKhr)],
-    ["áž”áž¶áž“áž”áž„áŸ‹ážŸáŸ’áž˜áž¾ USD", usd(purchaseMoney.paidEquivalentUsd)],
-    ["áž˜áž·áž“áž‘áž¶áž“áŸ‹áž”áž„áŸ‹ USD", usd(purchaseMoney.outstandingUsd)],
-    ["áž˜áž·áž“áž‘áž¶áž“áŸ‹áž”áž„áŸ‹ KHR", khr(purchaseMoney.outstandingKhr)],
-    ["áž˜áž·áž“áž‘áž¶áž“áŸ‹áž”áž„áŸ‹ážŸáŸ’áž˜áž¾ USD", usd(purchaseOutstandingEquivalentUsd)],
+    ["ចំនួនវិក្កយបត្រទិញ", number(purchaseMoney.count)],
+    ["សរុបលុយវិក្កយបត្រ USD", usd(purchaseTotalUsd)],
+    ["សរុបលុយវិក្កយបត្រ KHR", khr(purchaseTotalKhr)],
+    ["បានបង់ USD", usd(purchaseMoney.paidUsd)],
+    ["បានបង់ KHR", khr(purchaseMoney.paidKhr)],
+    ["បានបង់ស្មើ USD", usd(purchaseMoney.paidEquivalentUsd)],
+    ["មិនទាន់បង់ USD", usd(purchaseMoney.outstandingUsd)],
+    ["មិនទាន់បង់ KHR", khr(purchaseMoney.outstandingKhr)],
+    ["មិនទាន់បង់ស្មើ USD", usd(purchaseOutstandingEquivalentUsd)],
   ];
 
   const supplierRows = (purchaseMoney.suppliers ?? []).map((item) => [
@@ -469,27 +476,27 @@ export const buildReportExport = ({
   ]);
 
   const stockSummaryRows = [
-    ["ážáž˜áŸ’áž›áŸƒážŸáŸ’ážáž»áž€ USD", usd(stockReport.valueUsd)],
-    ["ážáž˜áŸ’áž›áŸƒážŸáŸ’ážáž»áž€ KHR", khr(stockReport.valueKhr)],
-    ["áž…áŸ†áž“áž½áž“ážŸáŸ’ážáž»áž€ážŸážšáž»áž”", number(stockReport.stockOnHand)],
-    ["áž…áŸ†áž“áž½áž“áž˜áž»ážáž‘áŸ†áž“áž·áž‰", number(stockReport.stockItemCount)],
-    ["ážŸáŸ’ážáž»áž€ážŸáŸ’áž‘áž¾ážšáž¢ážŸáŸ‹", number(stockReport.lowStockCount ?? stats.low_stock_count)],
-    ["ážŸáŸ’ážáž»áž€áž¢ážŸáŸ‹", number(stockReport.outOfStockCount)],
-    ["áž…áž›áž“áž¶ážŸáŸ’ážáž»áž€", number(stockReport.movementCount)],
-    ["áž…áž¼áž›ážŸáŸ’ážáž»áž€", number(stockReport.stockInQty)],
-    ["áž…áŸáž‰ážŸáŸ’ážáž»áž€", number(stockReport.stockOutQty)],
+    ["តម្លៃស្តុក USD", usd(stockReport.valueUsd)],
+    ["តម្លៃស្តុក KHR", khr(stockReport.valueKhr)],
+    ["ចំនួនស្តុកសរុប", number(stockReport.stockOnHand)],
+    ["ចំនួនមុខទំនិញ", number(stockReport.stockItemCount)],
+    ["ស្តុកស្ទើរអស់", number(stockReport.lowStockCount ?? stats.low_stock_count)],
+    ["ស្តុកអស់", number(stockReport.outOfStockCount)],
+    ["ចលនាស្តុក", number(stockReport.movementCount)],
+    ["ចូលស្តុក", number(stockReport.stockInQty)],
+    ["ចេញស្តុក", number(stockReport.stockOutQty)],
   ];
 
   const stockMovementRows = [
     ...(stockReport.stockInItems ?? []).map((item) => [
-      "áž…áž¼áž›ážŸáŸ’ážáž»áž€",
+      "ចូលស្តុក",
       item.name,
       qty(item.qty),
       item.unit,
       number(item.count),
     ]),
     ...(stockReport.stockOutItems ?? []).map((item) => [
-      "áž…áŸáž‰ážŸáŸ’ážáž»áž€",
+      "ចេញស្តុក",
       item.name,
       qty(item.qty),
       item.unit,
@@ -537,42 +544,42 @@ export const buildReportExport = ({
   ]);
 
   const activityRows = recentActivities.map((item) => [
-    item.type,
+    activityTypeLabel(item.type),
     item.label,
     item.desc,
     item.time,
   ]);
 
   const sectionsByKey = {
-    salesProfit: { title: "áž”áŸ’ážšáž¶áž€áŸ‹áž…áŸ†ážŽáŸáž‰", headers: ["áž”áŸ’ážšáž—áŸáž‘", "ážáž˜áŸ’áž›áŸƒ"], rows: salesProfitRows },
-    salesDetails: { title: "áž›áž˜áŸ’áž¢áž·ážáž€áž¶ážšáž›áž€áŸ‹", headers: ["áž›áŸážážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážš", "ážáŸ’áž„áŸƒ", "áž¢ážáž·ážáž·áž‡áž“", "áž¢áŸ’áž“áž€áž›áž€áŸ‹", "ážŸážšáž»áž”", "áž”áž¶áž“áž”áž„áŸ‹", "áž“áŸ…ážáŸ’ážœáŸ‡", "ážŸáŸ’ážáž¶áž“áž—áž¶áž–áž”áž„áŸ‹"], rows: salesDetailRows },
-    salesCustomers: { title: "áž›áž€áŸ‹ážáž¶áž˜áž¢ážáž·ážáž·áž‡áž“", headers: ["áž¢ážáž·ážáž·áž‡áž“", "ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážš", "ážŸážšáž»áž”", "áž”áž¶áž“áž”áž„áŸ‹", "áž“áŸ…ážáŸ’ážœáŸ‡"], rows: salesCustomerRows },
-    salesCashiers: { title: "áž›áž€áŸ‹ážáž¶áž˜áž¢áŸ’áž“áž€áž›áž€áŸ‹", headers: ["áž¢áŸ’áž“áž€áž›áž€áŸ‹", "ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážš", "ážŸážšáž»áž”", "áž”áž¶áž“áž”áž„áŸ‹", "áž“áŸ…ážáŸ’ážœáŸ‡"], rows: salesCashierRows },
-    purchaseDetails: { title: "áž›áž˜áŸ’áž¢áž·ážáž€áž¶ážšáž‘áž·áž‰", headers: ["áž›áŸážáž‘áž·áž‰", "ážáŸ’áž„áŸƒ", "áž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹", "ážŸážšáž»áž”", "áž”áž¶áž“áž”áž„áŸ‹", "áž“áŸ…ážáŸ’ážœáŸ‡", "ážŸáŸ’ážáž¶áž“áž—áž¶áž–áž”áž„áŸ‹", "ážŸáŸ’ážáž¶áž“áž—áž¶áž–"], rows: purchaseDetailRows },
-    purchasesBySupplier: { title: "áž‘áž·áž‰ážáž¶áž˜áž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹", headers: ["áž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹", "ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážš", "ážŸážšáž»áž”", "áž”áž¶áž“áž”áž„áŸ‹", "áž“áŸ…ážáŸ’ážœáŸ‡"], rows: purchasesBySupplierRows },
-    purchaseReturns: { title: "áž›áž˜áŸ’áž¢áž·ážáž€áž¶ážšážáŸ’ážšáž¡áž”áŸ‹áž€áž¶ážšáž‘áž·áž‰", headers: ["áž›áŸážážáŸ’ážšáž¡áž”áŸ‹", "ážáŸ’áž„áŸƒ", "áž›áŸážáž‘áž·áž‰", "áž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹", "áž˜áž¼áž›áž áŸážáž»", "ážŠáŸ†ážŽáŸ„áŸ‡ážŸáŸ’ážšáž¶áž™", "ážŸážšáž»áž”", "áž”áŸ’ážšáž¶áž€áŸ‹ážŸáž„", "Credit", "ážŸáŸ’ážáž¶áž“áž—áž¶áž–"], rows: purchaseReturnRows },
-    paymentTransactions: { title: "áž”áŸ’ážšážáž·áž”ážáŸ’ážáž·áž€áž¶ážšáž‘áž¼áž‘áž¶ážáŸ‹", headers: ["ážáŸ’áž„áŸƒ", "ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážš", "áž¢ážáž·ážáž·áž‡áž“", "ážœáž·áž’áž¸", "áž”áŸ’ážšáž—áž–", "áž”áž¶áž“áž‘áž‘áž½áž›", "ážŸáŸ’áž˜áž¾ USD", "áž¢áŸ’áž“áž€áž‘áž‘áž½áž›", "áž™áŸ„áž„"], rows: paymentTransactionRows },
-    outOfStock: { title: "ážŸáŸ’ážáž»áž€áž¢ážŸáŸ‹", headers: ["áž‘áŸ†áž“áž·áž‰", "áž“áŸ…ážŸáž›áŸ‹", "áž€áž˜áŸ’ážšáž·áž", "ážáŸ’áž“áž¶ážáž‘áŸ†áž“áž·áž‰"], rows: outOfStockRows },
-    batchExpiry: { title: "Batch áž“áž·áž„ážáŸ’áž„áŸƒáž•áž»ážáž€áŸ†ážŽážáŸ‹", headers: ["Batch", "Lot", "áž‘áŸ†áž“áž·áž‰", "áž•áž»ážáž€áŸ†ážŽážáŸ‹", "áž“áŸ…ážŸáž›áŸ‹", "ážáž˜áŸ’áž›áŸƒ", "ážŸáŸ’ážáž¶áž“áž—áž¶áž–"], rows: batchExpiryRows },
-    stockAdjustments: { title: "áž€áŸ‚ážáž˜áŸ’ážšáž¼ážœážŸáŸ’ážáž»áž€", headers: ["áž›áŸáž", "ážáŸ’áž„áŸƒ", "áž”áŸ’ážšáž—áŸáž‘", "áž˜áž¼áž›áž áŸážáž»", "ážŸáŸ’ážáž¶áž“áž—áž¶áž–", "áž˜áž»ážáž‘áŸ†áž“áž·áž‰", "áž…áŸ†áž“áž½áž“", "ážáž˜áŸ’áž›áŸƒ", "áž”áž„áŸ’áž€áž¾ážážŠáŸ„áž™"], rows: stockAdjustmentRows },
-    damagedStock: { title: "ážŸáŸ’ážáž»áž€ážáž¼áž…", headers: ["áž”áŸ’ážšáž—áž–", "áž¯áž€ážŸáž¶ážš", "áž—áž¶áž‚áž¸", "áž‘áŸ†áž“áž·áž‰", "áž…áŸ†áž“áž½áž“", "ážáŸ’áž“áž¶ážáž‘áŸ†áž“áž·áž‰", "ážáž˜áŸ’áž›áŸƒ"], rows: damagedStockRows },
-    closing: { title: "áž”áž·áž‘áž”áž‰áŸ’áž‡áž¸áž›áž»áž™", headers: ["ážáŸ’ážšáž¼ážœáž•áŸ’áž‘áŸ€áž„áž•áŸ’áž‘áž¶ážáŸ‹", "USD", "KHR", "ážŸáŸ’áž˜áž¾ USD", "áž…áŸ†ážŽáž¶áŸ†"], rows: closingRows },
-    summary: { title: "ážŸážšáž»áž”ážšáž”áž¶áž™áž€áž¶ážšážŽáŸ", headers: ["áž”áŸ’ážšáž—áŸáž‘áž‘áž·áž“áŸ’áž“áŸáž™", "ážáž˜áŸ’áž›áŸƒ", "áž…áŸ†áž“áž½áž“", "áž…áŸ†ážŽáž¶áŸ†"], rows: summaryRows },
-    salesType: { title: "áž€áž¶ážšáž›áž€áŸ‹ážáž¶áž˜áž”áŸ’ážšáž—áŸáž‘", headers: ["áž”áŸ’ážšáž—áŸáž‘", "áž…áŸ†áž“áž½áž“", "ážŸážšáž»áž” USD"], rows: salesByTypeRows },
-    insights: { title: "áž…áŸ†ážŽáž»áž…ážŸáŸ†ážáž¶áž“áŸ‹áŸ—", headers: ["áž”áŸ’ážšáž—áŸáž‘áž‘áž·áž“áŸ’áž“áŸáž™", "ážšáž™áŸˆáž–áŸáž›", "ážáž˜áŸ’áž›áŸƒ"], rows: insightRows },
-    chart: { title: "áž‘áž·áž“áŸ’áž“áŸáž™áž€áŸ’ážšáž¶áž”", note: chartGranularity ? `áž€áž¶ážšáž”áŸ‚áž„áž…áŸ‚áž€: ${chartGranularityLabel(chartGranularity)}` : "", headers: ["ážšáž™áŸˆáž–áŸáž›", "ážáŸ’áž„áŸƒ", "áž€áž¶ážšáž›áž€áŸ‹ážŸážšáž»áž” USD", "áž‘áž·áž‰ USD", "ážáŸ’ážšáž¡áž”áŸ‹áž‘áŸ†áž“áž·áž‰ážŸážšáž»áž” USD", "ážáŸ’ážšáž¡áž”áŸ‹áž–áž¸áž€áž¶ážšáž›áž€áŸ‹ USD", "ážáŸ’ážšáž¡áž”áŸ‹áž‘áŸ…áž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹ USD"], rows: chartRows },
-    topProducts: { title: "áž‘áŸ†áž“áž·áž‰áž›áž€áŸ‹ážŠáž¶áž…áŸ‹", headers: ["áž›.ážš", "áž‘áŸ†áž“áž·áž‰", "ážáŸ’áž“áž¶ážáž‘áŸ†áž“áž·áž‰", "áž…áŸ†áž“áž½áž“áž›áž€áŸ‹", "áž”áŸ’ážšáž¶áž€áŸ‹áž›áž€áŸ‹ USD", "ážŸáŸ’ážáž»áž€", "ážŸáŸ’ážáž¶áž“áž—áž¶áž–"], rows: productRows },
-    paymentSummary: { title: "ážŸáŸáž…áž€áŸ’ážáž¸ážŸáž„áŸ’ážáŸáž”áž€áž¶ážšáž‘áž¼áž‘áž¶ážáŸ‹", headers: ["áž”áŸ’ážšáž—áŸáž‘áž‘áž·áž“áŸ’áž“áŸáž™", "ážáž˜áŸ’áž›áŸƒ", "áž”áŸ’ážšáž—áŸáž‘áž‘áž·áž“áŸ’áž“áŸáž™", "ážáž˜áŸ’áž›áŸƒ"], rows: paymentSummaryRows },
-    paymentTypes: { title: "áž€áž¶ážšáž‘áž¼áž‘áž¶ážáŸ‹ážáž¶áž˜áž”áŸ’ážšáž—áŸáž‘", headers: ["áž”áŸ’ážšáž—áž–", "ážœáž·áž’áž¸ážŸáž¶ážŸáŸ’ážáŸ’ážš", "áž‘áž‘áž½áž› USD", "áž‘áž‘áž½áž› KHR", "áž¢áž¶áž”áŸ‹ USD", "áž¢áž¶áž”áŸ‹ KHR", "áž‘áž‘áž½áž›áž–áž·áž USD", "áž‘áž‘áž½áž›áž–áž·áž KHR", "ážŸáŸ’áž˜áž¾ USD"], rows: paymentRows },
-    outstandingAging: { title: "áž¢áž¶áž™áž»áž€áž¶áž›áž˜áž·áž“áž‘áž¶áž“áŸ‹áž‘áž¼áž‘áž¶ážáŸ‹", headers: ["áž¢áž¶áž™áž»áž€áž¶áž›", "ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážš", "ážŸážšáž»áž” USD"], rows: outstandingAgingRows },
-    outstandingCustomers: { title: "áž¢ážáž·ážáž·áž‡áž“áž˜áž·áž“áž‘áž¶áž“áŸ‹áž‘áž¼áž‘áž¶ážáŸ‹", headers: ["áž¢ážáž·ážáž·áž‡áž“", "ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážš", "ážŸážšáž»áž” USD"], rows: outstandingRows },
-    purchases: { title: "áž›áž»áž™áž…áŸáž‰áž–áž¸áž€áž¶ážšáž‘áž·áž‰", headers: ["áž”áŸ’ážšáž—áŸáž‘áž‘áž·áž“áŸ’áž“áŸáž™", "ážáž˜áŸ’áž›áŸƒ"], rows: purchaseRows },
-    purchaseProducts: { title: "áž‘áŸ†áž“áž·áž‰áž‘áž·áž‰áž…áž¼áž›", headers: ["áž›.ážš", "áž‘áŸ†áž“áž·áž‰", "ážáŸ’áž“áž¶ážáž‘áŸ†áž“áž·áž‰", "áž…áŸ†áž“áž½áž“áž‘áž·áž‰", "ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážšáž‘áž·áž‰", "តម្លៃទិញ USD"], rows: purchaseProductRows },
-    supplierDue: { title: "áž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹áž˜áž·áž“áž‘áž¶áž“áŸ‹áž”áž„áŸ‹", headers: ["áž¢áŸ’áž“áž€áž•áŸ’áž‚ážáŸ‹áž•áŸ’áž‚áž„áŸ‹", "ážœáž·áž€áŸ’áž€áž™áž”ážáŸ’ážšáž‘áž·áž‰", "ážŸážšáž»áž” USD", "ážŸážšáž»áž” KHR"], rows: supplierRows },
-    stockSummary: { title: "ážŸáž„áŸ’ážáŸáž”ážŸáŸ’ážáž»áž€", headers: ["áž”áŸ’ážšáž—áŸáž‘áž‘áž·áž“áŸ’áž“áŸáž™", "ážáž˜áŸ’áž›áŸƒ"], rows: stockSummaryRows },
-    stockMovement: { title: "áž…áž›áž“áž¶ážŸáŸ’ážáž»áž€", headers: ["áž”áŸ’ážšáž—áŸáž‘", "áž‘áŸ†áž“áž·áž‰", "áž…áŸ†áž“áž½áž“", "ážáŸ’áž“áž¶ážáž‘áŸ†áž“áž·áž‰", "áž…áŸ†áž“áž½áž“áž…áž›áž“áž¶"], rows: stockMovementRows },
-    lowStock: { title: "ážŸáŸ’ážáž»áž€ážŸáŸ’áž‘áž¾ážšáž¢ážŸáŸ‹", headers: ["áž‘áŸ†áž“áž·áž‰", "áž“áŸ…ážŸáž›áŸ‹", "áž€áž˜áŸ’ážšáž·áž", "ážáŸ’áž“áž¶ážáž‘áŸ†áž“áž·áž‰"], rows: lowStockRows },
-    activities: { title: "ážŸáž€áž˜áŸ’áž˜áž—áž¶áž–ážáŸ’áž˜áž¸áŸ—", headers: ["áž”áŸ’ážšáž—áŸáž‘", "ážŸáž€áž˜áŸ’áž˜áž—áž¶áž–", "áž›áž˜áŸ’áž¢áž·áž", "áž–áŸáž›ážœáŸáž›áž¶"], rows: activityRows },
+    salesProfit: { title: "ប្រាក់ចំណេញ", headers: ["ប្រភេទ", "តម្លៃ"], rows: salesProfitRows },
+    salesDetails: { title: "លម្អិតការលក់", headers: ["លេខវិក្កយបត្រ", "ថ្ងៃ", "អតិថិជន", "អ្នកលក់", "សរុប", "បានបង់", "នៅខ្វះ", "ស្ថានភាពបង់"], rows: salesDetailRows },
+    salesCustomers: { title: "លក់តាមអតិថិជន", headers: ["អតិថិជន", "វិក្កយបត្រ", "សរុប", "បានបង់", "នៅខ្វះ"], rows: salesCustomerRows },
+    salesCashiers: { title: "លក់តាមអ្នកលក់", headers: ["អ្នកលក់", "វិក្កយបត្រ", "សរុប", "បានបង់", "នៅខ្វះ"], rows: salesCashierRows },
+    purchaseDetails: { title: "លម្អិតការទិញ", headers: ["លេខទិញ", "ថ្ងៃ", "អ្នកផ្គត់ផ្គង់", "សរុប", "បានបង់", "នៅខ្វះ", "ស្ថានភាពបង់", "ស្ថានភាព"], rows: purchaseDetailRows },
+    purchasesBySupplier: { title: "ទិញតាមអ្នកផ្គត់ផ្គង់", headers: ["អ្នកផ្គត់ផ្គង់", "វិក្កយបត្រ", "សរុប", "បានបង់", "នៅខ្វះ"], rows: purchasesBySupplierRows },
+    purchaseReturns: { title: "លម្អិតការត្រឡប់ការទិញ", headers: ["លេខត្រឡប់", "ថ្ងៃ", "លេខទិញ", "អ្នកផ្គត់ផ្គង់", "មូលហេតុ", "ដំណោះស្រាយ", "សរុប", "ប្រាក់សង", "Credit", "ស្ថានភាព"], rows: purchaseReturnRows },
+    paymentTransactions: { title: "ប្រតិបត្តិការទូទាត់", headers: ["ថ្ងៃ", "វិក្កយបត្រ", "អតិថិជន", "វិធី", "ប្រភព", "បានទទួល", "ស្មើ USD", "អ្នកទទួល", "យោង"], rows: paymentTransactionRows },
+    outOfStock: { title: "ស្តុកអស់", headers: ["ទំនិញ", "នៅសល់", "កម្រិត", "ខ្នាតទំនិញ"], rows: outOfStockRows },
+    batchExpiry: { title: "Batch និងថ្ងៃផុតកំណត់", headers: ["Batch", "Lot", "ទំនិញ", "ផុតកំណត់", "នៅសល់", "តម្លៃ", "ស្ថានភាព"], rows: batchExpiryRows },
+    stockAdjustments: { title: "កែតម្រូវស្តុក", headers: ["លេខ", "ថ្ងៃ", "ប្រភេទ", "មូលហេតុ", "ស្ថានភាព", "មុខទំនិញ", "ចំនួន", "តម្លៃ", "បង្កើតដោយ"], rows: stockAdjustmentRows },
+    damagedStock: { title: "ស្តុកខូច", headers: ["ប្រភព", "លេខសំគាល់", "ភាគី", "ទំនិញ", "ចំនួន", "ខ្នាតទំនិញ", "តម្លៃ"], rows: damagedStockRows },
+    closing: { title: "បិទបញ្ជីលុយ", headers: ["ក្រុមផ្ទាត់ប្រាក់", "USD", "KHR", "ស្មើ USD", "ចំណាំ"], rows: closingRows },
+    summary: { title: "សរុបរបាយការណ៍", headers: ["ប្រភេទទិន្នន័យ", "តម្លៃ", "ចំនួន", "ចំណាំ"], rows: summaryRows },
+    salesType: { title: "ការលក់តាមប្រភេទ", headers: ["ប្រភេទ", "ចំនួន", "សរុប USD"], rows: salesByTypeRows },
+    insights: { title: "ចំណុចសំខាន់ៗ", headers: ["ប្រភេទទិន្នន័យ", "រយៈពេល", "តម្លៃ"], rows: insightRows },
+    chart: { title: "ទិន្នន័យក្រាប", note: chartGranularity ? `ការបែងចែក: ${chartGranularityLabel(chartGranularity)}` : "", headers: ["រយៈពេល", "ថ្ងៃ", "ការលក់សរុប USD", "ទិញ USD", "ត្រឡប់ទំនិញសរុប USD", "ត្រឡប់ពីការលក់ USD", "ត្រឡប់ទៅអ្នកផ្គត់ផ្គង់ USD"], rows: chartRows },
+    topProducts: { title: "ទំនិញលក់ដាច់", headers: ["ល.រ", "ទំនិញ", "ខ្នាតទំនិញ", "ចំនួនលក់", "ប្រាក់លក់ USD", "ស្តុក", "ស្ថានភាព"], rows: productRows },
+    paymentSummary: { title: "សេចក្តីសង្ខេបការទូទាត់", headers: ["ប្រភេទទិន្នន័យ", "តម្លៃ", "ប្រភេទទិន្នន័យ", "តម្លៃ"], rows: paymentSummaryRows },
+    paymentTypes: { title: "ការទូទាត់តាមប្រភេទ", headers: ["ប្រភព", "វិធីសាស្ត្រ", "ទទួល USD", "ទទួល KHR", "អាប់ USD", "អាប់ KHR", "ទទួលពិត USD", "ទទួលពិត KHR", "ស្មើ USD"], rows: paymentRows },
+    outstandingAging: { title: "អាយុកាលមិនទាន់ទូទាត់", headers: ["អាយុកាល", "វិក្កយបត្រ", "សរុប USD"], rows: outstandingAgingRows },
+    outstandingCustomers: { title: "អតិថិជនមិនទាន់ទូទាត់", headers: ["អតិថិជន", "វិក្កយបត្រ", "សរុប USD"], rows: outstandingRows },
+    purchases: { title: "លុយចេញការទិញ", headers: ["ប្រភេទទិន្នន័យ", "តម្លៃ"], rows: purchaseRows },
+    purchaseProducts: { title: "ទំនិញទិញច្រើន", headers: ["ល.រ", "ទំនិញ", "ខ្នាតទំនិញ", "ចំនួនទិញ", "វិក្កយបត្រទិញ", "តម្លៃទិញ USD"], rows: purchaseProductRows },
+    supplierDue: { title: "អ្នកផ្គត់ផ្គង់មិនទាន់បង់", headers: ["អ្នកផ្គត់ផ្គង់", "វិក្កយបត្រទិញ", "សរុប USD", "សរុប KHR"], rows: supplierRows },
+    stockSummary: { title: "សង្ខេបស្តុក", headers: ["ប្រភេទទិន្នន័យ", "តម្លៃ"], rows: stockSummaryRows },
+    stockMovement: { title: "ចលនាស្តុក", headers: ["ប្រភេទ", "ទំនិញ", "ចំនួន", "ខ្នាតទំនិញ", "ចំនួនចលនា"], rows: stockMovementRows },
+    lowStock: { title: "ស្តុកស្ទើរអស់", headers: ["ទំនិញ", "នៅសល់", "កម្រិត", "ខ្នាតទំនិញ"], rows: lowStockRows },
+    activities: { title: "សកម្មភាពថ្មីៗ", headers: ["ប្រភេទ", "សកម្មភាព", "លម្អិត", "ពេលវេលា"], rows: activityRows },
   };
 
   const sectionKeysByReport = {
@@ -629,40 +636,40 @@ export const buildReportExport = ({
     : sectionKeysByReport[reportTab]?.[reportType] ?? sectionKeysByReport.overview;
 
   const sectionGroupByKey = {
-    summary: "ážŸážšáž»áž”",
-    insights: "ážŸážšáž»áž”",
-    chart: "ážŸážšáž»áž”",
-    activities: "ážŸážšáž»áž”",
-    topProducts: "áž€áž¶ážšáž›áž€áŸ‹",
-    salesProfit: "áž€áž¶ážšáž›áž€áŸ‹",
-    salesType: "áž€áž¶ážšáž›áž€áŸ‹",
-    salesDetails: "áž€áž¶ážšáž›áž€áŸ‹",
-    salesCustomers: "áž€áž¶ážšáž›áž€áŸ‹",
-    salesCashiers: "áž€áž¶ážšáž›áž€áŸ‹",
-    outstandingAging: "áž€áž¶ážšáž›áž€áŸ‹",
-    outstandingCustomers: "áž€áž¶ážšáž›áž€áŸ‹",
-    purchases: "áž€áž¶ážšáž‘áž·áž‰",
-    purchaseDetails: "áž€áž¶ážšáž‘áž·áž‰",
-    purchaseProducts: "áž€áž¶ážšáž‘áž·áž‰",
-    purchasesBySupplier: "áž€áž¶ážšáž‘áž·áž‰",
-    supplierDue: "áž€áž¶ážšáž‘áž·áž‰",
-    purchaseReturns: "áž€áž¶ážšáž‘áž·áž‰",
-    stockSummary: "ážŸáŸ’ážáž»áž€",
-    stockMovement: "ážŸáŸ’ážáž»áž€",
-    lowStock: "ážŸáŸ’ážáž»áž€",
-    outOfStock: "ážŸáŸ’ážáž»áž€",
-    batchExpiry: "ážŸáŸ’ážáž»áž€",
-    stockAdjustments: "ážŸáŸ’ážáž»áž€",
-    damagedStock: "ážŸáŸ’ážáž»áž€",
-    paymentSummary: "áž áž·ážšáž‰áŸ’áž‰ážœážáŸ’ážáž»",
-    paymentTypes: "áž áž·ážšáž‰áŸ’áž‰ážœážáŸ’ážáž»",
-    paymentTransactions: "áž áž·ážšáž‰áŸ’áž‰ážœážáŸ’ážáž»",
-    closing: "áž áž·ážšáž‰áŸ’áž‰ážœážáŸ’ážáž»",
+    summary: "សរុប",
+    insights: "សរុប",
+    chart: "សរុប",
+    activities: "សរុប",
+    topProducts: "ការលក់",
+    salesProfit: "ការលក់",
+    salesType: "ការលក់",
+    salesDetails: "ការលក់",
+    salesCustomers: "ការលក់",
+    salesCashiers: "ការលក់",
+    outstandingAging: "ការលក់",
+    outstandingCustomers: "ការលក់",
+    purchases: "ការទិញ",
+    purchaseDetails: "ការទិញ",
+    purchaseProducts: "ការទិញ",
+    purchasesBySupplier: "ការទិញ",
+    supplierDue: "ការទិញ",
+    purchaseReturns: "ការទិញ",
+    stockSummary: "ស្តុក",
+    stockMovement: "ស្តុក",
+    lowStock: "ស្តុក",
+    outOfStock: "ស្តុក",
+    batchExpiry: "ស្តុក",
+    stockAdjustments: "ស្តុក",
+    damagedStock: "ស្តុក",
+    paymentSummary: "ហិរញ្ញវត្ថុ",
+    paymentTypes: "ហិរញ្ញវត្ថុ",
+    paymentTransactions: "ហិរញ្ញវត្ថុ",
+    closing: "ហិរញ្ញវត្ថុ",
   };
 
   return {
     filenameBase,
-    title: "ážšáž”áž¶áž™áž€áž¶ážšážŽáŸ",
+    title: "របាយការណ៍",
     period: `${safeFrom} to ${safeTo}`,
     generatedAt,
     sections: selectedKeys.map((key) => {
@@ -675,13 +682,13 @@ export const buildReportExport = ({
 export const exportReportCsv = (report) => {
   const csv = [
     report.title,
-    `ážšáž™áŸˆáž–áŸáž›,${csvCell(report.period)}`,
-    `áž–áŸáž›áž”áž„áŸ’áž€áž¾áž,${csvCell(report.generatedAt)}`,
+    `រយៈពេល,${csvCell(report.period)}`,
+    `ពេលបង្កើត,${csvCell(report.generatedAt)}`,
     "",
     ...report.sections.map(csvSection),
   ].join("\r\n");
 
-  downloadBlob(`\uFEFF${csv}`, `${report.filenameBase}.csv`, "text/csv;charset=utf-8");
+  downloadBlob(BOM + csv, `${report.filenameBase}.csv`, "text/csv;charset=utf-8");
 };
 
 export const exportReportExcel = (report) => {
@@ -704,8 +711,8 @@ export const exportReportExcel = (report) => {
       </head>
       <body>
         <h1>${escapeHtml(report.title)}</h1>
-        <p>ážšáž™áŸˆáž–áŸáž›: ${escapeHtml(report.period)}</p>
-        <p>áž–áŸáž›áž”áž„áŸ’áž€áž¾áž: ${escapeHtml(report.generatedAt)}</p>
+        <p>រយៈពេល: ${escapeHtml(report.period)}</p>
+        <p>ពេលបង្កើត: ${escapeHtml(report.generatedAt)}</p>
         ${reportPrintSectionsHtml(report)}
       </body>
     </html>
@@ -794,8 +801,8 @@ export const exportReportPdf = (report) => {
         <div class="report-header">
           <h1>${escapeHtml(report.title)}</h1>
           <div class="meta">
-            <p>ážšáž™áŸˆáž–áŸáž›: ${escapeHtml(report.period)}</p>
-            <p>áž–áŸáž›áž”áž„áŸ’áž€áž¾áž: ${escapeHtml(report.generatedAt)}</p>
+            <p>រយៈពេល: ${escapeHtml(report.period)}</p>
+            <p>ពេលបង្កើត: ${escapeHtml(report.generatedAt)}</p>
           </div>
         </div>
         ${reportPrintSectionsHtml(report)}
@@ -811,4 +818,3 @@ export const exportReportPdf = (report) => {
   printWindow.document.close();
   return true;
 };
-

@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
+import PermissionGate from "../../components/PermissionGate";
 
 import ProductBrowser   from "./components/productBrowser";
 import CurrentSalePanel from "./components/currentSalePanel";
@@ -20,6 +21,17 @@ import { getAppliedRule, usd } from "./components/posData";
 import { usePosData } from "./usePosData";
 import { useNotification } from "../../components/AppNotification";
 import { getProductVariantUnitByBarcodeApi } from "../../services/productVariantUnit.service";
+import { getSalesApi } from "../../services/sale.service";
+
+// Calendar-day key in the *local* timezone (not UTC) — same helper/reasoning as Sale.jsx's
+// toLocalDateKey (Dashboard's Asia/Phnom_Penh "today" boundary) — `.toISOString()` would
+// silently shift sales made in the 00:00–07:00 local window into "yesterday".
+function toLocalDateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 // ─── Held Orders Modal ────────────────────────────────────────────
 function HeldOrdersModal({ heldOrders, onResume, onDelete, onClose }) {
@@ -257,6 +269,49 @@ export default function Pos() {
   const [showBarcodeCameraModal, setShowBarcodeCameraModal] = useState(false);
 
   const notify = useNotification();
+
+  // "ការលក់ថ្ងៃនេះ" (completedSales) used to be purely client-side — only ever grown by
+  // handleCompleteSale() as sales happened in THIS browser tab, never hydrated from the server.
+  // A refresh remounts the component and resets it to an empty array, so the badge/list looked
+  // like it "lost" every sale made before the refresh even though nothing was actually deleted —
+  // it just never reflected the real day's total to begin with. Fetch today's completed sales
+  // once on mount so the count is correct from the start; handleCompleteSale still prepends new
+  // ones live afterward for instant feedback without needing to refetch.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await getSalesApi({ per_page: 100, sale_status: "completed" });
+        const list = Array.isArray(res) ? res
+          : Array.isArray(res?.data) ? res.data
+          : Array.isArray(res?.data?.data) ? res.data.data
+          : [];
+
+        const todayKey = toLocalDateKey(new Date());
+        const todaySales = list
+          .filter((s) => toLocalDateKey(new Date(s.sold_at || s.created_at)) === todayKey)
+          .sort((a, b) => new Date(b.sold_at || b.created_at) - new Date(a.sold_at || a.created_at))
+          .map((s) => ({
+            id: s.id,
+            invoiceNo: s.sale_no,
+            saleDate: new Date(s.sold_at || s.created_at).toLocaleString("en-US", {
+              year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+            }),
+            customerName: s.customer_name_snapshot || "អតិថិជនទូទៅ",
+            items: s.items || [],
+            discountAmount: Number(s.discount_total_usd || 0),
+            total: Number(s.grand_total_usd || 0),
+          }));
+
+        if (!cancelled) setCompletedSales(todaySales);
+      } catch {
+        // Non-critical — the badge just starts at 0 instead of blocking POS from loading.
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
 
   const currentUser      = useAuthStore((s) => s.user);
   const isAdmin          = useAuthStore((s) => s.can("dashboard.view"));
@@ -579,7 +634,7 @@ export default function Pos() {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-100 p-6">
         <div
-          className="flex min-h-[360px] w-full max-w-xl flex-col items-center justify-center rounded-3xl border border-white bg-white/80 shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur"
+          className="flex flex-col items-center justify-center"
           role="status"
           aria-live="polite"
         >
@@ -692,9 +747,14 @@ export default function Pos() {
             <ClipboardList className="h-3.5 w-3.5" />
           </IconBtn>
 
-          <IconBtn color="red"     title="ត្រឡប់ការលក់"                               onClick={() => setShowReturns(true)}>
-            <RotateCcw className="h-3.5 w-3.5" />
-          </IconBtn>
+          {/* Gated the same way Sale.jsx's own return button is (permission="sales.refund") —
+              previously ungated here, so a role without it would only find out after opening
+              the whole modal and submitting, rather than not seeing the button at all. */}
+          <PermissionGate permission="sales.refund">
+            <IconBtn color="red"     title="ត្រឡប់ការលក់"                               onClick={() => setShowReturns(true)}>
+              <RotateCcw className="h-3.5 w-3.5" />
+            </IconBtn>
+          </PermissionGate>
 
           <IconBtn color="slate"   title={isFullscreen ? "ចេញពី Full Screen" : "Full Screen"} active={isFullscreen} onClick={toggleFullscreen}>
             {isFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}

@@ -14,11 +14,16 @@ import {
 } from "../../Reports/utils/reportFormat";
 
 export default function SalesActivityChart({ theme, isDark, data, period, onPeriodChange }) {
-  const periods = ["ថ្ងៃនេះ", "សប្ដាហ៍", "ខែ", "ឆ្នាំ"];
+  const periods = ["ថ្ងៃនេះ", "សប្ដាហ៍", "ខែ", "ឆ្នាំ", "ទាំងអស់"];
+  // buildMoneyChartScale() reads `sales`/`purchases`/`returns` keys (its Reports-page origin) —
+  // this chart's rows are shaped {received, deferred} instead, so the keys must be remapped
+  // here or highestValue silently computes as 0 every time and the axis falls back to a fixed
+  // $100 max regardless of the real data (only became visible once real chart values started
+  // exceeding $100, e.g. the new "ឆ្នាំ"/"ទាំងអស់" periods).
   const chartScale = buildMoneyChartScale(
     data.map((item) => ({
-      received: Number(item.received || 0),
-      deferred: Number(item.deferred || 0),
+      sales: Number(item.received || 0),
+      purchases: Number(item.deferred || 0),
     }))
   );
   const periodDetail = {
@@ -26,6 +31,7 @@ export default function SalesActivityChart({ theme, isDark, data, period, onPeri
     "សប្ដាហ៍": "ចាប់ពីថ្ងៃចន្ទ ដល់ថ្ងៃអាទិត្យ",
     "ខែ": "បែងចែកជា ៤ សប្ដាហ៍ក្នុងខែ",
     "ឆ្នាំ": "បែងចែកតាមខែ មករា ដល់ធ្នូ",
+    "ទាំងអស់": "បែងចែកតាមឆ្នាំ ចាប់ពីចាប់ផ្ដើមរហូតដល់បច្ចុប្បន្ន",
   }[period];
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -98,7 +104,13 @@ export default function SalesActivityChart({ theme, isDark, data, period, onPeri
 
       <div className="h-[280px] w-full">
         <ResponsiveContainer width="100%" height="100%">
+          {/* key={period} forces a clean remount instead of an animated transition when the
+              period changes — without it, Recharts tweens between the old dataset's shape/
+              domain and the new one (e.g. 12 points up to $5,087 for "ឆ្នាំ" -> 4 points near $0
+              for "ខែ"), and the mismatched interpolation briefly renders a nonsensical spike
+              shooting off the top of the chart before settling on the correct final shape. */}
           <AreaChart
+            key={period}
             data={data}
             margin={{ top: 10, right: 24, left: -4, bottom: 0 }}
           >

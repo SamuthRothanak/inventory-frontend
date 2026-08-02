@@ -170,6 +170,16 @@ export default function InventoryDetailModal({
                 <p className={`text-xs font-semibold uppercase ${theme.muted}`}>ស្តុកបច្ចុប្បន្ន</p>
                 <p className="mt-2 text-2xl font-bold">{stockBreakdown.baseText}</p>
 
+                {stockBreakdown.convertedTexts.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {stockBreakdown.convertedTexts.map((c) => (
+                      <span key={c.unitName} className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${theme.badge}`}>
+                        {c.symbol || "≈"} {c.text}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 <div className="mt-3">
                   <StockStatusBadge status={item.status} getStatusClass={getStatusClass} />
                 </div>

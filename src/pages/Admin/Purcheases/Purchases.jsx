@@ -1271,7 +1271,14 @@ export default function Purchases() {
     setPurchaseReturnItemErrors({});
     setPurchaseReturnForm({
       ...emptyPurchaseReturnForm,
-      purchaseReturnNo: `PRET-${String(purchaseReturns.length + 1).padStart(3, "0")}`,
+      // Preview only — the backend (PurchaseReturnService::store) always overwrites this with
+      // its own PUR-RET-{latest id, incl. trashed, + 1}, ignoring whatever the client sends.
+      // Matching that format/logic here as closely as possible (max known id + 1) so the
+      // read-only preview isn't actively misleading; it may still drift by a few numbers from
+      // the real one if returns were soft-deleted since this list was last fetched.
+      purchaseReturnNo: `PUR-RET-${String(
+        Math.max(0, ...purchaseReturns.map((r) => Number(r.id) || 0)) + 1
+      ).padStart(3, "0")}`,
       purchaseId: detail.id,
       supplierId: detail.supplierId,
       returnDate: new Date().toISOString().slice(0, 10),

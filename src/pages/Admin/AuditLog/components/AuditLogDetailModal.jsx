@@ -1,6 +1,7 @@
 import React from "react";
-import { FiActivity, FiDatabase, FiMonitor, FiUser, FiX } from "react-icons/fi";
+import { FiActivity, FiDatabase, FiMinus, FiMonitor, FiPlus, FiUser, FiX } from "react-icons/fi";
 import { actionLabel, actionTone, changeFieldLabel, extractRefLabel, formatAuditValue, formatDateTime, moduleLabel, refTableLabel, translateDescription } from "../utils/auditLogFormat";
+import { getPermissionLabel } from "../../../../utils/permissionLabels";
 
 // old_values/new_values can differ in raw type (e.g. "40" vs 40, or 1 vs true) without
 // representing a real change, so compare their string form rather than the raw values.
@@ -19,8 +20,70 @@ function getChangedKeys(oldValues, newValues) {
   return changed;
 }
 
-function JsonPanel({ title, value, isDark, changedKeys }) {
-  const keys = value && typeof value === "object" ? Object.keys(value) : [];
+// The generic array formatter (formatAuditValue) shows any array as just "N items" — accurate
+// enough for line-item arrays (sale/purchase items, which have their own record to inspect
+// elsewhere) but useless for a permissions array, where this modal is the ONLY place the change
+// is visible. Compute an actual added/removed diff instead so editing a role's permissions shows
+// what changed, not just a before/after count.
+function getPermissionsDiff(oldValues, newValues) {
+  const oldPerms = Array.isArray(oldValues?.permissions) ? oldValues.permissions : null;
+  const newPerms = Array.isArray(newValues?.permissions) ? newValues.permissions : null;
+  if (!oldPerms && !newPerms) return null;
+
+  const oldSet = new Set(oldPerms ?? []);
+  const newSet = new Set(newPerms ?? []);
+  const added = (newPerms ?? []).filter((p) => !oldSet.has(p));
+  const removed = (oldPerms ?? []).filter((p) => !newSet.has(p));
+
+  return { added, removed };
+}
+
+function PermissionsDiff({ diff, isDark }) {
+  if (!diff || (diff.added.length === 0 && diff.removed.length === 0)) return null;
+
+  return (
+    <div className={`mt-2 rounded-2xl border p-4 ${isDark ? "border-white/10 bg-[#111113]" : "border-zinc-200 bg-zinc-50"}`}>
+      <p className={`mb-3 text-sm font-bold ${isDark ? "text-zinc-300" : "text-zinc-600"}`}>ការផ្លាស់ប្តូរសិទ្ធិប្រើប្រាស់</p>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <p className="mb-1.5 flex items-center gap-1 text-xs font-bold text-emerald-500">
+            <FiPlus size={12} /> បានបន្ថែម ({diff.added.length})
+          </p>
+          {diff.added.length === 0 ? (
+            <p className={`text-xs ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>-</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {diff.added.map((name) => (
+                <span key={name} className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  {getPermissionLabel(name)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <p className="mb-1.5 flex items-center gap-1 text-xs font-bold text-red-500">
+            <FiMinus size={12} /> បានដក ({diff.removed.length})
+          </p>
+          {diff.removed.length === 0 ? (
+            <p className={`text-xs ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>-</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {diff.removed.map((name) => (
+                <span key={name} className="rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400">
+                  {getPermissionLabel(name)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function JsonPanel({ title, value, isDark, changedKeys, hideKeys }) {
+  const keys = value && typeof value === "object" ? Object.keys(value).filter((k) => !hideKeys?.includes(k)) : [];
 
   return (
     <div className={`rounded-2xl border p-4 ${isDark ? "border-white/10 bg-[#111113]" : "border-zinc-200 bg-zinc-50"}`}>
@@ -67,6 +130,7 @@ export default function AuditLogDetailModal({ log, isDark = false, onClose }) {
   if (!log) return null;
 
   const changedKeys = getChangedKeys(log.old_values, log.new_values);
+  const permissionsDiff = getPermissionsDiff(log.old_values, log.new_values);
   const tone = actionTone(log.action);
   const toneClass = {
     emerald: "bg-emerald-500/10 text-emerald-500",
@@ -134,9 +198,10 @@ export default function AuditLogDetailModal({ log, isDark = false, onClose }) {
               បន្ទាត់ពណ៌លឿង គឺជាទិន្នន័យដែលពិតជាបានផ្លាស់ប្តូរ
             </p>
           )}
+          <PermissionsDiff diff={permissionsDiff} isDark={isDark} />
           <div className={`grid gap-4 md:grid-cols-2 ${changedKeys.size > 0 ? "mt-2" : "mt-5"}`}>
-            <JsonPanel title="តម្លៃមុន" value={log.old_values} isDark={isDark} changedKeys={changedKeys} />
-            <JsonPanel title="តម្លៃក្រោយ" value={log.new_values} isDark={isDark} changedKeys={changedKeys} />
+            <JsonPanel title="តម្លៃមុន" value={log.old_values} isDark={isDark} changedKeys={changedKeys} hideKeys={permissionsDiff ? ["permissions"] : []} />
+            <JsonPanel title="តម្លៃក្រោយ" value={log.new_values} isDark={isDark} changedKeys={changedKeys} hideKeys={permissionsDiff ? ["permissions"] : []} />
           </div>
         </div>
         <div className={`flex justify-end border-t p-4 sm:p-5 ${isDark ? "border-white/10" : "border-zinc-200"}`}>

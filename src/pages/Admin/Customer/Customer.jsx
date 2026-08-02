@@ -428,16 +428,17 @@ export default function Customer() {
 
   const handleExport = (type) => {
     setExportMenuOpen(false);
+    const exportFilters = { search: searchTerm.trim(), status: statusFilter };
     if (type === "pdf") {
-      const opened = exportCustomersPdf(exportCustomers);
+      const opened = exportCustomersPdf(exportCustomers, exportFilters);
       if (!opened) window.alert("Browser បាន block popup។ សូមអនុញ្ញាត popup រួច Export ម្តងទៀត។");
       return;
     }
     if (type === "excel") {
-      exportCustomersExcel(exportCustomers);
+      exportCustomersExcel(exportCustomers, exportFilters);
       return;
     }
-    exportCustomersCsv(exportCustomers);
+    exportCustomersCsv(exportCustomers, exportFilters);
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;

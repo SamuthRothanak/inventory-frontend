@@ -1,4 +1,5 @@
-import { FiCheck, FiClock, FiCreditCard, FiDollarSign, FiEye, FiPackage, FiRefreshCcw, FiRefreshCw, FiX } from "react-icons/fi";
+import { FiCheck, FiClock, FiDollarSign, FiEye, FiPackage, FiRefreshCcw, FiRefreshCw, FiX } from "react-icons/fi";
+import Tooltip from "./Tooltip";
 
 const STATUS_CHIP = {
   pending_approval: { label: "រង់ចាំអនុម័ត", icon: FiClock,   className: "bg-amber-500/10 text-amber-600" },
@@ -8,7 +9,6 @@ const STATUS_CHIP = {
 const RESOLUTION_CHIP = {
   refund:       { label: "សងប្រាក់",   icon: FiDollarSign, className: "bg-red-500/10 text-red-500" },
   replacement:  { label: "ដូរទំនិញ",   icon: FiRefreshCcw, className: "bg-blue-500/10 text-blue-600" },
-  store_credit: { label: "Credit ហាង", icon: FiCreditCard, className: "bg-purple-500/10 text-purple-600" },
 };
 
 const fmtUsd = (n) => `$${Number(n || 0).toFixed(2)}`;
@@ -113,32 +113,35 @@ export default function PendingReturnsPanel({
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      title="មើលលម្អិត"
-                      onClick={() => onView(ret)}
-                      className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white transition hover:-translate-y-0.5 hover:bg-orange-600 active:translate-y-0"
-                    >
-                      <FiEye size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      title={isWaitingStock ? "បញ្ចប់ (ស្តុកចូលហើយ)" : "អនុម័ត"}
-                      disabled={isProcessing}
-                      onClick={() => (isWaitingStock ? onComplete(ret) : onApprove(ret))}
-                      className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <FiCheck size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      title={isWaitingStock ? "លុបចោល" : "បដិសេធ"}
-                      disabled={isProcessing}
-                      onClick={() => onReject(ret)}
-                      className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white transition hover:-translate-y-0.5 hover:bg-red-700 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <FiX size={16} />
-                    </button>
+                    <Tooltip label="មើលលម្អិត">
+                      <button
+                        type="button"
+                        onClick={() => onView(ret)}
+                        className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white transition hover:-translate-y-0.5 hover:bg-orange-600 active:translate-y-0"
+                      >
+                        <FiEye size={16} />
+                      </button>
+                    </Tooltip>
+                    <Tooltip label={isWaitingStock ? "បញ្ចប់ (ស្តុកចូលហើយ)" : "អនុម័ត"}>
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => (isWaitingStock ? onComplete(ret) : onApprove(ret))}
+                        className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <FiCheck size={16} />
+                      </button>
+                    </Tooltip>
+                    <Tooltip label={isWaitingStock ? "លុបចោល" : "បដិសេធ"}>
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => onReject(ret)}
+                        className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white transition hover:-translate-y-0.5 hover:bg-red-700 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <FiX size={16} />
+                      </button>
+                    </Tooltip>
                   </div>
                 </td>
               </tr>

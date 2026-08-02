@@ -279,7 +279,7 @@ export function PurchaseReturnModal({
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <FormSection title="ដំណោះស្រាយ អ្នកផ្គត់ផ្គង់" subtitle="ជ្រើសរបៀបដែល អ្នកផ្គត់ផ្គង់ នឹងដោះស្រាយចំនួនខូច។" icon={<FiRotateCcw />} theme={theme}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <FormInput label="លេខការទាមទារ" required value={form.purchaseReturnNo} error={errors.purchaseReturnNo} onChange={(value) => onChange("purchaseReturnNo", value)} theme={theme} icon={<FiHash />} />
+              <FormInput label="លេខការទាមទារ" required value={form.purchaseReturnNo} error={errors.purchaseReturnNo} onChange={(value) => onChange("purchaseReturnNo", value)} theme={theme} icon={<FiHash />} readOnly />
               <FormInput label="កាលបរិច្ឆេទត្រឡប់" required type="date" value={form.returnDate} error={errors.returnDate} onChange={(value) => onChange("returnDate", value)} theme={theme} icon={<FiCalendar />} />
               {/* No form-level "return reason" field — the per-item "លក្ខខណ្ឌ" select (add-item row,
                   and editable inline per row in the table below) is the same information at the

@@ -1,18 +1,18 @@
 import { z } from "zod";
 
 export const defaultReturnForm = {
-  returnType: "full",
   resolutionType: "refund",
   reason: "",
   totalAmount: "",
   status: "pending_approval",
+  verificationType: "system_lookup",
 };
 
 export const saleReturnSchema = z.object({
-  returnType: z.enum(["full", "partial"]),
-  resolutionType: z.enum(["refund", "replacement", "store_credit"]),
+  resolutionType: z.enum(["refund", "replacement"]),
   reason: z.string().trim(),
   status: z.enum(["pending_approval", "approved", "completed", "rejected"]),
+  verificationType: z.enum(["receipt", "system_lookup", "verbal", "photo"]),
 });
 
 export const validateSaleReturn = (form, maxAmount) => {

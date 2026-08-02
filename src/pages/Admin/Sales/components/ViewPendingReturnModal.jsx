@@ -2,12 +2,12 @@ import { FiFileText, FiPackage } from "react-icons/fi";
 import { FormSection, InfoLine, ModalShell, SummaryMiniBox } from "./SaleModalShared";
 
 const STATUS_LABEL      = { pending_approval: "រង់ចាំអនុម័ត", approved: "ចាំទំនិញចូលស្តុក", completed: "បញ្ចប់ហើយ", rejected: "បដិសេធ" };
-const RESOLUTION_LABEL  = { refund: "សងប្រាក់ជូនអតិថិជន", replacement: "ដូរទំនិញ", store_credit: "ប្រាក់ credit ហាង" };
+const RESOLUTION_LABEL  = { refund: "សងប្រាក់ជូនអតិថិជន", replacement: "ដូរទំនិញ" };
 const RETURN_TYPE_LABEL = { full: "ត្រឡប់ទាំងអស់", partial: "ត្រឡប់មួយចំណែក" };
 const VERIFICATION_LABEL = { receipt: "វិក្កយបត្រ", system_lookup: "ស្វែងរកប្រព័ន្ធ", verbal: "មាត់", photo: "រូបថត" };
 const CONDITION_LABEL   = { good: "ល្អ", damaged: "ខូច", defective: "មានបញ្ហា", expired: "ផុតកំណត់" };
 const CONDITION_COLOR   = { good: "text-emerald-600", damaged: "text-red-500", defective: "text-red-500", expired: "text-amber-600" };
-const STOCK_ACTION_LABEL = { restock: "ដាក់ស្តុកត្រឡប់", damaged_write_off: "លុបបំណុលស្តុក", discard: "បោះចោល" };
+const STOCK_ACTION_LABEL = { restock: "ដាក់ចូលស្តុកវិញ", damaged_write_off: "មិនដាក់ចូលស្តុកវិញទេ", discard: "បោះចោល" };
 
 const fmtUsd = (n) => `$${Number(n || 0).toFixed(2)}`;
 const fmtKhr = (n) => `៛${Number(n || 0).toLocaleString("en-US")}`;

@@ -37,11 +37,11 @@ const RETURN_STATUS_STYLE = {
   rejected:         "bg-red-500/10 text-red-500",
 };
 const RETURN_STATUS_LABEL  = { pending_approval: "រង់ចាំ", approved: "យល់ព្រម", completed: "បញ្ចប់ហើយ", rejected: "បដិសេធ" };
-const RESOLUTION_LABEL     = { refund: "សងប្រាក់ជូនអតិថិជន", replacement: "ដូរទំនិញ", store_credit: "ប្រាក់ credit ហាង" };
+const RESOLUTION_LABEL     = { refund: "សងប្រាក់ជូនអតិថិជន", replacement: "ដូរទំនិញ" };
 const RETURN_TYPE_LABEL    = { full: "ត្រឡប់ទាំងអស់", partial: "ត្រឡប់មួយចំណែក" };
 const CONDITION_LABEL      = { good: "ល្អ", damaged: "ខូច", defective: "មានបញ្ហា", expired: "ផុតកំណត់" };
 const CONDITION_COLOR      = { good: "text-emerald-600", damaged: "text-red-500", defective: "text-red-500", expired: "text-amber-600" };
-const STOCK_ACTION_LABEL   = { restock: "ដាក់ស្តុកត្រឡប់", damaged_write_off: "លុបបំណុលស្តុក", discard: "បោះចោល" };
+const STOCK_ACTION_LABEL   = { restock: "ដាក់ចូលស្តុកវិញ", damaged_write_off: "មិនដាក់ចូលស្តុកវិញទេ", discard: "បោះចោល" };
 
 export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
   const fmtRate = Number(sale.exchangeRateKhrPerUsd).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -64,8 +64,8 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
 
   function printReturnReceipt(ret) {
     const conditionLabel   = { good: "ល្អ", damaged: "ខូច", defective: "មានបញ្ហា", expired: "ផុតកំណត់" };
-    const stockLabel       = { restock: "ដាក់ស្តុកត្រឡប់", damaged_write_off: "លុបបំណុលស្តុក", discard: "បោះចោល" };
-    const resolutionLabel  = { refund: "សងប្រាក់ជូនអតិថិជន", replacement: "ដូរទំនិញ", store_credit: "ប្រាក់ credit ហាង" };
+    const stockLabel       = { restock: "ដាក់ចូលស្តុកវិញ", damaged_write_off: "មិនដាក់ចូលស្តុកវិញទេ", discard: "បោះចោល" };
+    const resolutionLabel  = { refund: "សងប្រាក់ជូនអតិថិជន", replacement: "ដូរទំនិញ" };
     const returnTypeLabel  = { full: "ត្រឡប់ទាំងអស់", partial: "ត្រឡប់មួយចំណែក" };
 
     const itemRows = (ret.items ?? []).map((item) => `

@@ -187,6 +187,15 @@ const getMondayOfWeek = (date) => {
   return monday;
 };
 
+// Shop owner closes the books every 7 days (a rolling cycle, not necessarily Monday-anchored
+// like the "សប្ដាហ៍" quick-filter above) — the page should open straight to that same 7-day
+// window by default instead of forcing a manual date-range edit on every visit.
+const daysAgo = (date, days) => {
+  const past = new Date(date);
+  past.setDate(past.getDate() - days);
+  return past;
+};
+
 const formatReportDate = (value) => {
   const [year, month, day] = String(value ?? "").split("-");
   return year && month && day ? `${day}/${month}/${year}` : value;
@@ -324,11 +333,11 @@ export default function Report() {
   const outlet    = useOutletContext();
   const isDark    = outlet?.isDark ?? false;
   const today     = toLocalDateValue(new Date());
-  const monthStart = today.slice(0, 8) + "01";
+  const sevenDaysAgo = toLocalDateValue(daysAgo(new Date(), 6));
 
-  const [dateFrom,    setDateFrom]    = useState(monthStart);
+  const [dateFrom,    setDateFrom]    = useState(sevenDaysAgo);
   const [dateTo,      setDateTo]      = useState(today);
-  const [chartPeriod, setChartPeriod] = useState("ខែ");
+  const [chartPeriod, setChartPeriod] = useState("ផ្ទាល់ខ្លួន");
   const [followUpTab, setFollowUpTab] = useState("purchase");
   const [reportTab,   setReportTab]   = useState("overview");
   const [reportType,  setReportType]  = useState({
@@ -1534,7 +1543,7 @@ export default function Report() {
             {/* Reset */}
             <button
               type="button"
-              onClick={() => { setDateFrom(monthStart); setDateTo(today); setChartPeriod("ខែ"); }}
+              onClick={() => { setDateFrom(sevenDaysAgo); setDateTo(today); setChartPeriod("ផ្ទាល់ខ្លួន"); }}
               className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition hover:opacity-80 ${theme.badge}`}
             >
               <FiRotateCcw className="text-sm" />
@@ -1840,7 +1849,7 @@ export default function Report() {
               ["លក់បានសរុប", fmtUsd(stats.total_sales_usd), formatKhr(stats.total_sales_khr), "text-emerald-600", "តម្លៃវិក្កយបត្រលក់ទាំងអស់ក្នុងរយៈពេលនេះ"],
               ["ប្រាក់លក់បានពិត", fmtUsd(realSalesUsd), formatKhr(realSalesKhr), "text-blue-600", "លុយបានទទួលជាក់ស្តែង (ក្រោយដកសងវិញរួច)"],
               ["ត្រឡប់ - សងលុយ", fmtUsd(stats.sales_returns_cash_usd), formatKhr(stats.sales_returns_cash_khr), "text-red-500", "លុយពិតដែលបានចេញឲ្យអតិថិជនវិញ"],
-              ["ត្រឡប់ - ដូរទំនិញ/ក្រេឌីត", fmtUsd(stats.sales_returns_non_cash_usd), formatKhr(stats.sales_returns_non_cash_khr), "text-amber-600", "គ្មានលុយចេញពីហាង គ្រាន់តែដូរទំនិញ/ផ្តល់ក្រេឌីត"],
+              ["ត្រឡប់ - ដូរទំនិញ", fmtUsd(stats.sales_returns_non_cash_usd), formatKhr(stats.sales_returns_non_cash_khr), "text-amber-600", "គ្មានលុយចេញពីហាង គ្រាន់តែដូរទំនិញ"],
             ].map(([label, value, khrValue, valueClass, hint]) => (
               <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
                 <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>

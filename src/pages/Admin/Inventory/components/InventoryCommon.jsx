@@ -209,17 +209,25 @@ export function StockStatusBadge({ status, getStatusClass }) {
 }
 
 export function FormInput({ label, value, onChange, theme, error = "", type = "text", placeholder = "", icon, allowDecimal = true }) {
+  // Rendered as type="text" even when the caller asks for type="number" — a native
+  // <input type="number"> silently reports event.target.value as "" for anything that doesn't
+  // parse as a valid number (garbage pasted in, e.g. "2klk--=="), so sanitizeNumber() below never
+  // even sees the real characters to strip and the field ends up displaying whatever the browser
+  // left there, unfiltered. type="text" always gives onChange the real typed/pasted string, so
+  // sanitizeNumber can actually do its job; inputMode="decimal" still gets mobile devices to show
+  // a numeric keypad.
+  const isNumeric = type === "number";
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
       <div className="relative">
         {icon && <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>{icon}</span>}
         <input
-          type={type}
+          type={isNumeric ? "text" : type}
           value={value}
           placeholder={placeholder}
-          inputMode={type === "number" ? "decimal" : undefined}
-          onChange={(event) => onChange(type === "number" ? sanitizeNumber(event.target.value, allowDecimal) : event.target.value)}
+          inputMode={isNumeric ? "decimal" : undefined}
+          onChange={(event) => onChange(isNumeric ? sanitizeNumber(event.target.value, allowDecimal) : event.target.value)}
           className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${error ? "border-red-500 focus:border-red-500" : ""}`}
         />
       </div>
