@@ -252,7 +252,7 @@ const AUDIT_VALUE_LABELS = {
   internal_use: "ប្រើប្រាស់ខ្លួនឯង",
   lost: "បាត់",
   stock_count: "រាប់ស្តុក",
-  correction: "កែតម្រូវ",
+  correction: "កែតម្រូវការបញ្ចូលខុស",
   other: "ផ្សេងទៀត",
   // Currency codes (input_currency/paid_currency/discount_currency/... on Purchase-side
   // records use lowercase "usd"/"khr"; Sale-side invoice_currency uses uppercase — both

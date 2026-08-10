@@ -186,6 +186,10 @@ export const emptyAdjustmentForm = {
   unitName: "",
   inventoryBatchId: "",
   note: "",
+  // Optional — only used when a batch is selected during a "increase" adjustment, to fix that
+  // batch's own unit cost in the same action (e.g. a purchase was entered with the wrong price).
+  // Left empty, the batch's cost is untouched.
+  correctedUnitCost: "",
 };
 
 export const adjustmentReasons = [
@@ -194,13 +198,13 @@ export const adjustmentReasons = [
   { value: "internal_use", label: "ដកប្រើប្រាស់ខ្លួនឯង" },
   { value: "lost", label: "បាត់" },
   { value: "stock_count", label: "រាប់ស្តុកពិតប្រាកដ" },
-  { value: "correction", label: "ការកែតម្រូវ" },
+  { value: "correction", label: "កែតម្រូវការបញ្ចូលខុស" },
   { value: "other", label: "ផ្សេងទៀត" },
 ];
 
 export const stockInReasons = [
   { value: "stock_count", label: "រាប់ស្តុកពិតប្រាកដ" },
-  { value: "correction", label: "ការកែតម្រូវ" },
+  { value: "correction", label: "កែតម្រូវការបញ្ចូលខុស" },
   { value: "other", label: "ផ្សេងទៀត" },
 ];
 
@@ -209,6 +213,13 @@ export const stockOutReasons = [
   { value: "expired", label: "ផុតកំណត់" },
   { value: "internal_use", label: "ដកប្រើប្រាស់ខ្លួនឯង" },
   { value: "lost", label: "បាត់" },
+  // "stock_count"/"correction" were missing here even though both are direction-agnostic —
+  // a physical count or a data-entry mistake can just as easily reveal a SHORTAGE (needs
+  // "ស្តុកចេញ") as an overage (needs "ការកែតម្រូវស្តុក"). Their own REASON_EXAMPLE guidance in
+  // StockAdjustmentModal already describes a decrease scenario for both, but until now neither
+  // reason was actually selectable while in the decrease modal.
+  { value: "stock_count", label: "រាប់ស្តុកពិតប្រាកដ" },
+  { value: "correction", label: "កែតម្រូវការបញ្ចូលខុស" },
   { value: "other", label: "ផ្សេងទៀត" },
 ];
 

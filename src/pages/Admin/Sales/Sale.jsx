@@ -1226,7 +1226,7 @@ export default function Sale() {
                     {sale.customerName}
                   </p>
                   <p className={`mt-1 text-xs ${theme.muted}`}>
-                    {sale.customerId ? "លក់ដុំ" : "លក់រាយ"}
+                    {SALE_TYPE_LABEL[sale.saleType] ?? sale.saleType}
                   </p>
                 </div>
 
@@ -1420,7 +1420,7 @@ export default function Sale() {
                       {sale.customerName}
                     </p>
                     <p className={`mt-1 text-xs ${theme.muted}`}>
-                      {sale.customerId ? "លក់ដុំ" : "លក់រាយ"}
+                      {SALE_TYPE_LABEL[sale.saleType] ?? sale.saleType}
                     </p>
                   </td>
 

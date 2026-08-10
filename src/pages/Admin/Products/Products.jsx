@@ -125,6 +125,10 @@ export default function Products() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
 
   const [categoryFilter, setCategoryFilter] = useState("All");
+  // "All" — inactive/discontinued products stay visible in the same list rather than vanishing
+  // (deactivating one felt like data loss when the default was "Active"-only). The backend now
+  // sorts active products first and sinks inactive ones to the bottom instead
+  // (ProductRepository::paginate), so the list stays visible without the clutter concern.
   const [statusFilter, setStatusFilter] = useState("All");
   const [priceFilter, setPriceFilter] = useState("All");
 
@@ -646,6 +650,12 @@ export default function Products() {
     mutationFn: deleteProductVariantApi,
     onSuccess: () => {
       invalidateProductQueries();
+    },
+    // Was missing entirely — a variant with existing stock/trade history gets rejected by the
+    // backend (422, see ProductVariantService::hasStockOrHistory) but with no onError handler
+    // that message never reached the user; the delete button just silently did nothing.
+    onError: (error) => {
+      notify.error("លុបមុខទំនិញបរាជ័យ", getApiErrorMessage(error, "មិនអាចលុបមុខទំនិញបានទេ។"));
     },
   });
 

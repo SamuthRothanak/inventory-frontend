@@ -7,7 +7,7 @@ import {
   FiX,
 } from "react-icons/fi";
 
-const REASON_LABEL_KH = { damaged: "ខូចខាត", expired: "ផុតកំណត់", internal_use: "ដកប្រើប្រាស់ខ្លួនឯង", lost: "បាត់", stock_count: "រាប់ស្តុកពិតប្រាកដ", correction: "ការកែតម្រូវ", other: "ផ្សេងទៀត" };
+const REASON_LABEL_KH = { damaged: "ខូចខាត", expired: "ផុតកំណត់", internal_use: "ដកប្រើប្រាស់ខ្លួនឯង", lost: "បាត់", stock_count: "រាប់ស្តុកពិតប្រាកដ", correction: "កែតម្រូវការបញ្ចូលខុស", other: "ផ្សេងទៀត" };
 const ADJUSTMENT_STATUS_KH = { draft: "សេចក្ដីព្រាង", approved: "បានអនុម័ត", cancelled: "បានបោះបង់" };
 const ADJUSTMENT_TYPE_KH = { increase: "បន្ថែម", decrease: "កាត់" };
 const MOVEMENT_TYPE_KH = { purchase_in: "ទិញចូល", sale_out: "លក់ចេញ", damage_out: "ខូចខាតចេញ", adjustment_in: "ការកែតម្រូវចូល", adjustment_out: "ការកែតម្រូវចេញ", stock_count: "រាប់ស្តុក", correction: "ការកែតម្រូវ", internal_use: "ដកប្រើប្រាស់ខ្លួនឯង", expired_out: "ផុតកំណត់ចេញ", lost_out: "បាត់ចេញ" };

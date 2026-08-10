@@ -15,7 +15,6 @@ export default function CurrentSalePanel({
   saleChannel, setSaleChannel,
   deliveryFeeUsd, total,
   onUpdateQty, onRemove, onClear, onHold, onOpenPayment,
-  requiresCustomer,
   exchangeRate,
   note, onNoteChange,
 }) {
@@ -437,17 +436,9 @@ export default function CurrentSalePanel({
             />
           )}
 
-          {requiresCustomer && cart.length > 0 && (
-            <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-              <span className="text-[10px] font-semibold text-amber-700">
-                ការលក់ដុំត្រូវការអតិថិជន — សូមជ្រើសរើសខាងលើ
-              </span>
-            </div>
-          )}
-
           <button
             type="button"
-            disabled={cart.length === 0 || requiresCustomer}
+            disabled={cart.length === 0}
             onClick={onOpenPayment}
             className="quick-action-icon-3d flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-[13px] font-extrabold text-white shadow-md shadow-red-200 transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
           >

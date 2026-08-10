@@ -348,6 +348,7 @@ export default function Report() {
   });
   const [tablePages, setTablePages] = useState({});
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [expandedCashiers, setExpandedCashiers] = useState({});
 
   const applyPeriod = (period) => {
     const now = new Date();
@@ -965,8 +966,8 @@ export default function Report() {
     </div>
   );
   const renderCashierPerformance = () => {
-    const rows = [...salesByCashier].sort((a, b) => Number(b.totalUsd || 0) - Number(a.totalUsd || 0));
-    const maxValue = Math.max(...rows.map((row) => Number(row.totalUsd || 0)), 1);
+    const rows = [...salesByCashier].sort((a, b) => Number(b.netUsd ?? b.totalUsd ?? 0) - Number(a.netUsd ?? a.totalUsd ?? 0));
+    const maxValue = Math.max(...rows.map((row) => Number(row.netUsd ?? row.totalUsd ?? 0)), 1);
     const topRow = rows[0];
 
     return (
@@ -990,30 +991,37 @@ export default function Report() {
             <div className={`rounded-2xl border p-4 ${isDark ? "border-emerald-500/20 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50"}`}>
               <p className={`text-xs font-bold ${theme.muted}`}>អ្នកលក់លេខ 1</p>
               <p className="mt-2 line-clamp-2 text-xl font-extrabold leading-tight text-emerald-700">{topRow.cashierName || "Unknown"}</p>
-              <p className="mt-1 text-3xl font-extrabold tabular-nums text-emerald-600">{fmtUsd(topRow.totalUsd)}</p>
+              <p className="mt-1 text-3xl font-extrabold tabular-nums text-emerald-600">{fmtUsd(topRow.netUsd ?? topRow.totalUsd)}</p>
+              <p className={`mt-0.5 text-xs ${theme.muted}`}>ចំណូលពិត (បន្ទាប់ពីដកលុយសងត្រឡប់)</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <div className={`rounded-xl px-3 py-2 ${isDark ? "bg-black/20" : "bg-white"}`}>
                   <p className={`text-[11px] font-bold ${theme.muted}`}>វិក្កយបត្រ</p>
                   <p className={`text-lg font-extrabold ${theme.pageTitle}`}>{Number(topRow.count || 0).toLocaleString("en-US")}</p>
                 </div>
                 <div className={`rounded-xl px-3 py-2 ${isDark ? "bg-black/20" : "bg-white"}`}>
-                  <p className={`text-[11px] font-bold ${theme.muted}`}>បានបង់</p>
-                  <p className="text-lg font-extrabold text-emerald-600">{fmtUsd(topRow.paidUsd)}</p>
+                  <p className={`text-[11px] font-bold ${theme.muted}`}>លក់សរុប (មុនដកសង)</p>
+                  <p className={`text-lg font-extrabold ${theme.pageTitle}`}>{fmtUsd(topRow.totalUsd)}</p>
                 </div>
+                {Number(topRow.refundUsd || 0) > 0 && (
+                  <div className={`col-span-2 rounded-xl px-3 py-2 ${isDark ? "bg-black/20" : "bg-white"}`}>
+                    <p className={`text-[11px] font-bold ${theme.muted}`}>លុយសងត្រឡប់</p>
+                    <p className="text-lg font-extrabold text-red-500">-{fmtUsd(topRow.refundUsd)}</p>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className={`rounded-2xl border p-4 ${theme.softCard}`}>
               <div className="mb-3 flex items-center gap-3">
                 <span className="h-3 w-3 rounded-full bg-blue-500" />
-                <p className={`text-xs font-bold ${theme.muted}`}>សរុបការលក់</p>
+                <p className={`text-xs font-bold ${theme.muted}`}>ចំណូលពិត</p>
               </div>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={rows.slice(0, 6).map((row) => ({
                       name: row.cashierName || "Unknown",
-                      sales: Number(row.totalUsd || 0),
+                      sales: Number(row.netUsd ?? row.totalUsd ?? 0),
                     }))}
                     margin={{ top: 4, right: 18, left: 4, bottom: 28 }}
                   >
@@ -1030,12 +1038,93 @@ export default function Report() {
                     />
                     <YAxis tickFormatter={fmtCompactUsd} tick={{ fill: isDark ? "#a1a1aa" : "#71717a", fontSize: 12 }} />
                     <Tooltip content={<ChartTooltip theme={theme} labelFormatter={(label) => label} />} />
-                    <Bar dataKey="sales" name="សរុបការលក់" fill="#1d2aa6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="sales" name="ចំណូលពិត" fill="#1d2aa6" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
+          </div>
+        )}
+      </div>
+    );
+  };
+  const renderCashierInvoiceList = () => {
+    const rows = [...salesByCashier].sort((a, b) => Number(b.netUsd ?? b.totalUsd ?? 0) - Number(a.netUsd ?? a.totalUsd ?? 0));
+
+    return (
+      <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+        <div className="mb-4">
+          <h2 className={`text-base font-bold ${theme.pageTitle}`}>លក់តាមអ្នកលក់</h2>
+          <p className={`mt-1 text-sm ${theme.muted}`}>ចុចលើឈ្មោះដើម្បីមើលវិក្កយបត្រ និងទំនិញលក់បានទាំងអស់ក្នុងរយៈពេលដែលបានជ្រើស</p>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className={`flex min-h-32 items-center justify-center rounded-xl border border-dashed ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+            <p className={`text-sm ${theme.muted}`}>គ្មានទិន្នន័យ</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((row) => {
+              const cashierKey = row.cashierName || "Unknown";
+              const isOpen = !!expandedCashiers[cashierKey];
+              const invoices = row.invoices ?? [];
+
+              return (
+                <div key={cashierKey} className={`overflow-hidden rounded-xl border ${theme.softCard}`}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedCashiers((prev) => ({ ...prev, [cashierKey]: !prev[cashierKey] }))}
+                    className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FiChevronDown className={`shrink-0 transition-transform ${isOpen ? "rotate-180" : ""} ${theme.muted}`} />
+                      <span className={`font-bold ${theme.pageTitle}`}>{cashierKey}</span>
+                      <span className={`rounded-lg border px-2 py-0.5 text-xs font-bold ${theme.badge}`}>
+                        {Number(row.count || 0).toLocaleString("en-US")} វិក្កយបត្រ
+                      </span>
+                    </div>
+                    <span className="font-extrabold tabular-nums text-emerald-600">{fmtUsd(row.netUsd ?? row.totalUsd)}</span>
+                  </button>
+
+                  {isOpen && (
+                    <div className={`border-t ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                      {invoices.length === 0 ? (
+                        <p className={`p-4 text-sm ${theme.muted}`}>គ្មានវិក្កយបត្រ</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-zinc-200/70 text-sm dark:divide-white/10">
+                            <thead className={isDark ? "bg-white/[0.03]" : "bg-zinc-50"}>
+                              <tr>
+                                <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>លេខវិក្កយបត្រ</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>ថ្ងៃ</th>
+                                <th className={`px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>ទំនិញលក់</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-right text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>ថ្លៃ</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {invoices.map((inv) => (
+                                <tr key={inv.saleNo} className={`border-t ${theme.row}`}>
+                                  <td className="whitespace-nowrap px-4 py-2 font-semibold">{inv.saleNo}</td>
+                                  <td className={`whitespace-nowrap px-4 py-2 ${theme.muted}`}>{inv.date}</td>
+                                  <td className={`px-4 py-2 ${theme.muted}`}>{inv.products || "-"}</td>
+                                  <td className="whitespace-nowrap px-4 py-2 text-right font-bold tabular-nums">{fmtUsd(inv.totalUsd)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {Number(row.refundUsd || 0) > 0 && (
+                        <p className={`px-4 pb-3 text-xs ${theme.muted}`}>
+                          លក់សរុប {fmtUsd(row.totalUsd)} − សងត្រឡប់ <span className="font-bold text-red-500">{fmtUsd(row.refundUsd)}</span> = ចំណូលពិត <span className="font-bold text-emerald-600">{fmtUsd(row.netUsd ?? row.totalUsd)}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1911,6 +2000,8 @@ export default function Report() {
       )}
 
       {!suppressReport && reportTab === "sales" && showReportType("cashier") && renderCashierPerformance()}
+
+      {!suppressReport && reportTab === "sales" && showReportType("cashier") && renderCashierInvoiceList()}
 
       {!suppressReport && reportTab === "purchases" && showReportType("summary") && (
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>

@@ -16,7 +16,7 @@ import { ModalShell } from "./CustomerFormModal";
 export default function ViewCustomerModal({ customer, theme, onClose, onEdit }) {
   return (
     <ModalShell
-      title={customer.shopName}
+      title={customer.contactName || customer.shopName}
       subtitle={`${customer.customerCode} · អតិថិជនសម្រាប់កត់ត្រាការលក់`}
       theme={theme}
       onClose={onClose}

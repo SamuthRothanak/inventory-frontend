@@ -215,9 +215,20 @@ export default function VariantSetupFormModal({
     },
   ]);
 
-  const [priceRules, setPriceRules] = useState([makePriceRule(initialUnitKey)]);
+  // Starts empty — matches ProductSetupFormModal.jsx's variant default (priceRules: []). The
+  // earlier fix removing the "≥1 price rule" requirement from validateForm() wasn't actually
+  // enough on its own: this used to seed the form with ONE pre-filled (but still price=0) rule,
+  // which the per-rule validation below still caught and blocked on. The unit row's own
+  // "+ បន្ថែមតម្លៃ" button (and its existing empty-state message) already handle a genuinely
+  // empty starting array fine — no UI gap here.
+  const [priceRules, setPriceRules] = useState([]);
   const [formError, setFormError] = useState("");
   const [isAutoName, setIsAutoName] = useState(true);
+  // Was missing entirely — ProductSetupFormModal.jsx (the "Add Product" wizard's variant step)
+  // auto-selects the base unit to match "សណ្ឋានទំនិញ" (package_type) when a unit of the same
+  // name already exists, but this form (add-a-variant-to-an-existing-product) never did, leaving
+  // the "ខ្នាតទំនិញ" dropdown empty even after package_type was already chosen.
+  const [isAutoUnit, setIsAutoUnit] = useState(true);
   const [thresholdUnitKey, setThresholdUnitKey] = useState(null);
   const prevLargestKeyRef = useRef(null);
   const isFirstRunRef = useRef(true);
@@ -268,6 +279,20 @@ export default function VariantSetupFormModal({
     variantForm.size_value,
   ]);
 
+  // Auto-match base unit when package_type changes (only while still in "auto" mode) — same
+  // rule as ProductSetupFormModal.jsx's equivalent effect.
+  useEffect(() => {
+    if (!isAutoUnit) return;
+    if (!variantForm.package_type) return;
+    const matched = findMatchingUnit(units, variantForm.package_type);
+    if (!matched) return;
+    setUnitRows((prev) =>
+      prev.map((row) =>
+        row.is_base_unit ? { ...row, unit_id: String(matched.id) } : row
+      )
+    );
+  }, [variantForm.package_type, isAutoUnit, units]);
+
   const updateVariant = (field, value) => {
     setVariantForm((prev) => ({ ...prev, [field]: value }));
   };
@@ -291,6 +316,9 @@ export default function VariantSetupFormModal({
   };
 
   const updateUnit = (unitIndex, field, value) => {
+    if (field === "unit_id" && unitRows[unitIndex]?.is_base_unit) {
+      setIsAutoUnit(false); // user manually picked the base unit — stop auto-match
+    }
     setUnitRows((prev) =>
       prev.map((u, i) => {
         if (i !== unitIndex) return u;
@@ -380,7 +408,10 @@ export default function VariantSetupFormModal({
       if (Number(unit.conversion_qty) <= 0)
         return "ចំនួនក្នុងមួយខ្នាត ត្រូវ > 0 ។";
     }
-    if (priceRules.length === 0) return "ត្រូវការតម្លៃ យ៉ាងតិច ១ ។";
+    // Price is optional here — matches ProductSetupFormModal.jsx's schema
+    // (priceRules: z.array(...).optional().default([])), which lets a variant be created
+    // without a price and priced later. This form used to force at least one price rule,
+    // even though the UI already has a "remove" button that could take it down to zero anyway.
     for (const rule of priceRules) {
       if (!rule.applies_to) return "សូមជ្រើស ប្រើសម្រាប់ ។";
       if (Number(rule.min_qty) <= 0) return "លក់ចាប់ពីចំនួន ត្រូវ > 0 ។";

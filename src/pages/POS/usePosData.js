@@ -28,6 +28,14 @@ function groupById(arr, key) {
   return map;
 }
 
+// Product.status is a string enum ("active"/"inactive") in most places but some backend paths
+// still return the legacy 1/true forms (see ProductService::stats()) — normalize the same way.
+function isProductActive(product) {
+  if (!product) return true;
+  const status = String(product.status ?? "").toLowerCase();
+  return status === "active" || status === "1" || status === "true";
+}
+
 function assemblePosProducts(products, categories, variants, pvus, priceRules, stockBalances) {
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
   const productMap  = new Map(products.map((p) => [p.id, p]));
@@ -49,7 +57,10 @@ function assemblePosProducts(products, categories, variants, pvus, priceRules, s
   }
 
   return variants
-    .filter((v) => v.status)
+    // Was only checking the variant's own status — an active variant under a deactivated
+    // PARENT product still slipped through and stayed fully sellable in POS (the parent
+    // product's status was never consulted at all).
+    .filter((v) => v.status && isProductActive(productMap.get(v.product?.id)))
     .map((variant) => {
       const productId = variant.product?.id;
       const product   = productId ? productMap.get(productId) : null;

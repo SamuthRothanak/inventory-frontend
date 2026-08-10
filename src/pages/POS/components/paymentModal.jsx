@@ -517,6 +517,10 @@ export default function PaymentModal({
         total,
         payments:      builtPayments,
         exchangeRate,
+        // Was missing — the note WAS already being sent to the backend (salePayload.note above),
+        // but never carried into the receipt/print data, so SalePrintModal's own "📝 {sale.note}"
+        // section (which already existed) had nothing to show.
+        note,
       };
 
       setReceipt(receiptData);
@@ -586,6 +590,7 @@ export default function PaymentModal({
         payments:      [],
         exchangeRate,
         isCredit:      true,
+        note,
       };
 
       setReceipt(receiptData);

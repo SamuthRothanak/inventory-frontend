@@ -13,7 +13,7 @@ import BarcodeCameraModal   from "./components/barcodeCameraModal";
 import CustomerSearchSelect from "./components/customerSearchSelect";
 
 import {
-  ScanLine, LogOut, X,
+  ScanLine, LogOut, X, User,
   Layers, ClipboardList, Maximize, Minimize,
   ShoppingCart, Package2, Clock, Receipt, RotateCcw,
 } from "./components/posIcons";
@@ -270,6 +270,8 @@ export default function Pos() {
 
   const notify = useNotification();
 
+  const currentUser = useAuthStore((s) => s.user);
+
   // "ការលក់ថ្ងៃនេះ" (completedSales) used to be purely client-side — only ever grown by
   // handleCompleteSale() as sales happened in THIS browser tab, never hydrated from the server.
   // A refresh remounts the component and resets it to an empty array, so the badge/list looked
@@ -277,12 +279,22 @@ export default function Pos() {
   // it just never reflected the real day's total to begin with. Fetch today's completed sales
   // once on mount so the count is correct from the start; handleCompleteSale still prepends new
   // ones live afterward for instant feedback without needing to refetch.
+  //
+  // created_by scopes this to the LOGGED-IN cashier's own sales — was fetching every cashier's
+  // sales for today, so "ការលក់ថ្ងៃនេះ" showed the whole shop's total to whoever was logged in
+  // instead of just their own (same scoping already applied to POS's returns list).
   useEffect(() => {
+    if (!currentUser?.id) return undefined;
+
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await getSalesApi({ per_page: 100, sale_status: "completed" });
+        const res = await getSalesApi({
+          per_page: 100,
+          sale_status: "completed",
+          created_by: currentUser.id,
+        });
         const list = Array.isArray(res) ? res
           : Array.isArray(res?.data) ? res.data
           : Array.isArray(res?.data?.data) ? res.data.data
@@ -311,12 +323,11 @@ export default function Pos() {
     })();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [currentUser?.id]);
 
-  const currentUser      = useAuthStore((s) => s.user);
   const isAdmin          = useAuthStore((s) => s.can("dashboard.view"));
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null;
-  const appliesTo = saleMode === "wholesale" && selectedCustomer ? "customer" : "public";
+  const appliesTo = saleMode === "wholesale" ? "customer" : "public";
 
   // Reprice all cart items whenever pricing mode changes
   useEffect(() => {
@@ -768,6 +779,16 @@ export default function Pos() {
             <span className="text-xs font-extrabold text-slate-900">{exchangeRate.toLocaleString()} KHR</span>
           </div>
 
+          {/* Logged-in user — was nowhere visible in POS, so a shared/borrowed session looked
+              identical to logging in as yourself; this makes it obvious at a glance whose sales
+              "ការលក់ថ្ងៃនេះ" is now scoped to. */}
+          {currentUser?.name && (
+            <div className="hidden h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 sm:flex">
+              <User className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-xs font-extrabold text-slate-900">{currentUser.name}</span>
+            </div>
+          )}
+
           {/* Back to Admin — admin only */}
           {isAdmin && (
             <button type="button" onClick={() => navigate("/home")}
@@ -828,7 +849,6 @@ export default function Pos() {
             onClear={clearCart}
             onHold={holdOrder}
             onOpenPayment={() => setPaymentOpen(true)}
-            requiresCustomer={saleMode === "wholesale" && !selectedCustomer}
             exchangeRate={exchangeRate}
             note={saleNote}
             onNoteChange={setSaleNote}

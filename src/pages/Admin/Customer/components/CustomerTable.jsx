@@ -178,7 +178,7 @@ export default function CustomerTable({
                           (id) => Number(id) === Number(item.id)
                         )}
                         onChange={() => onToggleSelect(item.id)}
-                        aria-label={`ជ្រើស ${item.shopName}`}
+                        aria-label={`ជ្រើស ${item.contactName || item.shopName}`}
                         className="h-4 w-4 rounded border-zinc-300 text-red-500 focus:ring-red-500 dark:border-white/20"
                       />
                     </td>
@@ -191,8 +191,11 @@ export default function CustomerTable({
                       </div>
 
                       <div>
+                        {/* "គ្រប់គ្រងអតិថិជន" (Customer Management) — the person's own name leads,
+                            shop name moves down to the badge row. Falls back to shop name if a
+                            customer was saved with no contact name at all. */}
                         <p className="text-sm font-semibold leading-5">
-                          {item.shopName}
+                          {item.contactName || item.shopName}
                         </p>
 
                         <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -203,7 +206,7 @@ export default function CustomerTable({
                           </span>
 
                           <span className={`text-xs ${theme.muted}`}>
-                            {item.contactName || "គ្មានអ្នកទំនាក់ទំនង"}
+                            {item.shopName}
                           </span>
                         </div>
                       </div>

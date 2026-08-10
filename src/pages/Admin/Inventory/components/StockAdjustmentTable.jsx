@@ -1,7 +1,7 @@
 import { FiChevronLeft, FiChevronRight, FiEye, FiRotateCcw } from "react-icons/fi";
 import TableLoading from "../../../../components/TableLoading";
 
-const REASON_LABEL_KH = { damaged: "ខូចខាត", expired: "ផុតកំណត់", internal_use: "ដកប្រើប្រាស់ខ្លួនឯង", lost: "បាត់", stock_count: "រាប់ស្តុកពិតប្រាកដ", correction: "ការកែតម្រូវ", other: "ផ្សេងទៀត" };
+const REASON_LABEL_KH = { damaged: "ខូចខាត", expired: "ផុតកំណត់", internal_use: "ដកប្រើប្រាស់ខ្លួនឯង", lost: "បាត់", stock_count: "រាប់ស្តុកពិតប្រាកដ", correction: "កែតម្រូវការបញ្ចូលខុស", other: "ផ្សេងទៀត" };
 const ADJUSTMENT_STATUS_KH = { draft: "សេចក្ដីព្រាង", approved: "បានអនុម័ត", cancelled: "បានបោះបង់" };
 const ADJUSTMENT_TYPE_KH = { increase: "បន្ថែម", decrease: "កាត់" };
 const reasonLabel = (value = "") => REASON_LABEL_KH[String(value)] || String(value).replaceAll("_", " ");

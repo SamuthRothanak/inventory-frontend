@@ -355,9 +355,22 @@ export const buildReportExport = ({
     item.cashierName,
     number(item.count),
     usd(item.totalUsd),
+    usd(item.refundUsd ?? 0),
+    usd(item.netUsd ?? item.totalUsd),
     usd(item.paidUsd),
     usd(item.dueUsd),
   ]);
+
+  // One sub-section per cashier so the printed report shows every invoice (and what was
+  // sold on it) grouped under that person's name, instead of only a summary total.
+  const salesCashierDetailSections = salesByCashier.map((item) => ({
+    title: `វិក្កយបត្ររបស់ ${item.cashierName}`,
+    note: `${number(item.count)} វិក្កយបត្រ · លក់សរុប ${usd(item.totalUsd)}${
+      Number(item.refundUsd || 0) > 0 ? ` · សងត្រឡប់ ${usd(item.refundUsd)}` : ""
+    } · ចំណូលពិត ${usd(item.netUsd ?? item.totalUsd)}`,
+    headers: ["លេខវិក្កយបត្រ", "ថ្ងៃ", "ទំនិញលក់", "ថ្លៃ"],
+    rows: (item.invoices ?? []).map((inv) => [inv.saleNo, inv.date, inv.products, usd(inv.totalUsd)]),
+  }));
 
   const purchaseProductRows = topPurchaseItems.map((item, index) => [
     index + 1,
@@ -554,7 +567,7 @@ export const buildReportExport = ({
     salesProfit: { title: "ប្រាក់ចំណេញ", headers: ["ប្រភេទ", "តម្លៃ"], rows: salesProfitRows },
     salesDetails: { title: "លម្អិតការលក់", headers: ["លេខវិក្កយបត្រ", "ថ្ងៃ", "អតិថិជន", "អ្នកលក់", "សរុប", "បានបង់", "នៅខ្វះ", "ស្ថានភាពបង់"], rows: salesDetailRows },
     salesCustomers: { title: "លក់តាមអតិថិជន", headers: ["អតិថិជន", "វិក្កយបត្រ", "សរុប", "បានបង់", "នៅខ្វះ"], rows: salesCustomerRows },
-    salesCashiers: { title: "លក់តាមអ្នកលក់", headers: ["អ្នកលក់", "វិក្កយបត្រ", "សរុប", "បានបង់", "នៅខ្វះ"], rows: salesCashierRows },
+    salesCashiers: { title: "លក់តាមអ្នកលក់", headers: ["អ្នកលក់", "វិក្កយបត្រ", "លក់សរុប", "សងត្រឡប់", "ចំណូលពិត", "បានបង់", "នៅខ្វះ"], rows: salesCashierRows },
     purchaseDetails: { title: "លម្អិតការទិញ", headers: ["លេខទិញ", "ថ្ងៃ", "អ្នកផ្គត់ផ្គង់", "សរុប", "បានបង់", "នៅខ្វះ", "ស្ថានភាពបង់", "ស្ថានភាព"], rows: purchaseDetailRows },
     purchasesBySupplier: { title: "ទិញតាមអ្នកផ្គត់ផ្គង់", headers: ["អ្នកផ្គត់ផ្គង់", "វិក្កយបត្រ", "សរុប", "បានបង់", "នៅខ្វះ"], rows: purchasesBySupplierRows },
     purchaseReturns: { title: "លម្អិតការត្រឡប់ការទិញ", headers: ["លេខត្រឡប់", "ថ្ងៃ", "លេខទិញ", "អ្នកផ្គត់ផ្គង់", "មូលហេតុ", "ដំណោះស្រាយ", "សរុប", "ប្រាក់សង", "Credit", "ស្ថានភាព"], rows: purchaseReturnRows },
@@ -672,10 +685,15 @@ export const buildReportExport = ({
     title: "របាយការណ៍",
     period: `${safeFrom} to ${safeTo}`,
     generatedAt,
-    sections: selectedKeys.map((key) => {
+    sections: selectedKeys.flatMap((key) => {
       const section = sectionsByKey[key];
-      return section ? { ...section, group: sectionGroupByKey[key] } : null;
-    }).filter(Boolean),
+      if (!section) return [];
+      const group = sectionGroupByKey[key];
+      if (key === "salesCashiers") {
+        return [{ ...section, group }, ...salesCashierDetailSections.map((detail) => ({ ...detail, group }))];
+      }
+      return [{ ...section, group }];
+    }),
   };
 };
 

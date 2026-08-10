@@ -1,6 +1,7 @@
-import { FiClipboard, FiFileText, FiHash, FiInfo, FiLayers, FiPackage, FiSave, FiTag, FiTrendingDown, FiTrendingUp } from "react-icons/fi";
+import { FiArrowRight, FiClipboard, FiDollarSign, FiFileText, FiHash, FiInfo, FiLayers, FiPackage, FiSave, FiTag, FiTrendingDown, FiTrendingUp } from "react-icons/fi";
 import { stockInReasons, stockOutReasons } from "../utils/inventoryConstants";
-import { FormInput, FormSelect, FormTextarea, ModalShell, SectionTitle } from "./InventoryCommon";
+import { getExpiryInfo } from "../utils/inventoryExpiry";
+import { formatUsdTwoDigits, FormInput, FormSelect, FormTextarea, ModalShell, SectionTitle } from "./InventoryCommon";
 export default function StockAdjustmentModal({
     mode,
     inventory,
@@ -14,7 +15,11 @@ export default function StockAdjustmentModal({
     isSaving = false,
   }) {
     const isStockIn = mode === "adjustment_in";
-    const title = isStockIn ? "ការកែតម្រូវស្តុក" : "ស្តុកចេញ";
+    // "ការកែតម្រូវស្តុក" reads as direction-agnostic (could mean either +/-) despite this modal
+    // only ever adding — "ស្តុកចូល" would be the obvious symmetric pairing with "ស្តុកចេញ" but
+    // that name is already taken by the separate purchase-receiving flow (see the subtitle below,
+    // which explicitly disclaims "មិនមែនស្តុកចូលពីការទិញទេ" to avoid exactly that confusion).
+    const title = isStockIn ? "បន្ថែមស្តុក" : "ស្តុកចេញ";
     const reasonOptions = isStockIn ? stockInReasons : stockOutReasons;
     const subtitle = isStockIn
       ? "ប្រើសម្រាប់រាប់ស្តុក ឬការកែតម្រូវ — មិនមែនស្តុកចូលពីការទិញទេ។"
@@ -31,38 +36,77 @@ export default function StockAdjustmentModal({
     const previewBaseQty =
       Number(form.qty || 0) * Number(selectedUnit?.conversionQty || 1);
 
+    // "ចំនួន" is a delta (how much to add/remove), not the final quantity — the field alone
+    // makes users do the before/after math themselves (a real point of confusion: the value you
+    // type is NOT what the batch/item ends up holding). Compute both sides' current→after
+    // preview here so it's shown directly instead of left as mental arithmetic.
+    const signedBaseDelta = isStockIn ? previewBaseQty : -previewBaseQty;
+    const selectedBatch = activeItem?.batches?.find(
+      (batch) => String(batch.id) === String(form.inventoryBatchId)
+    );
+    const batchCurrentQty = selectedBatch ? Number(selectedBatch.qtyRemainingBase || 0) : null;
+    const batchNewQty = batchCurrentQty !== null ? batchCurrentQty + signedBaseDelta : null;
+    const itemCurrentQty = activeItem ? Number(activeItem.stockBaseQty || 0) : null;
+    const itemNewQty = itemCurrentQty !== null ? itemCurrentQty + signedBaseDelta : null;
+
     const truncateBatchNo = (batchNo) => {
       if (!batchNo) return "-";
       const parts = String(batchNo).split("-");
       if (parts.length <= 4) return batchNo;
       return `${parts.slice(0, 3).join("-")}-…${parts[parts.length - 1]}`;
     };
+    // stock_count/correction are the 2 reasons available in BOTH "បន្ថែមស្តុក" (increase-only)
+    // and "ស្តុកចេញ" (decrease-only) — a single example can't cover both directions without
+    // showing a delta the current modal can't even accept (e.g. "-49" while in the increase-only
+    // modal). Each gets an increase/decrease variant, picked below based on `isStockIn`.
     const REASON_EXAMPLE = {
       stock_count: {
-        title: "រាប់ស្តុកពិតប្រាកដ — របៀបប្រើ",
-        desc: "ចូលឃ្លាំង រាប់ចំនួនដោយដៃ ហើយប្រៀបជាមួយប្រព័ន្ធ។",
-        steps: [
-          "① ប្រព័ន្ធបង្ហាញ: 2,699 កំប៉ុង",
-          "② រាប់ឃ្លាំងពិតប្រាកដ: 2,650 កំប៉ុង",
-          "③ ប្រព័ន្ធលើស 49 → បញ្ចូល −49",
-        ],
+        increase: {
+          title: "រាប់ស្តុកពិតប្រាកដ — របៀបប្រើ",
+          desc: "ចូលឃ្លាំង រាប់ចំនួនដោយដៃ ហើយប្រៀបជាមួយប្រព័ន្ធ។",
+          steps: [
+            "① ប្រព័ន្ធបង្ហាញ: 2,650 កំប៉ុង",
+            "② រាប់ឃ្លាំងពិតប្រាកដ: 2,699 កំប៉ុង",
+            "③ ការពិតលើសពីប្រព័ន្ធ 49 → បញ្ចូល 49",
+          ],
+        },
+        decrease: {
+          title: "រាប់ស្តុកពិតប្រាកដ — របៀបប្រើ",
+          desc: "ចូលឃ្លាំង រាប់ចំនួនដោយដៃ ហើយប្រៀបជាមួយប្រព័ន្ធ។",
+          steps: [
+            "① ប្រព័ន្ធបង្ហាញ: 2,699 កំប៉ុង",
+            "② រាប់ឃ្លាំងពិតប្រាកដ: 2,650 កំប៉ុង",
+            "③ ប្រព័ន្ធលើសពីការពិត 49 → បញ្ចូល 49",
+          ],
+        },
       },
       correction: {
-        title: "ការកែតម្រូវ — របៀបប្រើ",
-        desc: "ប្រើពេលការបញ្ចូលក្នុងប្រព័ន្ធខុស ហើយចង់កែត្រឡប់ឲត្រូវ។",
-        steps: [
-          "① ការទិញបញ្ចូល +1,000 ខុស (គួរជា +100)",
-          "② ស្តុកលើស 900 → កែ −900",
-          "③ មូលហេតុ: ការកែតម្រូវ + កំណត់ចំណាំ: ពន្យល់ការបញ្ចូលខុស",
-        ],
+        increase: {
+          title: "កែតម្រូវការបញ្ចូលខុស — របៀបប្រើ",
+          desc: "ប្រើពេលការបញ្ចូលក្នុងប្រព័ន្ធខុស ហើយចង់កែត្រឡប់ឲត្រូវ។",
+          steps: [
+            "① ការទិញពិត 100 = $1,600 តែច្រឡំដាក់ 10 = $1,600",
+            "② ស្តុកខ្វះ 90 → បញ្ចូល 90",
+            "③ បើដឹងច្បាស់ថ្លៃពិត អាចវាយ \"កែថ្លៃដើមឯកតារបស់បាច់នេះ\" ផងក្នុងពេលតែមួយ ($1,600÷100=$16/ឯកតា)",
+          ],
+        },
+        decrease: {
+          title: "កែតម្រូវការបញ្ចូលខុស — របៀបប្រើ",
+          desc: "ប្រើពេលការបញ្ចូលក្នុងប្រព័ន្ធខុស ហើយចង់កែត្រឡប់ឲត្រូវ។",
+          steps: [
+            "① ការទិញបញ្ចូល +1,000 ខុស (គួរជា +100)",
+            "② ស្តុកលើស 900 → បញ្ចូល 900",
+            "③ មូលហេតុ: កែតម្រូវការបញ្ចូលខុស + កំណត់ចំណាំ: ពន្យល់ការបញ្ចូលខុស",
+          ],
+        },
       },
       damaged: {
         title: "ខូចខាត — របៀបប្រើ",
-        desc: "ប្រើពេលទំនិញខូច ឬប្រើប្រាស់មិនបាន ត្រូវដកចេញពីស្តុក។",
+        desc: "ប្រើពេលទំនិញខូច ឬប្រើប្រាស់មិនបាន ត្រូវដកចេញពីស្តុក — មិនថាមកពីមូលហេតុអ្វី។",
         steps: [
-          "① ដប 10 ធ្លាក់ខូចពីការដឹកជញ្ជូន",
-          "② បញ្ចូល −10 + មូលហេតុ: ខូចខាត",
-          "③ កំណត់ចំណាំ: ដប 10 ខូច — ដឹកជញ្ជូន 23/06/2026",
+          "① រកឃើញដប 10 ខូច ប្រើលក់មិនកើត",
+          "② បញ្ចូល 10 + មូលហេតុ: ខូចខាត",
+          "③ កំណត់ចំណាំ: ពន្យល់មូលហេតុជាក់លាក់ (ឧ. ធ្លាក់ខូចពេលដឹកជញ្ជូន, ទឹកជោគក្នុងឃ្លាំង)",
         ],
       },
       expired: {
@@ -70,7 +114,7 @@ export default function StockAdjustmentModal({
         desc: "ប្រើពេលបាច់ណាមួយផុតកំណត់ ហើយត្រូវដកចេញពីស្តុក។",
         steps: [
           "① បាច់ B2024 ផុតថ្ងៃ 01/01/2025 — មាន 50 ដប",
-          "② ជ្រើសបាច់ត្រឹមត្រូវ → បញ្ចូល −50",
+          "② ជ្រើសបាច់ត្រឹមត្រូវ → បញ្ចូល 50",
           "③ កំណត់ចំណាំ: បាច់ B2024 ផុតកំណត់",
         ],
       },
@@ -79,8 +123,8 @@ export default function StockAdjustmentModal({
         desc: "ប្រើពេលក្រុមហ៊ុនដកទំនិញប្រើប្រាស់ខ្លួនឯង (មិនមែនលក់)។",
         steps: [
           "① ប្រជុំ — ដកស្រា 10 ដបប្រើក្នុងការិយាល័យ",
-          "② បញ្ចូល −10 + មូលហេតុ: ដកប្រើប្រាស់ខ្លួនឯង",
-          "③ កំណត់ចំណាំ: ប្រើក្នុងប្រជុំ ថ្ងៃ 23/06/2026",
+          "② បញ្ចូល 10 + មូលហេតុ: ដកប្រើប្រាស់ខ្លួនឯង",
+          "③ កំណត់ចំណាំ: ប្រើក្នុងប្រជុំ ថ្ងៃណាមួយ",
         ],
       },
       lost: {
@@ -88,7 +132,7 @@ export default function StockAdjustmentModal({
         desc: "ប្រើពេលទំនិញបាត់ក្នុងឃ្លាំង ឬកំឡុងការដឹក ស្វែងរកមិនឃើញ។",
         steps: [
           "① ត្រួតពិនិត្យឃ្លាំង — ស្រា 5 ដបបាត់",
-          "② បញ្ចូល −5 + មូលហេតុ: បាត់",
+          "② បញ្ចូល 5 + មូលហេតុ: បាត់",
           "③ កំណត់ចំណាំ: ត្រួតពិនិត្យ កាមេរ៉ាសុវត្ថិភាព + របាយការណ៍ធ្វើហើយ",
         ],
       },
@@ -102,25 +146,63 @@ export default function StockAdjustmentModal({
       },
     };
 
+    const resolveReasonExample = (reason) => {
+      const entry = REASON_EXAMPLE[reason];
+      if (!entry) return null;
+      if (entry.increase || entry.decrease) return isStockIn ? entry.increase : entry.decrease;
+      return entry;
+    };
+
     const NOTE_PLACEHOLDER = {
-      stock_count: "ឧ. រាប់ស្តុកថ្ងៃទី 23/06/2026 — ឃើញ 2,650 កំប៉ុង តែប្រព័ន្ធបង្ហាញ 2,699",
-      correction: "ឧ. កែការបញ្ចូលខុស — បានបញ្ចូលចំនួន 100 ខុស គួរជា 10",
-      damaged: "ឧ. ទំនិញខូចខាតពីការដឹកជញ្ជូន — ធ្លាក់ 10 ដប",
+      stock_count: {
+        increase: "ឧ. រាប់ស្តុកកាលពីថ្ងៃណា — ឃើញ 2,699 កំប៉ុង តែប្រព័ន្ធបង្ហាញ 2,650",
+        decrease: "ឧ. រាប់ស្តុកកាលពីថ្ងៃណា — ឃើញ 2,650 កំប៉ុង តែប្រព័ន្ធបង្ហាញ 2,699",
+      },
+      correction: {
+        increase: "ឧ. កែការបញ្ចូលខុស — ទិញពិត 100 តែបានបញ្ចូល 10",
+        decrease: "ឧ. កែការបញ្ចូលខុស — បានបញ្ចូលចំនួន 100 ខុស គួរជា 10",
+      },
+      damaged: "ឧ. ដប 10 ខូច — ធ្លាក់ខូចពេលដឹកជញ្ជូន ឬទឹកជោគក្នុងឃ្លាំង",
       expired: "ឧ. ផុតកំណត់ប្រើប្រាស់ — បាច់ B2024 ផុតថ្ងៃ 01/01/2025",
-      internal_use: "ឧ. ដកប្រើប្រាស់ក្នុងការិយាល័យ — ប្រជុំថ្ងៃទី 20 មិថុនា",
+      internal_use: "ឧ. ដកប្រើប្រាស់ក្នុងការិយាល័យ — ប្រជុំកាលពីថ្ងៃណា",
       lost: "ឧ. ទំនិញបាត់ក្នុងឃ្លាំង — ត្រួតពិនិត្យ កាមេរ៉ាសុវត្ថិភាព រួចហើយ",
       other: "ឧ. ពន្យល់ពីហេតុផលនៃការកែតម្រូវ...",
     };
-    const notePlaceholder = NOTE_PLACEHOLDER[form.reason] || "មូលហេតុ ឬកំណត់ចំណាំ...";
+    const notePlaceholderEntry = NOTE_PLACEHOLDER[form.reason];
+    const notePlaceholder =
+      (notePlaceholderEntry && typeof notePlaceholderEntry === "object"
+        ? notePlaceholderEntry[isStockIn ? "increase" : "decrease"]
+        : notePlaceholderEntry) || "មូលហេតុ ឬកំណត់ចំណាំ...";
+    const reasonExample = resolveReasonExample(form.reason);
+
+    // Batches used to render in raw/insertion order — with many batches on one variant that's a
+    // jumbled list with no obvious pick. Sort soonest-to-expire first (same FEFO convention as
+    // InventoryDetailModal's batch table) so the batch someone would normally want is already
+    // near the top, and flag near-expiry ones with a plain-text marker (option labels must stay
+    // plain strings — InventoryDropdown's search filter does a raw .toLowerCase() over them).
+    const sortedBatches = [...(activeItem?.batches || [])]
+      .filter((batch) => Number(batch.qtyRemainingBase || 0) > 0)
+      .sort((a, b) => {
+        const aTime = a.expiredDate && a.expiredDate !== "-" ? new Date(a.expiredDate).getTime() : NaN;
+        const bTime = b.expiredDate && b.expiredDate !== "-" ? new Date(b.expiredDate).getTime() : NaN;
+        const aSort = Number.isNaN(aTime) ? Infinity : aTime;
+        const bSort = Number.isNaN(bTime) ? Infinity : bTime;
+        return aSort - bSort || Number(a.id || 0) - Number(b.id || 0);
+      });
 
     const batchOptions = [
-      { value: "", label: "គ្មានបាច់" },
-      ...(activeItem?.batches || [])
-        .filter((batch) => Number(batch.qtyRemainingBase || 0) > 0)
-        .map((batch) => ({
+      { value: "", label: "មិនដឹងបញ្ហានៅក្នុងបាច់មួយណា" },
+      ...sortedBatches.map((batch) => {
+        // Reuse getExpiryInfo's own label — it already distinguishes "ផុតកំណត់ហើយ" (already
+        // expired) from "នៅសល់ N ថ្ងៃ" (N days left); a single generic "ជិតផុតកំណត់" marker for
+        // both hid that already-expired stock is far more urgent than merely-soon-to-expire.
+        const expiryInfo = getExpiryInfo(batch.expiredDate);
+        const warnMark = expiryInfo?.shouldWarn ? ` ⚠ ${expiryInfo.label}` : "";
+        return {
           value: batch.id,
-          label: `${truncateBatchNo(batch.batchNo)} · ${Number(batch.qtyRemainingBase).toLocaleString()} ${activeItem.baseUnit} · Exp: ${batch.expiredDate || "-"}`,
-        })),
+          label: `${truncateBatchNo(batch.batchNo)} · ${Number(batch.qtyRemainingBase).toLocaleString()} ${activeItem.baseUnit} · Exp: ${batch.expiredDate || "-"}${warnMark}`,
+        };
+      }),
     ];
 
     return (
@@ -213,8 +295,30 @@ export default function StockAdjustmentModal({
                   icon={<FiClipboard />}
                   options={batchOptions}
                   searchable
+                  helper={
+                    isStockIn
+                      ? "បើមិនជ្រើសបាច់ទេ ប្រព័ន្ធនឹងបង្កើតបាច់ថ្មីស្វ័យប្រវត្តិ។"
+                      : "បើមិនជ្រើសបាច់ទេ ប្រព័ន្ធនឹងដកចេញពីបាច់ចាស់ ឬជិតផុតកំណត់បំផុតជាមុន (FEFO) ស្វ័យប្រវត្តិ។"
+                  }
                 />
               </div>
+
+              {isStockIn && selectedBatch && (
+                <div className="md:col-span-2">
+                  <FormInput
+                    label={`កែថ្លៃដើមឯកតារបស់បាច់នេះ — ក្នុង ${form.unitName || activeItem?.baseUnit || "ខ្នាត"} (ស្រេចចិត្ត)`}
+                    type="number"
+                    value={form.correctedUnitCost}
+                    onChange={(value) => onChange("correctedUnitCost", value)}
+                    theme={theme}
+                    placeholder={`ថ្លៃដើមបច្ចុប្បន្ន ${formatUsdTwoDigits(
+                      Number(selectedBatch.unitCostBase || 0) * Number(selectedUnit?.conversionQty || 1)
+                    )} / ${form.unitName || activeItem?.baseUnit || ""}`}
+                    icon={<FiDollarSign />}
+                    helper={`ថ្លៃដែលបងវាយបញ្ចូលនៅទីនេះគិតជាមួយ "${form.unitName || activeItem?.baseUnit || "ខ្នាត"}" (ខ្នាតដែលកំពុងជ្រើសខាងក្រោម) — ប្តូរខ្នាតនឹងប្តូរតម្លៃមួយឯកតានៅទីនេះដោយស្វ័យប្រវត្តិ។ ទុកទទេ = មិនប៉ះពាល់ថ្លៃដើម។`}
+                  />
+                </div>
+              )}
 
               <FormSelect
                 label="ខ្នាតទំនិញ"
@@ -253,6 +357,60 @@ export default function StockAdjustmentModal({
                   {Number(previewBaseQty || 0).toLocaleString()} {activeItem?.baseUnit || "មូលដ្ឋាន"}
                 </p>
               </div>
+
+              {activeItem && (
+                <div className="md:col-span-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {selectedBatch && (
+                    <div className="flex items-center gap-3 rounded-xl border border-blue-500/20 bg-blue-500/10 p-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-lg text-blue-600 dark:text-blue-400">
+                        <FiClipboard />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">ស្តុកបាច់នេះបច្ចុប្បន្ន</p>
+                        <p className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
+                          <span className="text-2xl font-extrabold text-blue-700 dark:text-blue-300">{batchCurrentQty.toLocaleString()}</span>
+                          <span className="text-xs font-semibold text-blue-600/80 dark:text-blue-400/80">{activeItem.baseUnit}</span>
+                        </p>
+                        {Number(form.qty || 0) > 0 && (
+                          <p className="mt-1 flex flex-wrap items-center gap-1 text-xs">
+                            <span className={isStockIn ? "font-bold text-blue-600" : "font-bold text-red-500"}>
+                              {isStockIn ? "+" : "−"}{previewBaseQty.toLocaleString()}
+                            </span>
+                            <FiArrowRight className="text-blue-600/60 dark:text-blue-400/60" size={11} />
+                            <span className={`font-bold ${batchNewQty < 0 ? "text-red-600" : "text-blue-700 dark:text-blue-300"}`}>
+                              {batchNewQty.toLocaleString()} {activeItem.baseUnit}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 rounded-xl border border-blue-500/20 bg-blue-500/10 p-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-lg text-blue-600 dark:text-blue-400">
+                      <FiPackage />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">ស្តុកសរុបផលិតផលបច្ចុប្បន្ន</p>
+                      <p className="mt-0.5 flex flex-wrap items-baseline gap-1.5">
+                        <span className="text-2xl font-extrabold text-blue-700 dark:text-blue-300">{itemCurrentQty.toLocaleString()}</span>
+                        <span className="text-xs font-semibold text-blue-600/80 dark:text-blue-400/80">{activeItem.baseUnit}</span>
+                      </p>
+                      {Number(form.qty || 0) > 0 && (
+                        <p className="mt-1 flex flex-wrap items-center gap-1 text-xs">
+                          <span className={isStockIn ? "font-bold text-blue-600" : "font-bold text-red-500"}>
+                            {isStockIn ? "+" : "−"}{previewBaseQty.toLocaleString()}
+                          </span>
+                          <FiArrowRight className="text-blue-600/60 dark:text-blue-400/60" size={11} />
+                          <span className={`font-bold ${itemNewQty < 0 ? "text-red-600" : "text-blue-700 dark:text-blue-300"}`}>
+                            {itemNewQty.toLocaleString()} {activeItem.baseUnit}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="mt-4">
@@ -267,7 +425,7 @@ export default function StockAdjustmentModal({
             </div>
           </div>
 
-          {form.reason && REASON_EXAMPLE[form.reason] && (
+          {reasonExample && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/5">
               <div className="flex gap-3">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
@@ -275,13 +433,13 @@ export default function StockAdjustmentModal({
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-amber-700 dark:text-amber-400">
-                    {REASON_EXAMPLE[form.reason].title}
+                    {reasonExample.title}
                   </p>
                   <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-300">
-                    {REASON_EXAMPLE[form.reason].desc}
+                    {reasonExample.desc}
                   </p>
                   <ul className="mt-2 space-y-1">
-                    {REASON_EXAMPLE[form.reason].steps.map((step, i) => (
+                    {reasonExample.steps.map((step, i) => (
                       <li key={i} className="text-xs font-medium text-amber-700 dark:text-amber-300">
                         {step}
                       </li>

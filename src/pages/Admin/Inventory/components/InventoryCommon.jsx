@@ -353,7 +353,7 @@ export function InventoryDropdown({
   );
 }
 
-export function FormSelect({ label, value, onChange, theme, error = "", icon, options = [], disabled = false, searchable = false }) {
+export function FormSelect({ label, value, onChange, theme, error = "", icon, options = [], disabled = false, searchable = false, helper = "" }) {
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
@@ -367,6 +367,7 @@ export function FormSelect({ label, value, onChange, theme, error = "", icon, op
         disabled={disabled}
         searchable={searchable}
       />
+      {helper && !error && <p className={`mt-1.5 text-xs ${theme.muted}`}>{helper}</p>}
       {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
     </label>
   );

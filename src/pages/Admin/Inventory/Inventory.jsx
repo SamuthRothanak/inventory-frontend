@@ -44,6 +44,7 @@
     getStockAdjustmentsApi,
     getStockBalancesApi,
     getStockMovementsApi,
+    updateInventoryBatchApi,
     updateStockAdjustmentApi,
   } from "../../../services/inventory.service";
   import { useNotification } from "../../../components/AppNotification";
@@ -1293,6 +1294,7 @@
         unitName: item?.baseUnit || "",
         inventoryBatchId: "",
         note: "",
+        correctedUnitCost: "",
       });
 
       setModalMode(isIn ? "adjustment_in" : "adjustment_out");
@@ -1380,6 +1382,22 @@
       onError: (error) => {
         const message = error?.response?.data?.message || error?.message || "ការអាប់ដេតការកែតម្រូវបរាជ័យ";
         notify.error("ការអាប់ដេតការកែតម្រូវបរាជ័យ", message);
+      },
+    });
+
+    // Follow-up step chained after createStockAdjustmentMutation succeeds, only when the user
+    // filled in "កែថ្លៃដើមឯកតារបស់បាច់នេះ" — the qty adjustment above already landed by the time
+    // this fires, so a failure here is reported distinctly rather than silently lost, since the
+    // user would otherwise assume both the qty AND the cost were fixed together.
+    const updateInventoryBatchMutation = useMutation({
+      mutationFn: updateInventoryBatchApi,
+      onSuccess: () => {
+        invalidateInventoryQueries();
+        notify.success("ថ្លៃដើមបាច់បានកែ", "ថ្លៃដើមឯកតារបស់បាច់ត្រូវបានកែតម្រូវរួចហើយ");
+      },
+      onError: (error) => {
+        const message = error?.response?.data?.message || error?.message || "កែថ្លៃដើមបាច់បរាជ័យ";
+        notify.error("កែថ្លៃដើមបាច់បរាជ័យ", `ចំនួនស្តុកបានកែជោគជ័យ ប៉ុន្តែថ្លៃដើមបាច់មិនទាន់កែបានទេ៖ ${message}`);
       },
     });
 
@@ -1585,27 +1603,56 @@
         (batch) => String(batch.id) === String(adjustmentForm.inventoryBatchId)
       );
 
-      createStockAdjustmentMutation.mutate({
-        adjustment_type: adjustmentForm.adjustmentType,
-        reason: adjustmentForm.reason,
-        note: adjustmentForm.note || "Manual stock adjustment",
-        created_at: now,
-        status: "approved",
-        items: [
-          {
-            product_variant_id: item.productVariantId,
-            product_variant_unit_id: selectedUnit.id || item.productVariantUnitId,
-            inventory_batch_id: selectedBatch?.id || null,
-            qty: Number(adjustmentForm.qty || 0),
-            base_qty: baseQty,
-            movement_type: movementType,
-            unit_cost_base: unitCostBase,
-            line_cost: lineCost,
-            note: adjustmentForm.note || "Manual stock adjustment",
-            created_at: now,
-          },
-        ],
-      });
+      // Optional same-action price fix — only meaningful when correcting a specific batch that
+      // was itself entered at the wrong cost (e.g. a purchase price typo). Independent of the
+      // qty adjustment above; overwrites the WHOLE batch's cost (old + newly-added qty alike),
+      // not just the qty being added here. The modal collects this in whichever unit ("ខ្នាតទំនិញ")
+      // the user is currently working in (e.g. per កេស), but inventory_batches.unit_cost_base is
+      // always stored per BASE unit — convert back before sending, same conversionQty used for qty.
+      const correctedUnitCostInSelectedUnit = Number(adjustmentForm.correctedUnitCost || 0);
+      const correctedUnitCostBase =
+        correctedUnitCostInSelectedUnit / Number(selectedUnit.conversionQty || 1);
+      const hasCostCorrection =
+        adjustmentForm.adjustmentType === "increase" &&
+        selectedBatch &&
+        correctedUnitCostInSelectedUnit > 0;
+
+      createStockAdjustmentMutation.mutate(
+        {
+          adjustment_type: adjustmentForm.adjustmentType,
+          reason: adjustmentForm.reason,
+          note: adjustmentForm.note || "Manual stock adjustment",
+          created_at: now,
+          status: "approved",
+          items: [
+            {
+              product_variant_id: item.productVariantId,
+              product_variant_unit_id: selectedUnit.id || item.productVariantUnitId,
+              inventory_batch_id: selectedBatch?.id || null,
+              qty: Number(adjustmentForm.qty || 0),
+              base_qty: baseQty,
+              movement_type: movementType,
+              unit_cost_base: unitCostBase,
+              line_cost: lineCost,
+              note: adjustmentForm.note || "Manual stock adjustment",
+              created_at: now,
+            },
+          ],
+        },
+        hasCostCorrection
+          ? {
+              onSuccess: () => {
+                updateInventoryBatchMutation.mutate({
+                  id: selectedBatch.id,
+                  payload: {
+                    unit_cost_base: correctedUnitCostBase,
+                    unit_cost_base_usd: correctedUnitCostBase,
+                  },
+                });
+              },
+            }
+          : undefined
+      );
     };
 
     const handleCancelAdjustment = async (adjustment) => {
@@ -1693,68 +1740,6 @@
 
         {activeTab === "stock" && (
           <>
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_230px_180px_220px]">
-            <div className="relative">
-              <FiSearch
-                className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-              />
-
-              <input
-                id="inventory-search"
-                type="text"
-                placeholder="ស្វែងរកស្តុក ទំនិញ បំពង លេខកូដ..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
-              />
-            </div>
-
-            <div className="relative">
-              <InventoryDropdown
-                value={statusFilter}
-                onChange={setStatusFilter}
-                theme={theme}
-                icon={<FiFilter />}
-                options={[
-                  { value: "All", label: "ស្ថានភាពទាំងអស់" },
-                  { value: "Needs Action", label: "ត្រូវការចាត់វិធានការ" },
-                  { value: "Expiring Stock", label: "ជិតផុតកំណត់" },
-                  { value: "In Stock", label: "មានស្តុក" },
-                  { value: "Low Stock", label: "ស្តុកស្ទើរអស់" },
-                  { value: "Out of Stock", label: "អស់ស្តុក" },
-                ]}
-                heightClass="h-12"
-                roundedClass="rounded-2xl"
-              />
-            </div>
-
-            <div className="relative">
-              <InventoryDropdown
-                value={perPage}
-                onChange={(value) => setPerPage(Number(value))}
-                theme={theme}
-                icon={<FiHash />}
-                options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / ទំព័រ` }))}
-                heightClass="h-12"
-                roundedClass="rounded-2xl"
-                fontClass="font-semibold"
-              />
-            </div>
-
-            <PermissionGate permission="purchases.stock-in">
-              <button
-                type="button"
-                onClick={openConfirmStockInModal}
-                className="quick-action-icon-3d inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600"
-              >
-                <FiCheckCircle className="text-lg" />
-                បញ្ជាក់ស្តុកចូល
-              </button>
-            </PermissionGate>
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <PermissionGate permission="purchases.stock-in">
             <ActionCard
@@ -1772,9 +1757,9 @@
             <ActionCard
               theme={theme}
               icon={<FiEdit2 className="text-4xl text-blue-500" />}
-              title="ការកែតម្រូវស្តុក"
-              subtitle="សម្រាប់អ្នកគ្រប់គ្រងប៉ុណ្ណោះ"
-              buttonText="ការកែតម្រូវស្តុក"
+              title="បន្ថែមស្តុក"
+              subtitle="ករណីទិញច្រឡំ និងរាប់ស្តុកពិតឃើញលើសពីប្រព័ន្ធ"
+              buttonText="បន្ថែមស្តុក"
               buttonClass="bg-blue-600 hover:bg-blue-700"
               onClick={() => openAdjustmentModal("adjustment_in")}
             />
@@ -1868,6 +1853,57 @@
             </button>
             </div>
           )}
+        </div>
+
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_230px_180px]">
+            <div className="relative">
+              <FiSearch
+                className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
+              />
+
+              <input
+                id="inventory-search"
+                type="text"
+                placeholder="ស្វែងរកស្តុក ទំនិញ បំពង លេខកូដ..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+              />
+            </div>
+
+            <div className="relative">
+              <InventoryDropdown
+                value={statusFilter}
+                onChange={setStatusFilter}
+                theme={theme}
+                icon={<FiFilter />}
+                options={[
+                  { value: "All", label: "ស្ថានភាពទាំងអស់" },
+                  { value: "Needs Action", label: "ត្រូវការចាត់វិធានការ" },
+                  { value: "Expiring Stock", label: "ជិតផុតកំណត់" },
+                  { value: "In Stock", label: "មានស្តុក" },
+                  { value: "Low Stock", label: "ស្តុកស្ទើរអស់" },
+                  { value: "Out of Stock", label: "អស់ស្តុក" },
+                ]}
+                heightClass="h-12"
+                roundedClass="rounded-2xl"
+              />
+            </div>
+
+            <div className="relative">
+              <InventoryDropdown
+                value={perPage}
+                onChange={(value) => setPerPage(Number(value))}
+                theme={theme}
+                icon={<FiHash />}
+                options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / ទំព័រ` }))}
+                heightClass="h-12"
+                roundedClass="rounded-2xl"
+                fontClass="font-semibold"
+              />
+            </div>
+          </div>
         </div>
 
         <InventoryTable
