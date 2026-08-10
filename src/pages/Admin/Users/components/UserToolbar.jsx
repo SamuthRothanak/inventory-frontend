@@ -8,7 +8,7 @@ export default function UserToolbar({
   theme,
 }) {
   return (
-    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <div className="flex flex-col gap-3 sm:gap-4 xl:flex-row xl:items-center xl:justify-between">
       <div className="relative w-full xl:max-w-4xl">
         <FiSearch
           className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -27,7 +27,7 @@ export default function UserToolbar({
         <button
           type="button"
           onClick={openCreateModal}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+          className="quick-action-icon-3d inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600"
         >
           <FiPlusCircle className="text-lg" />
           បន្ថែមអ្នកប្រើប្រាស់

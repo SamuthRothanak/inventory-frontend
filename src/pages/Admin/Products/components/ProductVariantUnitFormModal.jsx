@@ -103,6 +103,7 @@ export default function ProductVariantUnitFormModal({
         product_variant_id: String(variantUnit.productVariantId || variant?.id || ""),
         unit_id: String(variantUnit.unitId || ""),
         conversion_qty: Number(variantUnit.conversionQty || 1),
+        barcode: variantUnit.barcode || "",
         is_base_unit: Boolean(variantUnit.isBaseUnit),
         is_default_sale_unit: Boolean(variantUnit.isDefaultSaleUnit),
         is_default_purchase_unit: Boolean(variantUnit.isDefaultPurchaseUnit),
@@ -156,6 +157,7 @@ export default function ProductVariantUnitFormModal({
 
   return (
     <ModalShell
+      mobileFullScreen
       title={isEdit ? "កែខ្នាតទំនិញ" : "បន្ថែមខ្នាតទំនិញ"}
       subtitle={`មុខទំនិញ: ${variant?.variantName || "-"} · កំណត់ខ្នាតមូលដ្ឋាននិងការប្ដូរ ។`}
       theme={theme}
@@ -164,11 +166,11 @@ export default function ProductVariantUnitFormModal({
       footer={
         <>
           <button type="button" onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
             បោះបង់
           </button>
           <button type="submit" form="variant-unit-form" disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
             <FiSave />
             {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកខ្នាតទំនិញ"}
           </button>
@@ -179,7 +181,7 @@ export default function ProductVariantUnitFormModal({
         className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
         <input type="hidden" {...register("product_variant_id")} />
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <FormSelect label="ខ្នាតទំនិញ" required error={errors.unit_id?.message} theme={theme} icon={<FiLayers />}
             value={watch("unit_id")}
             onChange={(value) => setValue("unit_id", value, { shouldValidate: true })}
@@ -191,6 +193,9 @@ export default function ProductVariantUnitFormModal({
             error={errors.conversion_qty?.message} theme={theme} icon={<FiHash />}
             hint="ឧ. កេសមួយមាន 24 កំប៉ុង/ដប"
             inputProps={register("conversion_qty")} />
+          <FormInput label="បាកូដ (Barcode)" error={errors.barcode?.message} theme={theme} icon={<FiHash />}
+            hint="ស្រេចចិត្ត — ខ្នាតនីមួយៗអាចមាន barcode ខុសគ្នា"
+            inputProps={register("barcode")} />
         </div>
 
         <p className={`mb-2 mt-5 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>

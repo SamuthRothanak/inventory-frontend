@@ -4,7 +4,7 @@ export default function BackupSummaryCard({ theme, title, value, subtitle, icon,
   return (
     <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
       <div className="flex items-center gap-4">
-        <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-3xl ${toneClasses(tone)}`}>
+        <div className={`summary-icon-3d flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-3xl ${toneClasses(tone)}`}>
           {icon}
         </div>
         <div className="min-w-0">
@@ -16,4 +16,3 @@ export default function BackupSummaryCard({ theme, title, value, subtitle, icon,
     </div>
   );
 }
-

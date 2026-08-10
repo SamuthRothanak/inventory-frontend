@@ -3,8 +3,11 @@ import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FiBox,
+  FiChevronDown,
   FiCheckCircle,
   FiDollarSign,
+  FiDownload,
+  FiFileText,
   FiFilter,
   FiGrid,
   FiHash,
@@ -28,11 +31,11 @@ function ConfirmModal({ open, title, body, onConfirm, onCancel, theme }) {
         </div>
         <div className={`flex justify-end gap-3 border-t px-5 py-4 ${theme.modalHeader}`}>
           <button type="button" onClick={onCancel}
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+            className="table-icon-3d h-10 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
             បោះបង់
           </button>
           <button type="button" onClick={() => { onConfirm?.(); onCancel(); }}
-            className="h-10 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-600">
+            className="quick-action-icon-3d h-10 rounded-xl bg-red-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0">
             បញ្ជាក់
           </button>
         </div>
@@ -104,6 +107,12 @@ import {
   normalizeProduct,
 } from "./utils/productNormalizers";
 import { getPaginationMeta } from "./utils/productPagination";
+import {
+  buildProductExport,
+  exportProductCsv,
+  exportProductExcel,
+  exportProductPdf,
+} from "./utils/productExport";
 
 export default function Products() {
   const outlet = useOutletContext();
@@ -116,7 +125,12 @@ export default function Products() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
 
   const [categoryFilter, setCategoryFilter] = useState("All");
+  // "All" — inactive/discontinued products stay visible in the same list rather than vanishing
+  // (deactivating one felt like data loss when the default was "Active"-only). The backend now
+  // sorts active products first and sinks inactive ones to the bottom instead
+  // (ProductRepository::paginate), so the list stays visible without the clutter concern.
   const [statusFilter, setStatusFilter] = useState("All");
+  const [priceFilter, setPriceFilter] = useState("All");
 
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -126,6 +140,8 @@ export default function Products() {
 
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState([]);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [isExportingProducts, setIsExportingProducts] = useState(false);
 
   const [setupModalOpen, setSetupModalOpen] = useState(false);
 
@@ -177,7 +193,7 @@ export default function Products() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearchTerm, categoryFilter, statusFilter, perPage]);
+  }, [debouncedSearchTerm, categoryFilter, statusFilter, priceFilter, perPage]);
 
   const theme = {
     isDark,
@@ -247,6 +263,7 @@ export default function Products() {
         search: debouncedSearchTerm,
         categoryFilter,
         statusFilter,
+        priceFilter,
       },
     ],
     queryFn: () =>
@@ -261,6 +278,7 @@ export default function Products() {
             : statusFilter === "Active"
               ? "active"
               : "inactive",
+        price_status: priceFilter === "All" ? undefined : priceFilter,
       }),
     keepPreviousData: true,
   });
@@ -373,6 +391,21 @@ export default function Products() {
       noVariant: Number(data.products_without_variants || 0),
     };
   }, [productStatsQuery.data, pagination.total]);
+
+  const selectedCategoryLabel = useMemo(() => {
+    if (categoryFilter === "All") return "ទាំងអស់";
+    const category = activeCategories.find((item) => String(item.id) === String(categoryFilter));
+    return category?.name || categoryFilter;
+  }, [activeCategories, categoryFilter]);
+
+  const productExportFilters = useMemo(() => ({
+    search: debouncedSearchTerm,
+    category: selectedCategoryLabel,
+    status: statusFilter,
+    price: priceFilter,
+    page: "All",
+    perPage: "All",
+  }), [debouncedSearchTerm, priceFilter, selectedCategoryLabel, statusFilter]);
 
   const selectedProduct = useMemo(() => {
     if (!selectedProductId) return null;
@@ -618,6 +651,12 @@ export default function Products() {
     onSuccess: () => {
       invalidateProductQueries();
     },
+    // Was missing entirely — a variant with existing stock/trade history gets rejected by the
+    // backend (422, see ProductVariantService::hasStockOrHistory) but with no onError handler
+    // that message never reached the user; the delete button just silently did nothing.
+    onError: (error) => {
+      notify.error("លុបមុខទំនិញបរាជ័យ", getApiErrorMessage(error, "មិនអាចលុបមុខទំនិញបានទេ។"));
+    },
   });
 
   const createVariantUnitMutation = useMutation({
@@ -700,7 +739,7 @@ export default function Products() {
   });
 
   const categoryOptions = [
-    { value: "All", label: "ប្រភេទទាំងអស់" },
+    { value: "All", label: "ប្រភេទ" },
     ...activeCategories.map((category) => ({
       value: String(category.id),
       label: category.name,
@@ -717,7 +756,11 @@ export default function Products() {
   };
 
   const handleSaveProductSetup = (values) => {
-    if (!requireActiveExchangeRate()) return;
+    const setupHasPriceRules = (values.variants || []).some(
+      (variant) => (variant.priceRules || []).length > 0
+    );
+
+    if (setupHasPriceRules && !requireActiveExchangeRate()) return;
 
     const newName = (values.product?.name || "").trim().toLowerCase();
     const isDuplicate = productsForNameValidation.some((p) => (p.name || "").trim().toLowerCase() === newName);
@@ -1014,6 +1057,33 @@ export default function Products() {
       return;
     }
 
+    const existingRules = priceRuleFormState.variant?.priceRules || [];
+    const duplicateRule = existingRules.find((rule) => {
+      const ruleUnitId =
+        rule.productVariantUnitId ||
+        rule.product_variant_unit_id ||
+        rule.variantUnitId ||
+        rule.variant_unit_id;
+
+      const sameRule =
+        String(ruleUnitId) === String(productVariantUnitId) &&
+        String(rule.appliesTo || rule.applies_to || "retail") === String(values.applies_to || "retail") &&
+        Number(rule.minQty ?? rule.min_qty ?? 1) === Number(values.min_qty || 1);
+
+      if (!sameRule) return false;
+
+      if (priceRuleFormState.mode === "edit" && priceRuleFormState.priceRule) {
+        return Number(rule.id) !== Number(priceRuleFormState.priceRule.id);
+      }
+
+      return true;
+    });
+
+    if (duplicateRule) {
+      notify.error("តម្លៃស្ទួន", "តម្លៃសម្រាប់ខ្នាត/ប្រភេទ/ចំនួននេះមានរួចហើយ។");
+      return;
+    }
+
     const payload = {
       ...values,
       product_variant_unit_id: productVariantUnitId,
@@ -1055,6 +1125,113 @@ export default function Products() {
 
     if (manageProductId) {
       manageProductQuery.refetch();
+    }
+  };
+
+  const getProductExportQueryParams = () => ({
+    search: debouncedSearchTerm || undefined,
+    category_id: categoryFilter === "All" ? undefined : categoryFilter,
+    status:
+      statusFilter === "All"
+        ? undefined
+        : statusFilter === "Active"
+          ? "active"
+          : "inactive",
+    price_status: priceFilter === "All" ? undefined : priceFilter,
+    // Only the export flow needs full variant/unit/price-rule detail — the regular table
+    // never sets this, so normal browsing stays on the lighter counts-only query.
+    with_variants: 1,
+  });
+
+  const fetchAllProductsForExport = async () => {
+    const exportPerPage = 500;
+    const queryParams = getProductExportQueryParams();
+    const allProducts = [];
+    let currentExportPage = 1;
+    let lastExportPage = 1;
+    let exportPagination = {
+      currentPage: 1,
+      perPage: exportPerPage,
+      total: 0,
+      lastPage: 1,
+      from: 0,
+      to: 0,
+    };
+
+    do {
+      const response = await getProductsApi({
+        ...queryParams,
+        page: currentExportPage,
+        per_page: exportPerPage,
+      });
+      const pageProducts = extractApiData(response).map((product) => normalizeProduct(product, categories));
+      const pagePagination = getPaginationMeta(response, pageProducts.length);
+
+      allProducts.push(...pageProducts);
+      exportPagination = pagePagination;
+      lastExportPage = Math.max(1, Number(pagePagination.lastPage || 1));
+      currentExportPage += 1;
+    } while (currentExportPage <= lastExportPage);
+
+    return {
+      products: allProducts,
+      pagination: {
+        ...exportPagination,
+        currentPage: "ទាំងអស់",
+        perPage: allProducts.length,
+        total: exportPagination.total || allProducts.length,
+        from: allProducts.length > 0 ? 1 : 0,
+        to: allProducts.length,
+      },
+    };
+  };  
+
+  const canExportProducts = !isLoading && !isError && Number(pagination.total || 0) > 0 && !isExportingProducts;
+
+  const handleExportProducts = async (type) => {
+    if (!canExportProducts) return;
+    setExportMenuOpen(false);
+    setIsExportingProducts(true);
+    const pdfWindow = type === "pdf" ? window.open("", "_blank") : null;
+    if (pdfWindow) {
+      pdfWindow.document.open();
+      pdfWindow.document.write("<p style=\"font-family: Arial, 'Noto Sans Khmer', sans-serif; padding: 24px;\">កំពុងរៀបចំ PDF ផលិតផល...</p>");
+      pdfWindow.document.close();
+    }
+
+    try {
+      const exportData = await fetchAllProductsForExport();
+      const allProductsExport = buildProductExport({
+        products: exportData.products,
+        productStats,
+        pagination: exportData.pagination,
+        filters: productExportFilters,
+        // CSV/Excel get plain numbers (summable in a spreadsheet); PDF is print-only, where the
+        // comma/currency-formatted version reads better.
+        numeric: type !== "pdf",
+      });
+
+      if (type === "pdf") {
+        const opened = exportProductPdf(allProductsExport, pdfWindow);
+        if (!opened) {
+          window.alert("Browser បានបិទការបើក PDF។ សូមអនុញ្ញាត pop-up ហើយសាកល្បងម្ដងទៀត។");
+        }
+        return;
+      }
+
+      if (type === "excel") {
+        exportProductExcel(allProductsExport);
+        return;
+      }
+
+      exportProductCsv(allProductsExport);
+    } catch (error) {
+      if (pdfWindow) {
+        pdfWindow.close();
+      }
+      notify.error("Export បរាជ័យ", getApiErrorMessage(error, "មិនអាច Export ផលិតផលទាំងអស់បានទេ។"));
+    } finally {
+      setIsExportingProducts(false);
     }
   };
 
@@ -1108,8 +1285,8 @@ export default function Products() {
   };
 
   return (
-    <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <section className="space-y-4 sm:space-y-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         <SummaryCard
           theme={theme}
           icon={<FiBox className="text-[34px] text-red-500" />}
@@ -1151,8 +1328,7 @@ export default function Products() {
         </div>
       )}
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full grid-cols-1 gap-3 xl:max-w-6xl xl:grid-cols-[1fr_220px_200px_160px]">
+      <div className={`grid grid-cols-1 gap-2.5 xl:grid-cols-[minmax(220px,1fr)_180px_140px_170px_110px_130px_160px] xl:items-center ${exportMenuOpen ? "mb-14" : ""}`}>
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -1182,9 +1358,21 @@ export default function Products() {
             onChange={setStatusFilter}
             theme={theme}
             options={[
-              { value: "All", label: "ស្ថានភាពទាំងអស់" },
+              { value: "All", label: "ស្ថានភាព" },
               { value: "Active", label: "ដំណើរការ" },
               { value: "Inactive", label: "មិនដំណើរការ" },
+            ]}
+          />
+
+          <FilterSelect
+            icon={<FiDollarSign />}
+            value={priceFilter}
+            onChange={setPriceFilter}
+            theme={theme}
+            options={[
+              { value: "All", label: "តម្លៃទាំងអស់" },
+              { value: "priced", label: "មានតម្លៃ" },
+              { value: "unpriced", label: "អត់តម្លៃ" },
             ]}
           />
 
@@ -1195,23 +1383,56 @@ export default function Products() {
             theme={theme}
             options={[10, 20, 25, 50].map((value) => ({
               value,
-              label: `${value} / ទំព័រ`,
+              label: `${value}`,
             }))}
           />
-        </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row xl:shrink-0">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => canExportProducts && setExportMenuOpen((open) => !open)}
+              disabled={!canExportProducts}
+              aria-haspopup="menu"
+              aria-expanded={exportMenuOpen}
+              className={`table-icon-3d inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${theme.badge} hover:border-red-400 hover:text-red-500`}
+            >
+              <FiDownload className="text-lg" />
+              {isExportingProducts ? "កំពុង Export..." : "Export"}
+              <FiChevronDown className={`transition ${exportMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {exportMenuOpen && (
+              <div className={`absolute right-0 z-30 mt-2 w-44 overflow-hidden rounded-xl border py-1 shadow-xl ${isDark ? "border-white/10 bg-zinc-900" : "border-zinc-200 bg-white"}`} role="menu">
+                {[
+                  ["pdf", "PDF", FiFileText],
+                  ["excel", "Excel", FiGrid],
+                  ["csv", "CSV", FiDownload],
+                ].map(([type, label, Icon]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleExportProducts(type)}
+                    className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition ${isDark ? "text-zinc-100 hover:bg-white/10" : "text-zinc-700 hover:bg-zinc-100"}`}
+                  >
+                    <Icon className="text-base" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <PermissionGate permission="products.create">
             <button
               type="button"
               onClick={openAddProductForm}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
+              className="quick-action-icon-3d inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 active:translate-y-0"
             >
               <FiPlusCircle className="text-lg" />
               បន្ថែមផលិតផល
             </button>
           </PermissionGate>
-        </div>
       </div>
 
       {isError && (
@@ -1336,6 +1557,21 @@ export default function Products() {
             createVariantUnitMutation.isPending ||
             createPriceRuleMutation.isPending
           }
+          isCreatingUnit={createUnitMutation.isPending}
+          isUpdatingUnit={updateUnitMutation.isPending}
+          isDeletingUnit={deleteUnitMutation.isPending}
+          onCreateUnit={async (payload) => {
+            await createUnitMutation.mutateAsync(payload);
+            await unitsQuery.refetch();
+          }}
+          onUpdateUnit={async ({ id, payload }) => {
+            await updateUnitMutation.mutateAsync({ id, payload });
+            await unitsQuery.refetch();
+          }}
+          onDeleteUnit={async (id) => {
+            await deleteUnitMutation.mutateAsync(id);
+            await unitsQuery.refetch();
+          }}
           onClose={closeVariantSetupForm}
           onSave={handleSaveVariantSetup}
         />
@@ -1367,6 +1603,21 @@ export default function Products() {
           }
           onClose={closeVariantForm}
           onSave={handleSaveVariant}
+          isCreatingUnit={createUnitMutation.isPending}
+          isUpdatingUnit={updateUnitMutation.isPending}
+          isDeletingUnit={deleteUnitMutation.isPending}
+          onCreateUnit={async (payload) => {
+            await createUnitMutation.mutateAsync(payload);
+            await unitsQuery.refetch();
+          }}
+          onUpdateUnit={async ({ id, payload }) => {
+            await updateUnitMutation.mutateAsync({ id, payload });
+            await unitsQuery.refetch();
+          }}
+          onDeleteUnit={async (id) => {
+            await deleteUnitMutation.mutateAsync(id);
+            await unitsQuery.refetch();
+          }}
         />
       )}
 

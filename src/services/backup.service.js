@@ -23,8 +23,7 @@ export const deleteBackupApi = async (id) => {
 
 export const downloadBackupApi = (id) => {
   const { token } = useAuthStore.getState();
-  const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api/v1";
-  const url = `${baseUrl}/backups/${id}/download?token=${encodeURIComponent(token)}`;
+  const url = `${api.defaults.baseURL}/backups/${id}/download?token=${encodeURIComponent(token)}`;
   const a = document.createElement("a");
   a.href = url;
   a.style.display = "none";

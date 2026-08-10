@@ -7,16 +7,21 @@ export const auditLogModules = [
   { label: "ផលិតផល",       value: "products" },
   { label: "ប្រភេទ",        value: "categories" },
   { label: "អ្នកប្រើ",      value: "users" },
+  { label: "តួនាទី",        value: "roles" },
   { label: "ការកំណត់",      value: "settings" },
+  { label: "អតិថិជន",       value: "customers" },
+  { label: "អ្នកផ្គត់ផ្គង់", value: "suppliers" },
 ];
 
 export const auditLogActions = [
   { label: "គ្រប់សកម្មភាព", value: "all" },
   { label: "ចូល",           value: "login" },
+  { label: "ចូលប្រើបរាជ័យ", value: "login_failed" },
   { label: "ចេញ",           value: "logout" },
   { label: "បានបង្កើត",    value: "created" },
   { label: "បានកែ",         value: "updated" },
   { label: "បានលុប",        value: "deleted" },
+  { label: "បានលុបចោល",    value: "void" },
   { label: "បានបោះបង់",    value: "cancelled" },
 ];
 

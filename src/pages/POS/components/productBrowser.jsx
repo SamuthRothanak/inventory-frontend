@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Search, Package2 } from "./posIcons";
+import { Search, Package2, ScanLine } from "./posIcons";
 import { EmptyState } from "./ui";
 import { getAppliedRule, usd, cn } from "./posData";
 
@@ -126,6 +126,7 @@ export default function ProductBrowser({
   setSearch,
   filteredProducts,
   onOpenQuickAdd,
+  onOpenBarcodeCamera,
 }) {
   const [viewMode, setViewMode] = useState("grid");
 
@@ -171,6 +172,16 @@ export default function ProductBrowser({
             <Package2 className="h-3.5 w-3.5 text-red-400" />
             <span className="font-bold text-slate-700">{filteredProducts.length}</span>
           </div>
+
+          {/* Barcode camera scan */}
+          <button
+            type="button"
+            onClick={onOpenBarcodeCamera}
+            title="ស្កេនកាមេរ៉ា"
+            className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+          >
+            <ScanLine className="h-3.5 w-3.5" />
+          </button>
 
           {/* View toggle */}
           <div className="flex h-10 items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 px-1">

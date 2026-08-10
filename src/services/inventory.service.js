@@ -10,6 +10,11 @@ export const getInventoryBatchesApi = async (params = {}) => {
   return response.data;
 };
 
+export const updateInventoryBatchApi = async ({ id, payload }) => {
+  const response = await api.patch(`/inventory-batches/${id}`, payload);
+  return response.data;
+};
+
 export const getStockMovementsApi = async (params = {}) => {
   const response = await api.get("/stock-movements", { params });
   return response.data;

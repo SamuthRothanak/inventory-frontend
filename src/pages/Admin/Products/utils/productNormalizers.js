@@ -193,7 +193,14 @@ export function normalizeVariantUnit(unit) {
       unit.isDefaultPurchaseUnit ?? unit.is_default_purchase_unit ?? false
     ),
 
-    status: unit.status,
+    // product_variant_units.status is a DB boolean (true/false), unlike variant/price-rule
+    // status which are string enums ("active"/"inactive") — normalize here too so every
+    // consumer can compare against "active" the same way, regardless of the underlying column
+    // type. Passing the raw boolean straight through made "អសកម្ម" (inactive) show for every
+    // unit, since `true !== "active"` is always true.
+    status: normalizeStatus(unit.status),
+
+    barcode: unit.barcode ?? "",
   };
 }
 

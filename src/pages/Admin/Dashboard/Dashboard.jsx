@@ -8,7 +8,7 @@ import {
 import {
   FiActivity, FiAlertTriangle, FiArchive, FiArrowDown, FiArrowUp,
   FiBarChart2, FiBox, FiCheckCircle, FiClock, FiCreditCard, FiDollarSign,
-  FiExternalLink, FiFileText, FiLayers, FiPackage,
+  FiExternalLink, FiFileText, FiGrid, FiLayers, FiPackage,
   FiRefreshCw, FiRotateCcw, FiShoppingCart, FiTag, FiTruck, FiZap,
 } from "react-icons/fi";
 
@@ -28,11 +28,11 @@ const PAYMENT_METHOD_META = {
 // ── Static nav links ──────────────────────────────────────────────
 const QUICK_ACTIONS = [
   { label: "បើក POS",          icon: FiZap,         to: "/pos",                bg: "bg-red-500 hover:bg-red-600 text-white",                                              permission: "sales.create"   },
-  { label: "ស្តុក",            icon: FiArchive,      to: "/home/inventory",     bg: "bg-emerald-600 hover:bg-emerald-700 text-white",                                      permission: "stock.view"     },
+  { label: "ស្តុក",            icon: FiArchive,      to: "/home/inventory",     bg: "bg-emerald-600 hover:bg-emerald-700 text-white",                                      permission: "stock-balances.view" },
   { label: "បន្ថែមការទិញ",     icon: FiShoppingCart, to: "/home/purchases",     bg: "bg-blue-600 hover:bg-blue-700 text-white",                                            permission: "purchases.view" },
   { label: "បន្ថែមទំនិញ",      icon: FiBox,          to: "/home/products",      bg: "bg-violet-600 hover:bg-violet-700 text-white",                                        permission: "products.view"  },
   { label: "របាយការណ៍",        icon: FiBarChart2,    to: "/home/reports",       bg: "bg-amber-500 hover:bg-amber-600 text-white",                                          permission: "reports.sales"  },
-  { label: "អត្រាប្តូរប្រាក់", icon: FiRefreshCw,    to: "/home/exchange-rate", bg: "bg-zinc-600 hover:bg-zinc-700 text-white dark:bg-zinc-700 dark:hover:bg-zinc-600",   permission: "settings.view"  },
+  { label: "អត្រាប្តូរប្រាក់", icon: FiRefreshCw,    to: "/home/exchange-rate", bg: "bg-zinc-600 hover:bg-zinc-700 text-white dark:bg-zinc-700 dark:hover:bg-zinc-600",   permission: "exchange-rate.view" },
 ];
 
 const ACTIVITY_META = {
@@ -131,7 +131,7 @@ function HeroCard({ theme, title, value, sub, icon, iconBg, trend, details = [] 
     <div className={`rounded-2xl border p-6 shadow-sm ${theme.card}`}>
       <div className="flex items-center justify-between">
         <p className={`text-sm font-semibold uppercase tracking-wide ${theme.muted}`}>{title}</p>
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl text-xl ${iconBg}`}>
+        <div className={`summary-icon-3d flex h-12 w-12 items-center justify-center rounded-2xl text-xl ${iconBg}`}>
           <Icon />
         </div>
       </div>
@@ -164,7 +164,7 @@ function MiniCard({ theme, label, value, icon, iconBg, accent }) {
   return (
     <div className={`rounded-2xl border border-l-4 p-4 shadow-sm ${theme.card} ${accent}`}>
       <div className="flex items-center gap-3">
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base ${iconBg}`}>
+        <div className={`summary-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base ${iconBg}`}>
           <Icon />
         </div>
         <div className="min-w-0">
@@ -193,10 +193,55 @@ function LoadingPanel({ theme, text = "រង់ចាំបន្តិច...",
   );
 }
 
+function Dashboard3DLoading({ theme }) {
+  return (
+    <div
+      className={`flex min-h-[520px] flex-col items-center justify-center rounded-2xl border shadow-sm ${theme.card}`}
+      role="status"
+      aria-live="polite"
+    >
+      <div
+        className="relative flex h-36 w-36 items-center justify-center"
+        style={{ perspective: "750px" }}
+      >
+        <div className="absolute bottom-1 h-5 w-24 animate-pulse rounded-[50%] bg-red-500/25 blur-md" />
+
+        <div className="absolute inset-2 animate-spin rounded-full border border-dashed border-red-400/45 [animation-duration:3.2s]" />
+        <div className="absolute inset-6 animate-spin rounded-full border-2 border-transparent border-l-rose-300 border-r-red-600 [animation-direction:reverse] [animation-duration:1.9s]" />
+
+        <div
+          className="relative flex h-[72px] w-[72px] items-center justify-center rounded-[22px] border border-white/40 bg-gradient-to-br from-rose-300 via-red-500 to-red-700 text-white"
+          style={{
+            transform: "rotateX(12deg) rotateY(-18deg) translateZ(20px)",
+            boxShadow:
+              "16px 20px 28px rgba(153, 27, 27, 0.3), inset 5px 5px 11px rgba(255,255,255,0.36), inset -6px -8px 14px rgba(127,29,29,0.3)",
+          }}
+        >
+          <div className="absolute inset-1 rounded-[18px] border border-white/20" />
+          <FiGrid className="relative text-[34px] drop-shadow-md" />
+          <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-pulse rounded-full border-2 border-white bg-emerald-400 shadow-lg shadow-emerald-400/40" />
+        </div>
+      </div>
+
+      <p className={`mt-3 text-sm font-bold ${theme.pageTitle}`}>
+        រង់ចាំបន្តិច...
+      </p>
+      <p className={`mt-1 text-xs ${theme.muted}`}>
+        កំពុងរៀបចំផ្ទាំងគ្រប់គ្រង
+      </p>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const outlet = useOutletContext();
   const isDark  = outlet?.isDark ?? false;
   const can     = useAuthStore((s) => s.can);
+  // Purchases figures (today's totals, supplier debt, pending stock-in, claims) leak supplier
+  // pricing/payables to anyone with dashboard.view — gate them the same way the rest of the app
+  // gates Purchases access, so a role like "staff" (dashboard.view but no purchases.view) doesn't
+  // see them here even though it can't open the Purchases page itself.
+  const canViewPurchases = can("purchases.view");
 
   const theme = {
     pageTitle: isDark ? "text-white"                                  : "text-zinc-900",
@@ -245,6 +290,10 @@ export default function Dashboard() {
         </button>
       </div>
     );
+  }
+
+  if (isLoading) {
+    return <Dashboard3DLoading theme={theme} />;
   }
 
   const source = raw?.data ?? raw ?? {};
@@ -317,21 +366,19 @@ export default function Dashboard() {
     Number(d.inventory.low_stock_count ?? 0) +
     Number(d.inventory.out_of_stock_count ?? 0) +
     Number(d.inventory.expiring_soon_count ?? d.alerts.expiring_soon.length ?? 0);
+  // supplier_claims_count (not resolved/cancelled) already covers everything
+  // purchase_returns_pending (submitted/approved) counts — adding both double-counts every
+  // claim sitting in submitted/approved. Matches Purchases.jsx's own single-count
+  // openReturnsCount definition (see Purchases.jsx). supplier_claims_count itself is
+  // purchases-only data, so it's excluded entirely without purchases.view.
   const returnFollowCount =
     Number(d.today.sales_returns_today ?? 0) +
-    Number(d.today.purchase_returns_pending ?? 0) +
-    Number(d.today.supplier_claims_count ?? 0);
+    (canViewPurchases ? Number(d.today.supplier_claims_count ?? 0) : 0);
 
-  // ── Secondary cards ──────────────────────────────────────────────
+  // ── Secondary cards — universal ops cards first (visible to everyone with
+  // dashboard.view), purchases-specific card last so it simply drops out of
+  // the row (instead of leaving a gap up front) for roles without purchases.view ──
   const secondaryCards = [
-    {
-      label:  "ចាំទទួលស្តុក",
-      value:  fmtInt(d.today.pending_stock_in_count),
-      raw:    d.today.pending_stock_in_count,
-      icon:   FiPackage,
-      iconBg: "bg-violet-500/10 text-violet-500",
-      accent: "border-l-violet-500",
-    },
     {
       label:  "តាមដានស្តុក",
       value:  fmtInt(stockFollowCount),
@@ -348,7 +395,15 @@ export default function Dashboard() {
       iconBg: returnFollowCount > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500",
       accent: returnFollowCount > 0 ? "border-l-rose-500" : "border-l-emerald-500",
     },
-  ];
+    canViewPurchases && {
+      label:  "ចាំទទួលស្តុក",
+      value:  fmtInt(d.today.pending_stock_in_count),
+      raw:    d.today.pending_stock_in_count,
+      icon:   FiPackage,
+      iconBg: "bg-violet-500/10 text-violet-500",
+      accent: "border-l-violet-500",
+    },
+  ].filter(Boolean);
 
   // ── Alerts ───────────────────────────────────────────────────────
   const alerts = [
@@ -357,7 +412,7 @@ export default function Dashboard() {
       color: "text-red-500", bg: "bg-red-500/10", icon: FiAlertTriangle,
       items: d.alerts.low_stock,
     },
-    d.alerts.pending_stock_in.length > 0 && {
+    canViewPurchases && d.alerts.pending_stock_in.length > 0 && {
       type: "pending_stock_in", label: "រង់ចាំទទួលស្តុក",
       color: "text-violet-500", bg: "bg-violet-500/10", icon: FiPackage,
       items: d.alerts.pending_stock_in,
@@ -437,6 +492,7 @@ export default function Dashboard() {
 
   // ── Recent activities ─────────────────────────────────────────────
   const recentActivities = d.recent_activities
+    .filter((a) => canViewPurchases || a.type !== "purchase")
     .map((a, i) => ({
         id: i,
         ...(ACTIVITY_META[a.type] ?? { icon: FiActivity, color: "text-zinc-400", bg: "bg-zinc-100" }),
@@ -466,7 +522,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Hero Cards (Sales + Purchases) ───────────────────────────── */}
+      {/* ── Hero Cards — grouped by domain: sales value → sales cash actually
+           collected → purchases value → outstanding debts (both sides) last
+           as the wrap-up card ───────────────────────────────────────────── */}
       <div>
         <p className={`mb-3 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>ទិដ្ឋភាពសម្រាប់ថ្ងៃនេះ</p>
         {isLoading ? (
@@ -480,9 +538,9 @@ export default function Dashboard() {
           <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
             <HeroCard
               theme={theme}
-              title="ការលក់ថ្ងៃនេះ"
+              title="លក់បានសរុប"
               value={`$${fmtUsd(d?.today.sales_total_usd)}`}
-              sub={`${fmtInt(d?.today.sales_count)} វិក្កយបត្រលក់`}
+              sub={`${fmtInt(d?.today.sales_count)} វិក្កយបត្រលក់ក្នុងថ្ងៃនេះ`}
               icon={FiDollarSign}
               iconBg="bg-emerald-500/10 text-emerald-500"
               trend={salesTrend}
@@ -493,22 +551,9 @@ export default function Dashboard() {
             />
             <HeroCard
               theme={theme}
-              title="ទិញចូលថ្ងៃនេះ"
-              value={`$${fmtUsd(d?.today.purchases_total_usd)}`}
-              sub={`${fmtInt(d?.today.purchases_count)} វិក្កយបត្រទិញ`}
-              icon={FiShoppingCart}
-              iconBg="bg-blue-500/10 text-blue-500"
-              trend={purchaseTrend}
-              details={[
-                { label: "បានបង់ USD", value: `$${fmtUsd(d?.today.purchases_paid_usd)}` },
-                { label: "បានបង់ KHR", value: `៛${fmtInt(d?.today.purchases_paid_khr)}` },
-              ]}
-            />
-            <HeroCard
-              theme={theme}
-              title="ប្រមូលបានសុទ្ធថ្ងៃនេះ"
+              title="ប្រាក់លក់បានពិត"
               value={`$${fmtUsd(d?.payment_breakdown.total_collected_usd)}`}
-              sub="ក្រោយដកលុយអាប់"
+              sub="លុយបានទទួលជាក់ស្តែង (ក្រោយដកសងវិញ)"
               icon={FiDollarSign}
               iconBg="bg-emerald-500/10 text-emerald-500"
               trend={null}
@@ -517,10 +562,25 @@ export default function Dashboard() {
                 { label: "ទទួល KHR", value: `៛${fmtInt(d?.payment_breakdown.total_collected_khr)}` },
               ]}
             />
+            {canViewPurchases && (
+              <HeroCard
+                theme={theme}
+                title="ទិញចូលថ្ងៃនេះ"
+                value={`$${fmtUsd(d?.today.purchases_total_usd)}`}
+                sub={`${fmtInt(d?.today.purchases_count)} វិក្កយបត្រទិញ`}
+                icon={FiShoppingCart}
+                iconBg="bg-blue-500/10 text-blue-500"
+                trend={purchaseTrend}
+                details={[
+                  { label: "បានបង់ USD", value: `$${fmtUsd(d?.today.purchases_paid_usd)}` },
+                  { label: "បានបង់ KHR", value: `៛${fmtInt(d?.today.purchases_paid_khr)}` },
+                ]}
+              />
+            )}
             <div className={`rounded-2xl border p-6 shadow-sm ${theme.card}`}>
               <div className="flex items-center justify-between">
                 <p className={`text-sm font-semibold uppercase tracking-wide ${theme.muted}`}>ជំពាក់បច្ចុប្បន្ន</p>
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-xl text-amber-500">
+                <div className="summary-icon-3d flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-xl text-amber-500">
                   <FiCreditCard />
                 </div>
               </div>
@@ -533,14 +593,16 @@ export default function Dashboard() {
                   </div>
                   <p className={`mt-1 text-xs font-semibold ${theme.muted}`}>KHR: ៛{fmtInt(d?.today.pending_khr)}</p>
                 </div>
-                <div className={`border-t pt-3 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
-                  <p className={`text-xs font-semibold ${theme.muted}`}>យើងជំពាក់អ្នកផ្គត់ផ្គង់</p>
-                  <div className="mt-1 flex items-end justify-between gap-3">
-                    <p className="text-xl font-extrabold leading-none text-amber-500">${fmtUsd(d?.today.purchase_pending_usd)}</p>
-                    <p className={`shrink-0 text-xs ${theme.muted}`}>{fmtInt(d?.today.purchase_pending_count)} បញ្ជាទិញ</p>
+                {canViewPurchases && (
+                  <div className={`border-t pt-3 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                    <p className={`text-xs font-semibold ${theme.muted}`}>យើងជំពាក់អ្នកផ្គត់ផ្គង់</p>
+                    <div className="mt-1 flex items-end justify-between gap-3">
+                      <p className="text-xl font-extrabold leading-none text-amber-500">${fmtUsd(d?.today.purchase_pending_usd)}</p>
+                      <p className={`shrink-0 text-xs ${theme.muted}`}>{fmtInt(d?.today.purchase_pending_count)} បញ្ជាទិញ</p>
+                    </div>
+                    <p className={`mt-1 text-xs font-semibold ${theme.muted}`}>KHR: ៛{fmtInt(d?.today.purchase_pending_khr)}</p>
                   </div>
-                  <p className={`mt-1 text-xs font-semibold ${theme.muted}`}>KHR: ៛{fmtInt(d?.today.purchase_pending_khr)}</p>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -588,7 +650,9 @@ export default function Dashboard() {
               <Tooltip content={<CustomTooltip isDark={isDark} />} />
               <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12, color: isDark ? "#a1a1aa" : "#71717a" }} iconType="circle" iconSize={8} />
               <Bar dataKey="sales"     name="ការលក់" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={32} />
-              <Bar dataKey="purchases" name="ការទិញ" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={32} />
+              {canViewPurchases && (
+                <Bar dataKey="purchases" name="ការទិញ" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={32} />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -632,7 +696,9 @@ export default function Dashboard() {
                   to={action.to}
                   className={`flex flex-col items-center justify-center gap-2 rounded-2xl px-3 py-4 text-center shadow-sm transition hover:scale-[1.03] hover:shadow-md active:scale-[0.98] ${action.bg}`}
                 >
-                  <Icon className="text-xl" />
+                  <span className="quick-action-icon-3d flex h-8 w-8 items-center justify-center rounded-xl">
+                    <Icon className="text-lg" />
+                  </span>
                   <span className="text-xs font-semibold leading-tight">{action.label}</span>
                 </Link>
               );
@@ -681,7 +747,7 @@ export default function Dashboard() {
               const Icon = item.icon;
               return (
                 <div key={item.label} className={`flex items-center gap-3 rounded-xl border p-3 ${theme.softCard}`}>
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${item.bg} ${item.color}`}><Icon /></div>
+                  <div className={`summary-icon-3d flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${item.bg} ${item.color}`}><Icon /></div>
                   <div>
                     <p className={`text-xs ${theme.muted}`}>{item.label}</p>
                     <p className={`text-lg font-bold ${theme.pageTitle}`}>{item.value}</p>
@@ -696,7 +762,7 @@ export default function Dashboard() {
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h3 className={`text-base font-bold ${theme.pageTitle}`}>ការប្រមូលសុទ្ធថ្ងៃនេះ</h3>
+              <h3 className={`text-base font-bold ${theme.pageTitle}`}>ការប្រមូលពិតថ្ងៃនេះ</h3>
               <p className={`mt-0.5 text-xs ${theme.muted}`}>សាច់ប្រាក់ ធនាគារ និង QR ក្រោយដកលុយអាប់</p>
             </div>
             {can("sales.view") && (
@@ -713,7 +779,7 @@ export default function Dashboard() {
                   const isLastOddCard = paymentMethods.length % 2 === 1 && index === paymentMethods.length - 1;
                   return (
                     <div key={pm.label} className={`flex items-center gap-3 rounded-2xl border p-4 ${isLastOddCard ? "col-span-2" : ""} ${theme.softCard}`}>
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ${pm.bg} ${pm.color}`}><Icon /></div>
+                      <div className={`summary-icon-3d flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ${pm.bg} ${pm.color}`}><Icon /></div>
                       <div className="min-w-0">
                         <p className={`text-xs font-semibold ${theme.muted}`}>{pm.label}</p>
                         <p className={`truncate text-lg font-extrabold ${theme.pageTitle}`}>{pm.value}</p>
@@ -725,7 +791,7 @@ export default function Dashboard() {
           </div>
           <div className={`mt-4 rounded-2xl border p-4 ${theme.softCard}`}>
             <div className="flex items-center justify-between">
-              <p className={`text-sm font-bold ${theme.pageTitle}`}>សរុបប្រមូលបានសុទ្ធថ្ងៃនេះ</p>
+              <p className={`text-sm font-bold ${theme.pageTitle}`}>ប្រាក់លក់បានពិត</p>
               <p className="text-lg font-extrabold text-emerald-500">
                 {isLoading ? "-" : `$${fmtUsd(d?.payment_breakdown.total_collected_usd)}`}
               </p>

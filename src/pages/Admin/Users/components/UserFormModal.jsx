@@ -1,11 +1,14 @@
 ﻿import { useState } from "react";
+import { useEffect, useRef } from "react";
 import {
+  FiCheck,
   FiX,
   FiSave,
   FiUser,
   FiLock,
   FiShield,
-  FiToggleRight,
+  FiCheckCircle,
+  FiXCircle,
   FiMail,
   FiPhone,
   FiHash,
@@ -21,6 +24,8 @@ const sanitizePhone = (value) =>
 export default function UserFormModal({
   isEdit,
   register,
+  watch,
+  setValue,
   handleSubmit,
   onSubmit,
   errors,
@@ -39,14 +44,14 @@ export default function UserFormModal({
   return (
     <div
       onMouseDown={closeModal}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:px-4 sm:py-6"
     >
       <div
         onMouseDown={(event) => event.stopPropagation()}
-        className={`flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border shadow-2xl ${theme.modal}`}
+        className={`flex h-dvh max-h-dvh w-full max-w-3xl flex-col overflow-hidden border-0 shadow-2xl sm:h-auto sm:max-h-[90dvh] sm:rounded-3xl sm:border ${theme.modal}`}
       >
         {/* Header */}
-        <div className={`shrink-0 border-b px-6 py-5 ${theme.modalHeader}`}>
+        <div className={`shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5 ${theme.modalHeader}`}>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h2 className="text-xl font-bold tracking-tight">
@@ -66,9 +71,9 @@ export default function UserFormModal({
               aria-label="បិទផ្ទាំង"
               disabled={isSaving}
               className="
-                flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl
-                border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm
-                transition hover:bg-zinc-200 hover:text-zinc-950
+                table-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl
+                border border-zinc-300 bg-zinc-100 text-zinc-700
+                transition hover:-translate-y-0.5 hover:bg-zinc-200 hover:text-zinc-950
                 disabled:cursor-not-allowed disabled:opacity-70
                 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300
                 dark:hover:bg-white/10 dark:hover:text-white
@@ -82,12 +87,13 @@ export default function UserFormModal({
         {/* IMPORTANT: form must be flex-col + min-h-0 */}
         <form
           onSubmit={handleSubmit(onSubmit)}
+          autoComplete="off"
           className="flex min-h-0 flex-1 flex-col"
         >
           {/* Scroll body */}
           <div
             className={`
-              min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5
+              min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5
               [scroll-behavior:smooth] [scrollbar-gutter:stable]
               ${theme.modalBody}
             `}
@@ -170,6 +176,7 @@ export default function UserFormModal({
                     register={register("password")}
                     error={errors.password}
                     placeholder={isEdit ? "ទុកទំនេរដើម្បីរក្សាលេខសម្ងាត់ចាស់" : "យ៉ាងតិច 6 តួអក្សរ"}
+                    autoComplete="new-password"
                     theme={theme}
                   />
 
@@ -179,6 +186,7 @@ export default function UserFormModal({
                     register={register("password_confirmation")}
                     error={errors.password_confirmation}
                     placeholder="បញ្ជាក់លេខសម្ងាត់"
+                    autoComplete="new-password"
                     theme={theme}
                   />
                 </div>
@@ -195,6 +203,8 @@ export default function UserFormModal({
                     label="តួនាទី"
                     required
                     register={register("role")}
+                    value={watch("role")}
+                    onChange={(value) => setValue("role", value, { shouldValidate: true, shouldDirty: true })}
                     error={errors.role}
                     theme={theme}
                     icon={<FiShield />}
@@ -210,9 +220,11 @@ export default function UserFormModal({
                       label="ស្ថានភាព"
                       required
                       register={register("status")}
+                      value={watch("status")}
+                      onChange={(value) => setValue("status", value, { shouldValidate: true, shouldDirty: true })}
                       error={errors.status}
                       theme={theme}
-                      icon={<FiToggleRight />}
+                      icon={watch("status") === "active" ? <FiCheckCircle /> : <FiXCircle />}
                       options={[
                         { value: "active",   label: "ដំណើរការ" },
                         { value: "inactive", label: "មិនដំណើរការ" },
@@ -225,16 +237,16 @@ export default function UserFormModal({
           </div>
 
           {/* Footer */}
-          <div className={`shrink-0 border-t px-6 py-4 ${theme.modalHeader}`}>
+          <div className={`shrink-0 border-t px-4 py-3 sm:px-6 sm:py-4 ${theme.modalHeader}`}>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={closeModal}
                 disabled={isSaving}
                 className="
-                  h-11 rounded-xl border border-zinc-300 bg-white px-5
-                  text-sm font-semibold text-zinc-700 shadow-sm transition
-                  hover:bg-zinc-100 hover:text-zinc-950
+                  table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5
+                  text-sm font-semibold text-zinc-700 transition
+                  hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950
                   disabled:cursor-not-allowed disabled:opacity-70
                   dark:border-white/10 dark:bg-white/5 dark:text-zinc-200
                   dark:hover:bg-white/10 dark:hover:text-white
@@ -247,9 +259,9 @@ export default function UserFormModal({
                 type="submit"
                 disabled={isSaving}
                 className="
-                  inline-flex h-11 items-center justify-center gap-2 rounded-xl
-                  bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm
-                  transition hover:bg-emerald-600
+                  quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl
+                  bg-emerald-500 px-5 text-sm font-semibold text-white
+                  transition hover:-translate-y-0.5 hover:bg-emerald-600
                   disabled:cursor-not-allowed disabled:opacity-70
                 "
               >
@@ -268,7 +280,7 @@ function FormSection({ title, subtitle, icon, theme, children }) {
   return (
     <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
       <div className="mb-4 flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+        <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
           {icon}
         </div>
 
@@ -343,7 +355,7 @@ function FormInput({
   );
 }
 
-function PasswordInput({ label, required = false, register, error, theme, placeholder = "" }) {
+function PasswordInput({ label, required = false, register, error, theme, placeholder = "", autoComplete = "new-password" }) {
   const [show, setShow] = useState(false);
 
   return (
@@ -361,6 +373,7 @@ function PasswordInput({ label, required = false, register, error, theme, placeh
         <input
           type={show ? "text" : "password"}
           {...register}
+          autoComplete={autoComplete}
           placeholder={placeholder}
           className={`h-11 w-full rounded-xl border pl-10 pr-10 text-sm outline-none transition focus:ring-4 ${theme.input} ${
             error ? "border-red-500 focus:border-red-500" : ""
@@ -386,45 +399,92 @@ function FormSelect({
   label,
   required = false,
   register,
+  value,
+  onChange,
   error,
   theme,
   options,
   icon,
 }) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef(null);
+  const selectedOption = options.find((option) => String(option.value) === String(value)) || options[0];
+  const themeText = [theme.select, theme.input, theme.modal, theme.section].join(" ");
+  const isDark = Boolean(theme.isDark) || themeText.includes("bg-[#") || themeText.includes("bg-zinc-900") || themeText.includes("text-white");
+  const dropdownClass = isDark
+    ? "border-white/10 bg-[#18181b] text-zinc-100 shadow-2xl shadow-black/30"
+    : "border-zinc-200 bg-white text-zinc-800 shadow-xl shadow-zinc-200/70";
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
-    <label className="block">
+    <label className="block" ref={wrapperRef}>
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
         {label}
         {required && <span className="ml-1 text-red-400">*</span>}
       </span>
 
       <div className="relative">
+        <input type="hidden" {...register} />
+
         {icon && (
           <span
-            className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
+            className={`pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-base ${theme.muted}`}
           >
             {icon}
           </span>
         )}
 
-        <select
-          {...register}
-          className={`h-11 w-full appearance-none rounded-xl border ${
+        <button
+          type="button"
+          onClick={() => setOpen((previous) => !previous)}
+          className={`flex h-11 w-full items-center justify-between rounded-xl border ${
             icon ? "pl-10" : "pl-3"
-          } pr-10 text-sm outline-none transition focus:ring-4 ${
+          } pr-3 text-left text-sm outline-none transition focus:ring-4 ${
             theme.select || theme.input
           } ${error ? "border-red-500 focus:border-red-500" : ""}`}
         >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          <span className="truncate">{selectedOption?.label || ""}</span>
+          <FiChevronDown
+            className={`ml-2 shrink-0 text-base transition ${theme.muted} ${open ? "rotate-180" : ""}`}
+          />
+        </button>
 
-        <FiChevronDown
-          className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}
-        />
+        {open && (
+          <div className={`absolute z-50 mt-2 w-full overflow-hidden rounded-xl border ${dropdownClass}`}>
+            <div className="max-h-56 overflow-y-auto py-1">
+              {options.map((option) => {
+                const isActive = String(option.value) === String(value);
+                return (
+                  <button
+                    key={String(option.value)}
+                    type="button"
+                    onClick={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition ${
+                      isActive
+                        ? "bg-red-500/10 font-semibold text-red-500 dark:text-red-400"
+                        : isDark
+                        ? "text-zinc-200 hover:bg-white/[0.06] hover:text-white"
+                        : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
+                    }`}
+                  >
+                    <span className="truncate">{option.label}</span>
+                    {isActive && <FiCheck className="ml-2 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {error && <p className="mt-1.5 text-xs text-red-400">{error.message}</p>}

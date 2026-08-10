@@ -20,6 +20,7 @@ const variantUnitSchema = z.object({
     .number()
     .min(1, "ចំនួនក្នុងមួយខ្នាត ត្រូវ ≥ 1 ។")
     .max(10000, "ចំនួនក្នុងមួយខ្នាត ខ្ពស់ពេក ។"),
+  barcode: z.string().optional(),
   is_base_unit: z.boolean(),
   is_default_sale_unit: z.boolean(),
   is_default_purchase_unit: z.boolean(),
@@ -44,7 +45,8 @@ const variantSchema = z.object({
     .min(1, "ត្រូវការខ្នាតទំនិញ យ៉ាងតិច ១ ។"),
   priceRules: z
     .array(priceRuleSchema)
-    .min(1, "ត្រូវការតម្លៃ យ៉ាងតិច ១ ។"),
+    .optional()
+    .default([]),
 });
 
 export const productSetupSchema = z.object({

@@ -31,7 +31,7 @@ export default function AlertSection({ alert, theme, isDark }) {
         className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left transition hover:opacity-80`}
       >
         <div className="flex items-center gap-2">
-          <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm ${alert.bg} ${alert.color}`}>
+          <span className={`table-icon-3d flex h-7 w-7 items-center justify-center rounded-lg text-sm ${alert.bg} ${alert.color}`}>
             <Icon />
           </span>
           <span className={`text-sm font-bold ${theme.pageTitle}`}>{alert.label}</span>

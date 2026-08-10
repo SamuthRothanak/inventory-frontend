@@ -14,7 +14,7 @@ export const priceRuleSchema = z.object({
 });
 
 export const standalonePriceRuleSchema = z.object({
-  product_variant_unit_id: z.string().min(1, "ខ្នាតទំនិញ ត្រូវការ ។"),
+  product_variant_unit_id: z.coerce.string().min(1, "ខ្នាតទំនិញ ត្រូវការ ។"),
   applies_to: z.enum(["retail", "wholesale", "both"], {
     message: "សូមជ្រើស ប្រើសម្រាប់ ។",
   }),

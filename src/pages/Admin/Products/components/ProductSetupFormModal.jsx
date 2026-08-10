@@ -32,6 +32,70 @@ import {
 
 const makeLocalKey = (prefix) => `${prefix}_${Date.now()}_${Math.random()}`;
 
+// Rough phonetic Khmer→Latin map for auto-generating a unit code from a Khmer unit name
+// (e.g. "ដប" → "DB" after transliteration + the existing uppercase/strip pipeline). Not a
+// linguistically precise romanization (ignores consonant series/inherent-vowel rules and
+// coeng-stacking nuances) — it only needs to produce a short, readable, non-empty code, not a
+// faithful transliteration. Tone/register marks and the subscript joiner are dropped rather
+// than mapped, since they don't contribute a distinct sound worth encoding into a short code.
+const KHMER_LATIN_MAP = {
+  "ក": "K", "ខ": "KH", "គ": "K", "ឃ": "KH", "ង": "NG",
+  "ច": "CH", "ឆ": "CH", "ជ": "CH", "ឈ": "CH", "ញ": "NY",
+  "ដ": "D", "ឋ": "TH", "ឌ": "D", "ឍ": "TH", "ណ": "N",
+  "ត": "T", "ថ": "TH", "ទ": "T", "ធ": "TH", "ន": "N",
+  "ប": "B", "ផ": "PH", "ព": "P", "ភ": "P", "ម": "M",
+  "យ": "Y", "រ": "R", "ល": "L", "វ": "V", "ស": "S",
+  "ហ": "H", "ឡ": "L", "អ": "A",
+  "ឥ": "I", "ឦ": "EI", "ឧ": "U", "ឩ": "OU", "ឪ": "OU",
+  "ឫ": "REU", "ឬ": "REU", "ឭ": "LEU", "ឮ": "LEU",
+  "ឯ": "AE", "ឰ": "AI", "ឱ": "O", "ឲ": "O", "ឳ": "AU",
+  "ា": "A", "ិ": "I", "ី": "EY", "ឹ": "EU", "ឺ": "EW",
+  "ុ": "U", "ូ": "OU", "ួ": "UA", "ើ": "OE", "ឿ": "UE",
+  "ៀ": "EA", "េ": "E", "ែ": "AE", "ៃ": "AI", "ោ": "OA", "ៅ": "AU",
+  "ំ": "M", "ះ": "H",
+  "០": "0", "១": "1", "២": "2", "៣": "3", "៤": "4",
+  "៥": "5", "៦": "6", "៧": "7", "៨": "8", "៩": "9",
+};
+
+function transliterateKhmer(value) {
+  return String(value || "")
+    .split("")
+    .map((char) => (char in KHMER_LATIN_MAP ? KHMER_LATIN_MAP[char] : char))
+    .join("");
+}
+
+// A unit *name* describes what the unit is ("ដប", "Box") — digits/symbols belong in the
+// separate conversion-quantity field, not here, so they're blocked at input time rather than
+// silently accepted and then stripped later by generateUnitCode. \p{M} (combining marks) is
+// required alongside \p{L} — Khmer dependent vowel signs like េ/ា/ិ are Unicode *marks*, not
+// letters, so a letters-only filter would silently mutilate real Khmer words (e.g. "កេស"
+// losing its េ and becoming "កស").
+function sanitizeUnitNameInput(value) {
+  return String(value || "").replace(/[^\p{L}\p{M}\s]/gu, "");
+}
+
+// Module-level (not inside QuickCreateUnitBox) and exported so the package-type "create
+// matching unit" nudge — in this file's VariantSetupCard, and in ProductVariantFormModal.jsx's
+// edit-existing-variant form — generates the same code a user typing directly into
+// QuickCreateUnitBox would get. One code-generation rule, not several copies that could drift.
+export function generateUnitCode(unitName) {
+  return transliterateKhmer(String(unitName || "").trim())
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+// Shared by the existing "auto-assign matching unit" effect, the new-product-wizard nudge, and
+// the edit-existing-variant nudge (ProductVariantFormModal.jsx) — one comparison rule everywhere
+// this correlation is checked, not several copies that could drift apart.
+export function findMatchingUnit(units, name) {
+  const target = String(name || "").trim().toLowerCase();
+  if (!target) return null;
+  return units.find(
+    (u) => (u.unit_name || u.unitName || u.unit_code || "").toLowerCase() === target
+  ) || null;
+}
+
 const PACKAGE_TYPES = [
   "ដុំ", "កញ្ចប់", "កញ្ចប់តូច", "ថង់", "ប្រអប់",
   "កេស", "កាតុង", "កំប៉ុង", "ដប", "ដុំរមូរ",
@@ -71,7 +135,7 @@ function cleanNamePart(value) {
     .replace(/[\s\u00A0\u1680\u180E\u2000-\u200D\u202F\u205F\u3000]+/g, " ");
 }
 
-function detectUnitType(unitName) {
+export function detectUnitType(unitName) {
   const value = String(unitName || "").trim().toLowerCase();
   const exactWeightKeywords = ["kg", "kgs", "g"];
   const exactVolumeKeywords = ["ml", "l"];
@@ -221,24 +285,14 @@ export default function ProductSetupFormModal({
           local_key: baseUnitKey,
           unit_id: "",
           conversion_qty: 1,
+          barcode: "",
           is_base_unit: true,
           is_default_sale_unit: true,
           is_default_purchase_unit: false,
           status: true,
         },
       ],
-      priceRules: [
-        {
-          local_unit_key: baseUnitKey,
-          applies_to: "retail",
-          min_qty: 1,
-          unit_price_usd: 0,
-          unit_price_khr: 0,
-          input_currency: "USD",
-          input_price: "",
-          status: "active",
-        },
-      ],
+      priceRules: [],
     });
     setActiveVariantIndex(variantIndex);
     setPendingNewVariantIndex(variantIndex);
@@ -311,6 +365,7 @@ export default function ProductSetupFormModal({
 
   return (
     <ModalShell
+      mobileFullScreen
       title="បន្ថែមផលិតផល"
       subtitle="បង្កើតផលិតផល បន្ទាប់មកបន្ថែមមុខទំនិញ បន្ទាប់មកជ្រើសរើសខ្នាតទំនិញ សម្រាប់មុខទំនិញនីមួយៗ និងចំនួនស្ដុកដែលជិតអស់។"
       theme={theme}
@@ -319,11 +374,11 @@ export default function ProductSetupFormModal({
       footer={
         <>
           <button type="button" onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
             បោះបង់
           </button>
           <button type="submit" form="product-setup-form" disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
             <FiSave />
             {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកផលិតផល"}
           </button>
@@ -392,7 +447,7 @@ export default function ProductSetupFormModal({
               </p>
             </div>
             <button type="button" onClick={handleAddVariant}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600">
+              className="quick-action-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600">
               <FiPlus />
               បន្ថែមមុខទំនិញ
             </button>
@@ -406,7 +461,9 @@ export default function ProductSetupFormModal({
 
           {variantFields.length === 0 && (
             <div className={`flex flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center ${theme.softCard}`}>
-              <FiPackage className="text-4xl text-red-500" />
+              <span className="summary-icon-3d flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10">
+                <FiPackage className="text-4xl text-red-500" />
+              </span>
               <p className="mt-3 text-sm font-semibold">មិនទាន់មានមុខទំនិញ</p>
               <p className={`mt-1 text-xs ${theme.muted}`}>ចុច «បន្ថែមមុខទំនិញ» ដើម្បីចាប់ផ្ដើម ។</p>
             </div>
@@ -450,12 +507,12 @@ export default function ProductSetupFormModal({
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-2">
                             <button type="button" onClick={() => handleOpenVariant(variantIndex)}
-                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700">
+                              className="quick-action-icon-3d inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700">
                               <FiEdit2 />
                               កែ
                             </button>
                             <button type="button" onClick={() => removeVariant(variantIndex)}
-                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
+                              className="quick-action-icon-3d inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">
                               <FiTrash2 />
                               លុប
                             </button>
@@ -480,11 +537,11 @@ export default function ProductSetupFormModal({
           footer={
             <>
               <button type="button" onClick={handleCloseVariantModal}
-                className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+                className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
                 បោះបង់
               </button>
               <button type="button" onClick={handleSaveVariantModal}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600">
+                className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600">
                 <FiSave />
                 រក្សាទុកមុខទំនិញ
               </button>
@@ -538,6 +595,12 @@ function VariantSetupCard({
 }) {
   const confirm = useConfirm();
   const [quickUnitOpen, setQuickUnitOpen] = useState(false);
+  const quickUnitBoxRef = useRef(null);
+  useEffect(() => {
+    if (quickUnitOpen) {
+      quickUnitBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [quickUnitOpen]);
   const [quickUnit, setQuickUnit] = useState({
     unit_code: "",
     unit_name: "",
@@ -610,9 +673,7 @@ function VariantSetupCard({
       .findIndex((u) => u.is_base_unit);
     if (baseUnitIndex === -1) return;
     if (!packageTypeVal) return;
-    const matched = units.find(
-      (u) => (u.unit_name || u.unitName || u.unit_code || "").toLowerCase() === packageTypeVal.toLowerCase()
-    );
+    const matched = findMatchingUnit(units, packageTypeVal);
     if (matched) {
       setValue(`variants.${variantIndex}.units.${baseUnitIndex}.unit_id`, String(matched.id), { shouldValidate: true });
     }
@@ -659,6 +720,7 @@ function VariantSetupCard({
       local_key: makeLocalKey("unit"),
       unit_id: "",
       conversion_qty: "",
+      barcode: "",
       is_base_unit: false,
       is_default_sale_unit: false,
       is_default_purchase_unit: true,
@@ -742,7 +804,7 @@ function VariantSetupCard({
         </div>
         {onRemoveVariant && (
           <button type="button" onClick={onRemoveVariant}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
+            className="quick-action-icon-3d inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0">
             <FiTrash2 />
             លុបមុខទំនិញ
           </button>
@@ -756,19 +818,21 @@ function VariantSetupCard({
         {/* Variant Code — read-only style, auto-generated */}
         <div>
           <label className={`mb-2 flex h-7 items-center text-xs font-semibold ${theme.muted}`}>
-            លេខកូដមុខទំនិញ <span className="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-500 dark:bg-white/10">auto</span>
+            លេខកូដមុខទំនិញ <span className="ml-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-bold text-zinc-500 dark:bg-white/10">ស្វ័យប្រវត្តិ</span>
           </label>
           <div className="relative">
             <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
             <input {...register(`variants.${variantIndex}.variant_code`)}
-              className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} opacity-70`} />
+              readOnly
+              aria-readonly="true"
+              className={`h-11 w-full cursor-default rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} opacity-70`} />
           </div>
           <div className="min-h-[1.375rem]">
             {variantErrors?.variant_code?.message ? (
               <p className="mt-1.5 text-xs text-red-400">{variantErrors.variant_code.message}</p>
             ) : (
               <p className={`mt-1.5 text-xs ${theme.muted}`}>
-                លេខកូដបង្កើតស្វ័យប្រវត្តិ និងអាចកែបានបើចាំបាច់។
+                លេខកូដបង្កើតស្វ័យប្រវត្តិ។
               </p>
             )}
           </div>
@@ -850,6 +914,29 @@ function VariantSetupCard({
               value={watch(`variants.${variantIndex}.package_type`) || ""}
               onChange={(v) => setValue(`variants.${variantIndex}.package_type`, v, { shouldValidate: true })}
             />
+            {packageTypeVal &&
+              !findMatchingUnit(units, packageTypeVal) &&
+              !(quickUnitOpen && quickUnit.unit_name.trim().toLowerCase() === packageTypeVal.trim().toLowerCase()) && (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                <span>&quot;{packageTypeVal}&quot; មិនទាន់ជាខ្នាតទំនិញនៅឡើយ</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickUnit({
+                      unit_code: generateUnitCode(packageTypeVal),
+                      unit_name: packageTypeVal,
+                      unit_type: detectUnitType(packageTypeVal),
+                      allow_decimal: false,
+                      status: "active",
+                    });
+                    setQuickUnitOpen(true);
+                  }}
+                  className="shrink-0 rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-bold text-white transition hover:-translate-y-0.5 hover:bg-amber-600"
+                >
+                  បង្កើតជាខ្នាតទំនិញ
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
@@ -911,12 +998,12 @@ function VariantSetupCard({
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setQuickUnitOpen(true)}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-zinc-500 px-3 text-xs font-semibold text-white hover:bg-zinc-600">
+              className="quick-action-icon-3d inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-zinc-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-zinc-600">
               <FiSettings />
               ប្រភេទខ្នាតទំនិញ
             </button>
             <button type="button" onClick={handleAddUnit}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 text-xs font-semibold text-white hover:bg-emerald-600">
+              className="quick-action-icon-3d inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600">
               <FiPlus />
               បន្ថែមខ្នាតទំនិញ
             </button>
@@ -924,23 +1011,25 @@ function VariantSetupCard({
         </div>
 
         {quickUnitOpen && (
-          <QuickCreateUnitBox
-            theme={theme}
-            units={units}
-            quickUnit={quickUnit}
-            setQuickUnit={setQuickUnit}
-            isCreatingUnit={isCreatingUnit}
-            isUpdatingUnit={isUpdatingUnit}
-            isDeletingUnit={isDeletingUnit}
-            onCreateUnit={onCreateUnit}
-            onUpdateUnit={onUpdateUnit}
-            onDeleteUnit={onDeleteUnit}
-            onClose={() => setQuickUnitOpen(false)}
-            onCreated={() => {
-              setQuickUnit({ unit_code: "", unit_name: "", unit_type: "piece", allow_decimal: false, status: "active" });
-              setQuickUnitOpen(false);
-            }}
-          />
+          <div ref={quickUnitBoxRef}>
+            <QuickCreateUnitBox
+              theme={theme}
+              units={units}
+              quickUnit={quickUnit}
+              setQuickUnit={setQuickUnit}
+              isCreatingUnit={isCreatingUnit}
+              isUpdatingUnit={isUpdatingUnit}
+              isDeletingUnit={isDeletingUnit}
+              onCreateUnit={onCreateUnit}
+              onUpdateUnit={onUpdateUnit}
+              onDeleteUnit={onDeleteUnit}
+              onClose={() => setQuickUnitOpen(false)}
+              onCreated={() => {
+                setQuickUnit({ unit_code: "", unit_name: "", unit_type: "piece", allow_decimal: false, status: "active" });
+                setQuickUnitOpen(false);
+              }}
+            />
+          </div>
         )}
 
         {variantErrors?.units?.message && (
@@ -995,7 +1084,7 @@ function VariantSetupCard({
                   </div>
                   {unitFields.length > 1 && (
                     <button type="button" onClick={() => handleRemoveUnit(unitIndex, unitLocalKey)}
-                      className="inline-flex h-8 items-center gap-1 rounded-lg bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
+                      className="quick-action-icon-3d inline-flex h-8 items-center gap-1 rounded-lg bg-red-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">
                       <FiTrash2 />
                       លុបខ្នាតទំនិញ
                     </button>
@@ -1003,7 +1092,7 @@ function VariantSetupCard({
                 </div>
 
                 {/* UNIT FIELDS */}
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_1fr_2fr]">
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                   <SearchableDropdown label="ខ្នាតទំនិញ" required error={unitErrors?.unit_id?.message} theme={theme} icon={<FiLayers />}
                     value={watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`)}
                     onChange={(v) => {
@@ -1043,29 +1132,33 @@ function VariantSetupCard({
                       }} />
                   </div>
                   <div>
-                    <p className={`mb-2 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
-                      <FiInfo /> ជម្រើសខ្នាតទំនិញ
-                    </p>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <CheckBox label="ខ្នាតទំនិញស្តុក" helper="តាមដានស្តុកក្នុងខ្នាតទំនិញនេះ"
-                        checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`)}
-                        onChange={(c) => {
-                          setValue(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`, c, { shouldValidate: true });
-                          if (c) {
-                            autoFillPackageType(watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`));
-                          }
-                        }} />
-                      <CheckBox label="លក់ក្នុង POS" helper="ប្រើស្វ័យប្រវត្ដិពេលលក់ដល់អតិថិជន"
-                        checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`)}
-                        onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`, c, { shouldValidate: true })} />
-                      <CheckBox label="ទិញពីអ្នកផ្គត់ផ្គង់" helper="ប្រើស្វ័យប្រវត្ដិពេលបញ្ជាទិញស្តុក"
-                        checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_purchase_unit`)}
-                        onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_purchase_unit`, c, { shouldValidate: true })} />
-                      <CheckBox label="ដំណើរការ" helper="អាចប្រើខ្នាតទំនិញនេះ"
-                        checked={watch(`variants.${variantIndex}.units.${unitIndex}.status`)}
-                        onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.status`, c, { shouldValidate: true })} />
-                    </div>
+                    <FormInput label="បាកូដ (Barcode)" theme={theme} icon={<FiHash />}
+                      hint="ស្រេចចិត្ត — ខ្នាតនីមួយៗអាចមាន barcode ខុសគ្នា"
+                      inputProps={register(`variants.${variantIndex}.units.${unitIndex}.barcode`)} />
                   </div>
+                </div>
+
+                <p className={`mb-2 mt-3 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
+                  <FiInfo /> ជម្រើសខ្នាតទំនិញ
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <CheckBox label="ខ្នាតទំនិញស្តុក" helper="តាមដានស្តុកក្នុងខ្នាតទំនិញនេះ"
+                    checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`)}
+                    onChange={(c) => {
+                      setValue(`variants.${variantIndex}.units.${unitIndex}.is_base_unit`, c, { shouldValidate: true });
+                      if (c) {
+                        autoFillPackageType(watch(`variants.${variantIndex}.units.${unitIndex}.unit_id`));
+                      }
+                    }} />
+                  <CheckBox label="លក់ក្នុង POS" helper="ប្រើស្វ័យប្រវត្ដិពេលលក់ដល់អតិថិជន"
+                    checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`)}
+                    onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_sale_unit`, c, { shouldValidate: true })} />
+                  <CheckBox label="ទិញពីអ្នកផ្គត់ផ្គង់" helper="ប្រើស្វ័យប្រវត្ដិពេលបញ្ជាទិញស្តុក"
+                    checked={watch(`variants.${variantIndex}.units.${unitIndex}.is_default_purchase_unit`)}
+                    onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.is_default_purchase_unit`, c, { shouldValidate: true })} />
+                  <CheckBox label="ដំណើរការ" helper="អាចប្រើខ្នាតទំនិញនេះ"
+                    checked={watch(`variants.${variantIndex}.units.${unitIndex}.status`)}
+                    onChange={(c) => setValue(`variants.${variantIndex}.units.${unitIndex}.status`, c, { shouldValidate: true })} />
                 </div>
 
                 {/* NESTED PRICE RULES for this unit */}
@@ -1075,7 +1168,7 @@ function VariantSetupCard({
                       តម្លៃសម្រាប់ {unitLabel(unitItem, unitIndex)}
                     </p>
                     <button type="button" onClick={() => handleAddPriceForUnit(unitLocalKey)}
-                      className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-500 px-3 text-xs font-semibold text-white hover:bg-emerald-600">
+                      className="quick-action-icon-3d inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600">
                       <FiPlus />
                       បន្ថែមតម្លៃ
                     </button>
@@ -1083,7 +1176,7 @@ function VariantSetupCard({
 
                   {rulesForUnit.length === 0 && (
                     <p className={`rounded-lg border border-dashed px-3 py-3 text-center text-xs ${theme.muted}`}>
-                      មិនទាន់មានតម្លៃ ។ ចុច «បន្ថែមតម្លៃ» ។
+                      មិនទាន់មានតម្លៃ ។ អាចបន្ថែមក្រោយបាន មុនយកទៅលក់។
                     </p>
                   )}
 
@@ -1133,7 +1226,7 @@ function VariantSetupCard({
                                 : "គ្មានអត្រាប្ដូររូបិយប័ណ្ណ"}
                             </p>
                             <button type="button" onClick={() => removePriceRule(idx)}
-                              className="inline-flex h-7 items-center gap-1 rounded-lg bg-red-500 px-2.5 text-[11px] font-semibold text-white hover:bg-red-600">
+                              className="quick-action-icon-3d inline-flex h-7 items-center gap-1 rounded-lg bg-red-500 px-2.5 text-[11px] font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">
                               <FiTrash2 />
                               លុបតម្លៃ
                             </button>
@@ -1235,8 +1328,6 @@ export function QuickCreateUnitBox({
   const [editingUnitId, setEditingUnitId] = useState(null);
   const [unitError, setUnitError] = useState("");
 
-  const generateUnitCode = (unitName) =>
-    String(unitName || "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
   const getSuggestedUnitType = (unitName = quickUnit.unit_name) =>
     detectUnitType(unitName);
@@ -1320,16 +1411,16 @@ export function QuickCreateUnitBox({
         <div>
           <p className="text-sm font-bold">{editingUnitId ? "ធ្វើបច្ចុប្បន្នភាពខ្នាតទំនិញ" : "បង្កើតខ្នាតទំនិញថ្មី"}</p>
           <p className={`mt-1 text-xs ${theme.muted}`}>
-            លេខកូដស្វ័យប្រវត្ដិ ។ ឧ: Small Bottle → SMALL_BOTTLE ។ ឈ្មោះខ្មែរ → UNIT12345 ។
+            លេខកូដស្វ័យប្រវត្ដិ ។ ឧ: Small Bottle → SMALL_BOTTLE ។ ដប → DB ។
           </p>
         </div>
         <div className="flex gap-2">
           {editingUnitId && (
             <button type="button" onClick={resetForm}
-              className="rounded-lg bg-zinc-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-600">ថ្មី</button>
+              className="quick-action-icon-3d rounded-lg bg-zinc-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-zinc-600">ថ្មី</button>
           )}
           <button type="button" onClick={onClose}
-            className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">បិទ</button>
+            className="quick-action-icon-3d rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">បិទ</button>
         </div>
       </div>
 
@@ -1338,7 +1429,7 @@ export function QuickCreateUnitBox({
           <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>ឈ្មោះខ្នាតទំនិញ *</span>
           <input value={quickUnit.unit_name}
             onChange={(e) => {
-              const n = e.target.value;
+              const n = sanitizeUnitNameInput(e.target.value);
               setQuickUnit((p) => ({
                 ...p,
                 unit_name: n,
@@ -1377,7 +1468,7 @@ export function QuickCreateUnitBox({
         </div>
         <div className="flex items-end">
           <button type="button" disabled={isCreatingUnit || isUpdatingUnit} onClick={handleSave}
-            className="h-11 w-full rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
+            className="quick-action-icon-3d h-11 w-full rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
             {editingUnitId ? (isUpdatingUnit ? "កំពុងធ្វើបច្ចុប្បន្នភាព..." : "ធ្វើបច្ចុប្បន្នភាព") : (isCreatingUnit ? "កំពុងបង្កើត..." : "រក្សាទុកខ្នាតទំនិញ")}
           </button>
         </div>
@@ -1412,9 +1503,9 @@ export function QuickCreateUnitBox({
                 </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => handleEdit(unit)}
-                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">កែ</button>
+                    className="quick-action-icon-3d rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700">កែ</button>
                   <button type="button" disabled={isDeletingUnit} onClick={() => handleDelete(unit)}
-                    className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60">
+                    className="quick-action-icon-3d rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60">
                     {isDeletingUnit ? "កំពុងលុប..." : "លុប"}
                   </button>
                 </div>
@@ -1434,7 +1525,7 @@ function FormSection({ title, subtitle, icon, theme, children }) {
   return (
     <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
       <div className="mb-4 flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">{icon}</div>
+        <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">{icon}</div>
         <div>
           <h3 className="text-sm font-bold">{title}</h3>
           {subtitle && <p className={`mt-0.5 text-xs leading-5 ${theme.muted}`}>{subtitle}</p>}
@@ -1459,7 +1550,7 @@ function ImageInput({ label, theme, previewFile, onChange, uniqueId = "" }) {
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
       <div className="rounded-xl border border-dashed border-zinc-300 bg-white/0 p-3 transition hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
+          <div className="summary-icon-3d flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
             {previewUrl ? <img src={previewUrl} alt="Selected" className="h-full w-full object-cover" /> : <FiImage className="text-3xl text-red-500" />}
           </div>
           <input id={inputId} type="file" accept="image/*" className="hidden"
@@ -1467,12 +1558,12 @@ function ImageInput({ label, theme, previewFile, onChange, uniqueId = "" }) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap gap-2">
               <label htmlFor={inputId}
-                className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700">
+                className="quick-action-icon-3d inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-700">
                 <FiImage className="text-lg" /> {previewUrl ? "ប្ដូររូបភាព" : "ជ្រើសរើសរូបភាព"}
               </label>
               {previewUrl && (
                 <button type="button" onClick={handleRemoveImage}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+                  className="table-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
                   <FiXCircle className="text-base" /> លុប
                 </button>
               )}

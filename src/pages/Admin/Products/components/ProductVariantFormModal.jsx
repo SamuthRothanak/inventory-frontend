@@ -18,6 +18,12 @@ import {
 import ModalShell from "./ModalShell";
 import SearchableDropdown from "./SearchableDropdown";
 import { CreatableOptionSelect, SizeUnitSelect } from "./SizeUnitSelect";
+import {
+  QuickCreateUnitBox,
+  generateUnitCode,
+  findMatchingUnit,
+  detectUnitType,
+} from "./ProductSetupFormModal";
 
 const DEFAULT_EXCHANGE_RATE = 0;
 const makeLocalKey = (prefix) => `${prefix}_${Date.now()}_${Math.random()}`;
@@ -135,6 +141,7 @@ function makeUnit(isFirst = false) {
     local_key: makeLocalKey("unit"),
     unit_id: "",
     conversion_qty: 1,
+    barcode: "",
     is_base_unit: isFirst,
     is_default_sale_unit: isFirst,
     is_default_purchase_unit: false,
@@ -166,9 +173,33 @@ export default function VariantSetupFormModal({
   isSaving = false,
   onClose,
   onSave,
+  isCreatingUnit,
+  isUpdatingUnit,
+  isDeletingUnit,
+  onCreateUnit,
+  onUpdateUnit,
+  onDeleteUnit,
 }) {
   const isEdit = mode === "edit";
   const initialUnitKey = React.useMemo(() => makeLocalKey("unit"), []);
+
+  // "Create matching unit" nudge for a package_type with no unit of the same name yet — same
+  // QuickCreateUnitBox + local state pattern already used by ProductManageModal.jsx, so a
+  // brand-new unit created here shows up there (and vice versa) via the shared `units` query.
+  const [quickUnitOpen, setQuickUnitOpen] = useState(false);
+  const [quickUnit, setQuickUnit] = useState({
+    unit_code: "",
+    unit_name: "",
+    unit_type: "piece",
+    allow_decimal: false,
+    status: "active",
+  });
+  const quickUnitBoxRef = useRef(null);
+  useEffect(() => {
+    if (quickUnitOpen) {
+      quickUnitBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [quickUnitOpen]);
 
   const makeVariantForm = (sourceVariant = null) => ({
     product_id: product?.id || sourceVariant?.productId || sourceVariant?.product_id || "",
@@ -199,6 +230,7 @@ export default function VariantSetupFormModal({
       local_key: initialUnitKey,
       unit_id: "",
       conversion_qty: 1,
+      barcode: "",
       is_base_unit: true,
       is_default_sale_unit: true,
       is_default_purchase_unit: false,
@@ -405,6 +437,7 @@ export default function VariantSetupFormModal({
         local_key: u.local_key,
         unit_id: Number(u.unit_id),
         conversion_qty: Number(u.conversion_qty || 1),
+        barcode: u.barcode || "",
         is_base_unit: Boolean(u.is_base_unit),
         is_default_sale_unit: Boolean(u.is_default_sale_unit),
         is_default_purchase_unit: Boolean(u.is_default_purchase_unit),
@@ -423,6 +456,7 @@ export default function VariantSetupFormModal({
 
   return (
     <ModalShell
+      mobileFullScreen
       title={isEdit ? "កែមុខទំនិញ" : "បន្ថែមមុខទំនិញ"}
       subtitle={`ផលិតផល: ${product?.name || product?.productName || "-"}`}
       theme={theme}
@@ -431,11 +465,11 @@ export default function VariantSetupFormModal({
       footer={
         <>
           <button type="button" onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
             បោះបង់
           </button>
           <button type="submit" form="variant-setup-form" disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
             <FiSave />
             {isSaving ? "កំពុងរក្សាទុក..." : isEdit ? "រក្សាទុកមុខទំនិញ" : "រក្សាទុកមុខទំនិញ"}
           </button>
@@ -465,14 +499,15 @@ export default function VariantSetupFormModal({
                 <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}><FiHash /></span>
                 <input
                   value={variantForm.variant_code}
-                  onChange={(e) => updateVariant("variant_code", e.target.value)}
+                  readOnly
+                  aria-readonly="true"
                   placeholder="PV-BEER-330ML-CAN"
-                  className={`h-11 w-full rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+                  className={`h-11 w-full cursor-default rounded-xl border pl-10 pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} opacity-70`}
                 />
               </div>
               <div className="min-h-[1.375rem]">
                 <p className={`mt-1.5 text-xs ${theme.muted}`}>
-                  លេខកូដបង្កើតស្វ័យប្រវត្តិ និងអាចកែបានបើចាំបាច់។
+                  លេខកូដបង្កើតស្វ័យប្រវត្តិ។
                 </p>
               </div>
             </div>
@@ -530,13 +565,38 @@ export default function VariantSetupFormModal({
               <p className={`mt-0.5 text-xs ${theme.muted}`}>សណ្ឋាន ទំហំ ពណ៌ និងរូបភាពសម្រាប់មុខទំនិញនេះ។</p>
             </div>
             <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-            <PackageTypeCombobox
-              label="សណ្ឋានទំនិញ"
-              required
-              theme={theme}
-              value={variantForm.package_type}
-              onChange={(v) => updateVariant("package_type", v)}
-            />
+            <div>
+              <PackageTypeCombobox
+                label="សណ្ឋានទំនិញ"
+                required
+                theme={theme}
+                value={variantForm.package_type}
+                onChange={(v) => updateVariant("package_type", v)}
+              />
+              {variantForm.package_type &&
+                !findMatchingUnit(units, variantForm.package_type) &&
+                !(quickUnitOpen && quickUnit.unit_name.trim().toLowerCase() === variantForm.package_type.trim().toLowerCase()) && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                  <span>&quot;{variantForm.package_type}&quot; មិនទាន់ជាខ្នាតទំនិញនៅឡើយ</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickUnit({
+                        unit_code: generateUnitCode(variantForm.package_type),
+                        unit_name: variantForm.package_type,
+                        unit_type: detectUnitType(variantForm.package_type),
+                        allow_decimal: false,
+                        status: "active",
+                      });
+                      setQuickUnitOpen(true);
+                    }}
+                    className="shrink-0 rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-bold text-white transition hover:-translate-y-0.5 hover:bg-amber-600"
+                  >
+                    បង្កើតជាខ្នាតទំនិញ
+                  </button>
+                </div>
+              )}
+            </div>
             <div>
               <label className={`mb-2 block text-xs font-semibold ${theme.muted}`}>
                 ទំហំ <span className="font-normal">(ស្រេចចិត្ត)</span>
@@ -640,11 +700,33 @@ export default function VariantSetupFormModal({
           </div>
         </Section>
 
+        {quickUnitOpen && (
+          <div ref={quickUnitBoxRef}>
+            <QuickCreateUnitBox
+              theme={theme}
+              units={units}
+              quickUnit={quickUnit}
+              setQuickUnit={setQuickUnit}
+              isCreatingUnit={isCreatingUnit}
+              isUpdatingUnit={isUpdatingUnit}
+              isDeletingUnit={isDeletingUnit}
+              onCreateUnit={onCreateUnit}
+              onUpdateUnit={onUpdateUnit}
+              onDeleteUnit={onDeleteUnit}
+              onClose={() => setQuickUnitOpen(false)}
+              onCreated={() => {
+                setQuickUnit({ unit_code: "", unit_name: "", unit_type: "piece", allow_decimal: false, status: "active" });
+                setQuickUnitOpen(false);
+              }}
+            />
+          </div>
+        )}
+
         {!isEdit && (
         <Section theme={theme} icon={<FiLayers />} title="២. ខ្នាតទំនិញ & តម្លៃ">
           <div className="mb-4 flex justify-end">
             <button type="button" onClick={addUnit}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600">
+              className="quick-action-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600">
               <FiPlus />
               បន្ថែមខ្នាតទំនិញ
             </button>
@@ -680,14 +762,14 @@ export default function VariantSetupFormModal({
                     </div>
                     {unitRows.length > 1 && (
                       <button type="button" onClick={() => removeUnit(unitIndex)}
-                        className="inline-flex h-8 items-center gap-1 rounded-lg bg-red-500 px-3 text-xs font-semibold text-white hover:bg-red-600">
+                        className="quick-action-icon-3d inline-flex h-8 items-center gap-1 rounded-lg bg-red-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">
                         <FiTrash2 />
                         លុបខ្នាតទំនិញ
                       </button>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                     <SearchableDropdown label="ខ្នាតទំនិញ" required theme={theme} icon={<FiLayers />}
                       value={unit.unit_id}
                       onChange={(v) => updateUnit(unitIndex, "unit_id", v)}
@@ -703,6 +785,11 @@ export default function VariantSetupFormModal({
                       onChange={(v) => updateUnit(unitIndex, "conversion_qty", v)}
                       placeholder="1"
                       hint="ឧ. កេសមួយមាន 24 កំប៉ុង/ដប" />
+                    <FormInput label="បាកូដ (Barcode)" theme={theme} icon={<FiHash />}
+                      value={unit.barcode}
+                      onChange={(v) => updateUnit(unitIndex, "barcode", v)}
+                      placeholder="ស្កេន ឬវាយបញ្ចូលបាកូដ"
+                      hint="ស្រេចចិត្ត — ខ្នាតនីមួយៗអាចមាន barcode ខុសគ្នា" />
                   </div>
 
                   <p className={`mb-2 mt-3 flex items-center gap-1.5 text-xs font-semibold ${theme.muted}`}>
@@ -728,7 +815,7 @@ export default function VariantSetupFormModal({
                     <div className="mb-3 flex items-center justify-between">
                       <p className="text-xs font-bold">តម្លៃសម្រាប់ {unitLabel(unit, unitIndex)}</p>
                       <button type="button" onClick={() => addPriceForUnit(unit.local_key)}
-                        className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-500 px-3 text-xs font-semibold text-white hover:bg-emerald-600">
+                        className="quick-action-icon-3d inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600">
                         <FiPlus />
                         បន្ថែមតម្លៃ
                       </button>
@@ -786,7 +873,7 @@ export default function VariantSetupFormModal({
                                 : "គ្មានអត្រាប្ដូររូបិយប័ណ្ណ"}
                             </p>
                             <button type="button" onClick={() => removePriceRule(idx)}
-                              className="inline-flex h-7 items-center gap-1 rounded-lg bg-red-500 px-2.5 text-[11px] font-semibold text-white hover:bg-red-600">
+                              className="quick-action-icon-3d inline-flex h-7 items-center gap-1 rounded-lg bg-red-500 px-2.5 text-[11px] font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">
                               <FiTrash2 />
                               លុបតម្លៃ
                             </button>
@@ -874,7 +961,7 @@ function Section({ theme, icon, title, subtitle, children }) {
   return (
     <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
       <div className="mb-4 flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+        <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
           {icon}
         </div>
         <div>
@@ -959,7 +1046,7 @@ function ImageInput({ label, theme, previewFile, onChange }) {
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
       <div className="rounded-2xl border border-dashed border-zinc-300 bg-white/0 p-4 transition hover:border-red-400 hover:bg-red-500/[0.03] focus-within:border-red-500 focus-within:bg-red-500/[0.04] dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-red-500 dark:focus-within:border-red-500">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
+          <div className="summary-icon-3d flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
             {previewUrl ? <img src={previewUrl} alt="Selected variant" className="h-full w-full object-cover" /> : <FiImage className="text-3xl text-red-500" />}
           </div>
           <div className="min-w-0 flex-1">
@@ -967,12 +1054,12 @@ function ImageInput({ label, theme, previewFile, onChange }) {
               onChange={(e) => onChange(e.target.files?.[0] || null)} />
             <div className="flex flex-wrap gap-2">
               <label htmlFor={inputId}
-                className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700">
+                className="quick-action-icon-3d inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-700">
                 <FiImage className="text-lg" /> {previewUrl ? "ប្ដូររូបភាព" : "ជ្រើសរូបភាព"}
               </label>
               {previewUrl && (
                 <button type="button" onClick={handleRemoveImage}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
+                  className="table-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white">
                   <FiXCircle className="text-base" /> លុប
                 </button>
               )}

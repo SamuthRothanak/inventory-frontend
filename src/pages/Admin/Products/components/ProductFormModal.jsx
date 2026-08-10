@@ -71,6 +71,7 @@ export default function ProductFormModal({
 
   return (
     <ModalShell
+      mobileFullScreen
       title={isEdit ? "កែផលិតផល" : "បន្ថែមផលិតផល"}
       subtitle="បង្កើតទិន្នន័យផលិតផលមុនពេលបន្ថែម មុខទំនិញ, units, និងតម្លៃ។"
       theme={theme}
@@ -80,7 +81,7 @@ export default function ProductFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បោះបង់
           </button>
@@ -89,7 +90,7 @@ export default function ProductFormModal({
             type="submit"
             form="product-form"
             disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FiSave />
             {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកផលិតផល"}
@@ -100,7 +101,7 @@ export default function ProductFormModal({
       <form id="product-form" onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.section}`}>
           <div className="mb-4 flex items-start gap-3">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+            <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
               <FiBox />
             </div>
 
@@ -298,7 +299,7 @@ function FormImageInput({ label, file, preview, onChange, onRemove, theme, error
         }`}
       >
         <div className="flex flex-col gap-4 md:flex-row md:items-center">
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
+          <div className="summary-icon-3d flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
             {preview ? (
               <img src={preview} alt="Product preview" className="h-full w-full object-cover" />
             ) : (
@@ -309,7 +310,7 @@ function FormImageInput({ label, file, preview, onChange, onRemove, theme, error
           <div className="min-w-0 flex-1">
             <label
               htmlFor={inputId}
-              className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+              className="quick-action-icon-3d inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-700"
             >
               <FiUploadCloud className="text-lg" />
               ជ្រើសរើសរូបភាព
@@ -338,7 +339,7 @@ function FormImageInput({ label, file, preview, onChange, onRemove, theme, error
             <button
               type="button"
               onClick={onRemove}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+              className="table-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <FiX />
               លុបចេញ

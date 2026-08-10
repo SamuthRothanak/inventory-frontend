@@ -32,7 +32,6 @@
   } from "react-icons/fi";
   import {
     confirmPurchaseStockInApi,
-    getPurchaseByIdApi,
     getPurchaseReturnsApi,
     getPurchasesApi,
     updatePurchaseReturnApi,
@@ -45,6 +44,7 @@
     getStockAdjustmentsApi,
     getStockBalancesApi,
     getStockMovementsApi,
+    updateInventoryBatchApi,
     updateStockAdjustmentApi,
   } from "../../../services/inventory.service";
   import { useNotification } from "../../../components/AppNotification";
@@ -85,6 +85,7 @@
     exportInventoryExcel,
     exportInventoryPdf,
   } from "./utils/inventoryExport";
+  import { getNearestExpiryInfo } from "./utils/inventoryExpiry";
 
   const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const parseMovementDate = (value) => {
@@ -114,6 +115,34 @@
     }
     if (period === "year") return target.getFullYear() === today.getFullYear();
     return true;
+  };
+
+  const shouldIncludePurchaseDeliveryInStockCost = (purchase = {}) =>
+    ["buyer", "shop", "business", "company"].includes(String(purchase.deliveryPaidBy || "").toLowerCase());
+
+  const getLandedUnitCostBase = (purchase = {}, item = {}) => {
+    const conversionQty = Number(item.conversionQty || 1);
+    const acceptedQty = Number(item.acceptedQty || 0);
+    const unitCostUsd = Number(item.unitCostUsd || item.unitCost || 0);
+    const stockableLineUsd = acceptedQty * unitCostUsd;
+    const fallback =
+      Number(item.unitCostBase || 0) ||
+      (conversionQty > 0 ? unitCostUsd / conversionQty : unitCostUsd);
+
+    if (conversionQty <= 0 || acceptedQty <= 0 || stockableLineUsd <= 0) return fallback;
+
+    const eligibleSubtotalUsd = (purchase.items || [])
+      .filter((purchaseItem) => Number(purchaseItem.acceptedQty || 0) > 0 && Number(purchaseItem.unitCostUsd || purchaseItem.unitCost || 0) > 0)
+      .reduce((sum, purchaseItem) => sum + (Number(purchaseItem.acceptedQty || 0) * Number(purchaseItem.unitCostUsd || purchaseItem.unitCost || 0)), 0);
+
+    if (eligibleSubtotalUsd <= 0) return fallback;
+
+    const deliveryUsd = shouldIncludePurchaseDeliveryInStockCost(purchase) ? Number(purchase.deliveryFeeUsd || 0) : 0;
+    const discountUsd = Number(purchase.discountTotalUsd || 0);
+    const adjustmentShareUsd = (stockableLineUsd / eligibleSubtotalUsd) * (deliveryUsd - discountUsd);
+    const landedLineUsd = Math.max(0, stockableLineUsd + adjustmentShareUsd);
+
+    return landedLineUsd / acceptedQty / conversionQty;
   };
 
   export default function Inventory() {
@@ -216,6 +245,12 @@
           getPurchasesApi({ status: "pending_claim", per_page: 100 }),
           getPurchaseReturnsApi(purchaseReturnParams),
         ]);
+        // The pending_stock_in/pending_claim list responses above already eager-load everything
+        // this screen needs (supplier, items.productVariantUnit.unit, items.productVariantUnit.
+        // productVariant — see PurchaseRepository::paginate) — identical to the single-purchase
+        // detail endpoint except for used_credits, which this stock-in flow never reads. This used
+        // to re-fetch getPurchaseByIdApi() once per purchase here (an N+1 round trip on every
+        // Inventory page load), purely to get that unused field.
         const purchases = responses
           .slice(0, 2)
           .flatMap((response) => extractApiData(response))
@@ -225,32 +260,27 @@
               list.findIndex((item) => String(item.id) === String(purchase.id)) === index
           );
 
-        const detailed = await Promise.all(
-          purchases.map(async (purchase) => {
-            try {
-              const detailResponse = await getPurchaseByIdApi(purchase.id);
-              return normalizePurchase(extractApiObject(detailResponse));
-            } catch {
-              return purchase;
-            }
-          })
-        );
-
+        // No resolution_type gate here: replacement_received_qty/replacement_stocked_in_qty on the
+        // return are already scoped to replacement-type items only by the backend rollup
+        // (recomputeReturnRollup), so they're both 0 for a return with no replacement items
+        // regardless of its rollup type. Checking item.resolution_type === "replacement" here used
+        // to read "mixed" for a claim that also has a refund/credit_note item, silently dropping
+        // its still-pending replacement stock-in from this list entirely.
         const replacementReturns = extractApiData(responses[2])
           .filter((item) => {
-            const resolutionType = String(item.resolution_type || item.resolutionType || "").toLowerCase();
             const receivedQty = Number(item.replacement_received_qty ?? item.replacementReceivedQty ?? 0);
             const stockedQty = Number(item.replacement_stocked_in_qty ?? item.replacementStockedInQty ?? 0);
-            return resolutionType === "replacement" && receivedQty > stockedQty;
+            return receivedQty > stockedQty;
           });
 
-        return [...detailed, ...replacementReturns.map(normalizePendingReplacementReturnForStockIn)];
+        return [...purchases, ...replacementReturns.map(normalizePendingReplacementReturnForStockIn)];
       },
       staleTime: 0,
       refetchOnMount: true,
     });
 
     const theme = {
+      isDark,
       pageTitle: isDark ? "text-white" : "text-zinc-900",
 
       card: isDark
@@ -366,11 +396,13 @@
     });
 
     const normalizeStockMovement = (item = {}) => {
+      const purchase = item.purchase || {};
       const purchaseReturn = item.purchase_return || item.purchaseReturn || {};
       const sourcePurchase = purchaseReturn.purchase || purchaseReturn.source_purchase || purchaseReturn.sourcePurchase || {};
       const refType = item.reference_type || item.ref_type || item.refType || item.source_type || item.sourceType || "-";
       const refId = item.reference_id || item.ref_id || item.refId || item.source_id || item.sourceId || "";
       const purchaseReturnNo = purchaseReturn.purchase_return_no || purchaseReturn.purchaseReturnNo || "";
+      const purchaseNo = purchase.purchase_no || purchase.purchaseNo || "";
       const sourcePurchaseNo = sourcePurchase.purchase_no || sourcePurchase.purchaseNo || "";
 
       return {
@@ -380,7 +412,9 @@
         refType,
         refId,
         referenceLabel:
-          refType === "purchase_return" && purchaseReturnNo
+          refType === "purchase" && purchaseNo
+            ? purchaseNo
+            : refType === "purchase_return" && purchaseReturnNo
             ? `Claim ${purchaseReturnNo}`
             : `${String(refType || "-").replaceAll("_", " ")}${refId ? ` #${refId}` : ""}`,
         sourcePurchaseNo,
@@ -571,6 +605,7 @@
         stockBaseQty,
         lowStockThreshold,
         unitCostBase: Number(item.unit_cost_base ?? item.unitCostBase ?? item.average_cost_usd ?? item.averageCostUsd ?? item.unit_cost_usd ?? 0),
+        stockValueUsd: Number(item.stock_value_usd ?? item.stockValueUsd ?? 0),
         status: getStockStatus(stockBaseQty, lowStockThreshold),
         units,
         batches: batches.filter(
@@ -599,9 +634,7 @@
         .map((item) => {
           const qty = Number(item.acceptedQty || 0) - Number(item.stockedInQty || 0);
           const conversionQty = Number(item.conversionQty || 1);
-          const unitCostBase =
-            Number(item.unitCostBase || 0) ||
-            (conversionQty > 0 ? Number(item.unitCostUsd || item.unitCost || 0) / conversionQty : Number(item.unitCostUsd || item.unitCost || 0));
+          const unitCostBase = getLandedUnitCostBase(purchase, item);
 
           return {
             purchaseItemId: item.id,
@@ -625,11 +658,21 @@
 
     const normalizePendingReplacementReturnForStockIn = (purchaseReturn = {}) => {
       const sourcePurchase = purchaseReturn.purchase || purchaseReturn.source_purchase || {};
-      const returnItems = Array.isArray(purchaseReturn.items)
-        ? purchaseReturn.items
-        : Array.isArray(purchaseReturn.purchase_return_items)
-          ? purchaseReturn.purchase_return_items
-          : [];
+      // Only this return's REPLACEMENT-type items — a claim can now mix resolution types, so a
+      // refund/credit_note line in the same return must never be built into a stock-in line here
+      // (its replacement_received_qty is legitimately 0, and the `qtyAvailable || remainingQty`
+      // fallback below would otherwise treat that real zero as "no data" and wrongly assign it
+      // the return's whole remaining replacement qty).
+      const returnItems = (
+        Array.isArray(purchaseReturn.items)
+          ? purchaseReturn.items
+          : Array.isArray(purchaseReturn.purchase_return_items)
+            ? purchaseReturn.purchase_return_items
+            : []
+      ).filter((item) => {
+        const type = String(item.resolution_type || item.resolutionType || "").toLowerCase();
+        return type === "replacement" || type === "";
+      });
       const sourceItems = Array.isArray(sourcePurchase.items)
         ? sourcePurchase.items
         : Array.isArray(sourcePurchase.purchase_items)
@@ -649,7 +692,13 @@
                 Number(item.claim_qty ?? item.claimQty ?? 0) *
                 (Number(item.conversion_qty ?? item.conversionQty ?? item.product_variant_unit?.conversion_qty ?? item.productVariantUnit?.conversionQty ?? 1) || 1),
             }));
-      const receivedQty = Number(purchaseReturn.replacement_received_qty ?? purchaseReturn.replacementReceivedQty ?? 0);
+      const returnStatus = String(
+        purchaseReturn.status ?? purchaseReturn.resolution_status ?? purchaseReturn.resolutionStatus ?? ""
+      ).trim().toLowerCase();
+      const replacementQty = Number(purchaseReturn.replacement_qty ?? purchaseReturn.replacementQty ?? 0);
+      const receivedQty =
+        Number(purchaseReturn.replacement_received_qty ?? purchaseReturn.replacementReceivedQty ?? 0) ||
+        (["resolved", "completed"].includes(returnStatus) ? replacementQty : 0);
       const stockedQty = Number(purchaseReturn.replacement_stocked_in_qty ?? purchaseReturn.replacementStockedInQty ?? 0);
       let remainingQty = Math.max(0, receivedQty - stockedQty);
 
@@ -673,12 +722,21 @@
             purchaseItem.productVariant ||
             {};
           const unit = variantUnit.unit || {};
-          const qtyAvailable = Math.max(
-            0,
-            Number(returnItem.replacement_received_qty ?? returnItem.replacementReceivedQty ?? returnItem.qty_returned ?? returnItem.qtyReturned ?? returnItem.qty ?? 0) -
-              Number(returnItem.replacement_stocked_in_qty ?? returnItem.replacementStockedInQty ?? 0)
-          );
-          const qty = Math.min(remainingQty, qtyAvailable || remainingQty);
+          // Distinguish "this item's own receipt data is legitimately 0 remaining" (another
+          // replacement item in the same mixed/multi-item claim already fully stocked in) from
+          // "this item has no per-item receipt data at all" (legacy pre-migration data) — the old
+          // `qtyAvailable || remainingQty` fallback treated a real 0 as "no data" and would wrongly
+          // hand it the whole pool's remaining qty, double-counting against whatever another item
+          // in the same return still legitimately needs.
+          const hasOwnReceiptData = returnItem.replacement_received_qty != null || returnItem.replacementReceivedQty != null;
+          const qtyAvailable = hasOwnReceiptData
+            ? Math.max(
+                0,
+                Number(returnItem.replacement_received_qty ?? returnItem.replacementReceivedQty ?? 0) -
+                  Number(returnItem.replacement_stocked_in_qty ?? returnItem.replacementStockedInQty ?? 0)
+              )
+            : remainingQty;
+          const qty = Math.min(remainingQty, qtyAvailable);
           remainingQty = Math.max(0, remainingQty - qty);
           const conversionQty =
             Number(
@@ -707,7 +765,9 @@
             qty,
             unitName: returnItem.unit_name || returnItem.unitName || unit.unit_name || purchaseItem.unit_name || "unit",
             conversionQty,
-            baseUnit: returnItem.base_unit || returnItem.baseUnit || purchaseItem.base_unit || unit.unit_code || unit.unit_name || "base units",
+            // Prefer unit_name over unit_code — unit_code is an internal identifier that can be
+            // a meaningless auto-generated placeholder (e.g. "UNIT12345") for Khmer unit names.
+            baseUnit: returnItem.base_unit || returnItem.baseUnit || purchaseItem.base_unit || unit.unit_name || unit.unit_code || "base units",
             baseQty: qty * conversionQty,
             unitCostBase,
             expiredDate: formatDateOnly(returnItem.expired_date || returnItem.expiry_date || purchaseItem.expired_date || purchaseItem.expiryDate),
@@ -866,8 +926,14 @@
           item.variantCode.toLowerCase().includes(search) ||
           item.category.toLowerCase().includes(search);
 
+        const hasExpiryWarning = Boolean(getNearestExpiryInfo(item.batches)?.info?.shouldWarn);
+
         const matchesStatus =
-          statusFilter === "All" || item.status === statusFilter;
+          statusFilter === "All" ||
+          (statusFilter === "Needs Action" &&
+            (item.status === "Low Stock" || item.status === "Out of Stock")) ||
+          (statusFilter === "Expiring Stock" && hasExpiryWarning) ||
+          item.status === statusFilter;
 
         return matchesSearch && matchesStatus;
       });
@@ -984,16 +1050,17 @@
 
     const handleInventoryExport = (type) => {
       setExportMenuOpen(false);
+      const exportFilters = { search: searchTerm.trim(), status: statusFilter };
       if (type === "pdf") {
-        const opened = exportInventoryPdf(filteredInventory);
+        const opened = exportInventoryPdf(filteredInventory, exportFilters);
         if (!opened) window.alert("Browser បាន block popup។ សូមអនុញ្ញាត popup រួច Export ម្តងទៀត។");
         return;
       }
       if (type === "excel") {
-        exportInventoryExcel(filteredInventory);
+        exportInventoryExcel(filteredInventory, exportFilters);
         return;
       }
-      exportInventoryCsv(filteredInventory);
+      exportInventoryCsv(filteredInventory, exportFilters);
     };
 
     const inventoryPageNumbers = useMemo(
@@ -1069,7 +1136,9 @@
 
     const stockValue = inventory.reduce(
       (total, item) =>
-        total + Number(item.stockBaseQty || 0) * Number(item.unitCostBase || 0),
+        total +
+        (Number(item.stockValueUsd || 0) ||
+          Number(item.stockBaseQty || 0) * Number(item.unitCostBase || 0)),
       0
     );
 
@@ -1225,6 +1294,7 @@
         unitName: item?.baseUnit || "",
         inventoryBatchId: "",
         note: "",
+        correctedUnitCost: "",
       });
 
       setModalMode(isIn ? "adjustment_in" : "adjustment_out");
@@ -1264,10 +1334,22 @@
 
         return confirmPurchaseStockInApi(purchase.id, payload);
       },
-      onSuccess: () => {
+      onSuccess: (_data, { purchase }) => {
         invalidateInventoryQueries();
+        // Optimistically drop the just-confirmed purchase right away instead of waiting for the
+        // invalidation above to refetch over the network — that round trip used to take a couple
+        // seconds, during which the row stayed visible with its "រង់ចាំស្តុកចូល" badge even though
+        // the success toast had already fired. This is only ever a temporary bridge: the
+        // pendingPurchasesQuery.isSuccess effect below still overwrites pendingPurchases with the
+        // server's own list once that refetch completes, so this can't leave stale/wrong state.
+        setPendingPurchases((previous) =>
+          previous.filter((item) => String(item.id) !== String(purchase.id))
+        );
         notify.success("ស្តុកចូលបានបញ្ជាក់", "ចំនួនការទិញដែលទទួលបានត្រូវបានបន្ថែមទៅស្តុករួចហើយ");
-        closeModal();
+        // Don't closeModal() here — this list can hold several pending purchases at once, and
+        // closing the whole modal after confirming just one forces the user to reopen it to
+        // handle the rest. Keep modalMode as "confirm_stock_in"; the pending-purchases query
+        // invalidation above will refetch and drop this purchase from the list on its own.
         if (stockInPurchaseId) {
           setSearchParams({}, { replace: true });
         }
@@ -1300,6 +1382,22 @@
       onError: (error) => {
         const message = error?.response?.data?.message || error?.message || "ការអាប់ដេតការកែតម្រូវបរាជ័យ";
         notify.error("ការអាប់ដេតការកែតម្រូវបរាជ័យ", message);
+      },
+    });
+
+    // Follow-up step chained after createStockAdjustmentMutation succeeds, only when the user
+    // filled in "កែថ្លៃដើមឯកតារបស់បាច់នេះ" — the qty adjustment above already landed by the time
+    // this fires, so a failure here is reported distinctly rather than silently lost, since the
+    // user would otherwise assume both the qty AND the cost were fixed together.
+    const updateInventoryBatchMutation = useMutation({
+      mutationFn: updateInventoryBatchApi,
+      onSuccess: () => {
+        invalidateInventoryQueries();
+        notify.success("ថ្លៃដើមបាច់បានកែ", "ថ្លៃដើមឯកតារបស់បាច់ត្រូវបានកែតម្រូវរួចហើយ");
+      },
+      onError: (error) => {
+        const message = error?.response?.data?.message || error?.message || "កែថ្លៃដើមបាច់បរាជ័យ";
+        notify.error("កែថ្លៃដើមបាច់បរាជ័យ", `ចំនួនស្តុកបានកែជោគជ័យ ប៉ុន្តែថ្លៃដើមបាច់មិនទាន់កែបានទេ៖ ${message}`);
       },
     });
 
@@ -1383,6 +1481,67 @@
       closeModal();
     };
 
+    // Shared by validateAdjustment() (on submit) and the live-preview effect below (as the
+    // user types) — one rule, not two copies that could silently drift apart.
+    const getAdjustmentQtyError = (item, form) => {
+      if (!item || form.adjustmentType !== "decrease") return "";
+
+      const selectedUnit =
+        item.units.find((unit) => unit.unitName === form.unitName) ||
+        item.units.find((unit) => unit.isBaseUnit) ||
+        item.units[0];
+
+      const baseQty =
+        Number(form.qty || 0) * Number(selectedUnit?.conversionQty || 1);
+
+      if (baseQty > Number(item.stockBaseQty || 0)) {
+        return `មិនអាចដកចេញច្រើនជាង ${Number(
+          item.stockBaseQty || 0
+        ).toLocaleString()} ${item.baseUnit} ទេ`;
+      }
+
+      if (form.inventoryBatchId) {
+        const selectedBatch = item.batches.find(
+          (batch) => String(batch.id) === String(form.inventoryBatchId)
+        );
+
+        if (selectedBatch && baseQty > Number(selectedBatch.qtyRemainingBase || 0)) {
+          return `Batch ដែលជ្រើសមានតែ ${Number(
+            selectedBatch.qtyRemainingBase || 0
+          ).toLocaleString()} ${item.baseUnit} ប៉ុណ្ណោះ`;
+        }
+      }
+
+      return "";
+    };
+
+    // Live feedback while the stock-out modal is open — re-checks the qty-vs-available rule on
+    // every keystroke (qty/unit/batch change) instead of only at submit time, so a user typing a
+    // quantity that exceeds the selected batch (or the item's total stock) sees the warning
+    // immediately rather than after clicking "រក្សាទុក".
+    useEffect(() => {
+      if (modalMode !== "adjustment_in" && modalMode !== "adjustment_out") return;
+
+      const item = inventory.find(
+        (inventoryItem) => String(inventoryItem.id) === String(adjustmentForm.inventoryId)
+      );
+
+      const qtyError = getAdjustmentQtyError(item, adjustmentForm);
+
+      setErrors((previous) =>
+        (previous.qty || "") === qtyError ? previous : { ...previous, qty: qtyError }
+      );
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+      modalMode,
+      inventory,
+      adjustmentForm.inventoryId,
+      adjustmentForm.unitName,
+      adjustmentForm.qty,
+      adjustmentForm.inventoryBatchId,
+      adjustmentForm.adjustmentType,
+    ]);
+
     const validateAdjustment = () => {
       const nextErrors = {};
       const parsedForm = stockAdjustmentFormSchema.safeParse(adjustmentForm);
@@ -1405,33 +1564,9 @@
         nextErrors.inventoryId = "សូមជ្រើសទំនិញស្តុក";
       }
 
-      if (item && adjustmentForm.adjustmentType === "decrease") {
-        const selectedUnit =
-          item.units.find((unit) => unit.unitName === adjustmentForm.unitName) ||
-          item.units.find((unit) => unit.isBaseUnit) ||
-          item.units[0];
-
-        const baseQty =
-          Number(adjustmentForm.qty || 0) *
-          Number(selectedUnit?.conversionQty || 1);
-
-        if (baseQty > Number(item.stockBaseQty || 0)) {
-          nextErrors.qty = `មិនអាចដកចេញច្រើនជាង ${Number(
-            item.stockBaseQty || 0
-          ).toLocaleString()} ${item.baseUnit} ទេ`;
-        }
-
-        if (adjustmentForm.inventoryBatchId) {
-          const selectedBatch = item.batches.find(
-            (batch) => String(batch.id) === String(adjustmentForm.inventoryBatchId)
-          );
-
-          if (selectedBatch && baseQty > Number(selectedBatch.qtyRemainingBase || 0)) {
-            nextErrors.qty = `Batch ដែលជ្រើសមានតែ ${Number(
-              selectedBatch.qtyRemainingBase || 0
-            ).toLocaleString()} ${item.baseUnit} ប៉ុណ្ណោះ`;
-          }
-        }
+      const qtyError = getAdjustmentQtyError(item, adjustmentForm);
+      if (qtyError) {
+        nextErrors.qty = qtyError;
       }
 
       setErrors(nextErrors);
@@ -1456,14 +1591,7 @@
         Number(adjustmentForm.qty || 0) *
         Number(selectedUnit.conversionQty || 1);
 
-      const isStockIn = adjustmentForm.adjustmentType === "increase";
-      const signedQtyBase = isStockIn ? baseQty : -baseQty;
-
-      const nextQty = Number(item.stockBaseQty || 0) + signedQtyBase;
-      const nextStatus = getStockStatus(nextQty, item.lowStockThreshold);
-      const nowDate = getToday();
       const now = getNow();
-      const adjustmentId = Date.now();
       const movementType = getMovementTypeFromAdjustment(
         adjustmentForm.adjustmentType,
         adjustmentForm.reason
@@ -1475,8 +1603,22 @@
         (batch) => String(batch.id) === String(adjustmentForm.inventoryBatchId)
       );
 
-      if (stockBalancesQuery.isSuccess && item.productVariantId) {
-        createStockAdjustmentMutation.mutate({
+      // Optional same-action price fix — only meaningful when correcting a specific batch that
+      // was itself entered at the wrong cost (e.g. a purchase price typo). Independent of the
+      // qty adjustment above; overwrites the WHOLE batch's cost (old + newly-added qty alike),
+      // not just the qty being added here. The modal collects this in whichever unit ("ខ្នាតទំនិញ")
+      // the user is currently working in (e.g. per កេស), but inventory_batches.unit_cost_base is
+      // always stored per BASE unit — convert back before sending, same conversionQty used for qty.
+      const correctedUnitCostInSelectedUnit = Number(adjustmentForm.correctedUnitCost || 0);
+      const correctedUnitCostBase =
+        correctedUnitCostInSelectedUnit / Number(selectedUnit.conversionQty || 1);
+      const hasCostCorrection =
+        adjustmentForm.adjustmentType === "increase" &&
+        selectedBatch &&
+        correctedUnitCostInSelectedUnit > 0;
+
+      createStockAdjustmentMutation.mutate(
+        {
           adjustment_type: adjustmentForm.adjustmentType,
           reason: adjustmentForm.reason,
           note: adjustmentForm.note || "Manual stock adjustment",
@@ -1496,81 +1638,21 @@
               created_at: now,
             },
           ],
-        });
-        return;
-      }
-
-      const adjustment = {
-        id: adjustmentId,
-        adjustmentNo: `ADJ-${String(stockAdjustments.length + 1).padStart(3, "0")}`,
-        adjustmentType: adjustmentForm.adjustmentType,
-        reason: adjustmentForm.reason,
-        note: adjustmentForm.note || "Manual stock adjustment",
-        createdBy: 1,
-        createdAt: now,
-        status: "approved",
-        items: [
-          {
-            id: adjustmentId + 1,
-            stockAdjustmentId: adjustmentId,
-            productVariantId: item.productVariantId,
-            productVariantUnitId: selectedUnit.id || null,
-            inventoryBatchId: selectedBatch?.id || null,
-            qty: Number(adjustmentForm.qty || 0),
-            baseQty,
-            movementType,
-            unitCostBase,
-            lineCost,
-            note: adjustmentForm.note || "Manual stock adjustment",
-            createdAt: now,
-          },
-        ],
-      };
-
-      setStockAdjustments((previous) => [adjustment, ...previous]);
-
-      setInventory((previous) =>
-        previous.map((inventoryItem) => {
-          if (inventoryItem.id !== item.id) return inventoryItem;
-
-          const updatedBatches = inventoryItem.batches.map((batch) => {
-            if (String(batch.id) !== String(adjustmentForm.inventoryBatchId)) {
-              return batch;
-            }
-
-            const nextBatchQty = Math.max(
-              0,
-              Number(batch.qtyRemainingBase || 0) + signedQtyBase
-            );
-
-            return {
-              ...batch,
-              qtyRemainingBase: nextBatchQty,
-              status: nextBatchQty <= 0 ? "depleted" : batch.status,
-            };
-          });
-
-          return {
-            ...inventoryItem,
-            stockBaseQty: nextQty,
-            status: nextStatus,
-            batches: updatedBatches,
-            movements: [
-              {
-                type: movementType,
-                qtyBase: signedQtyBase,
-                refType: "adjustment",
-                refId: adjustmentId,
-                note: adjustmentForm.note || "Manual stock adjustment",
-                createdAt: nowDate,
+        },
+        hasCostCorrection
+          ? {
+              onSuccess: () => {
+                updateInventoryBatchMutation.mutate({
+                  id: selectedBatch.id,
+                  payload: {
+                    unit_cost_base: correctedUnitCostBase,
+                    unit_cost_base_usd: correctedUnitCostBase,
+                  },
+                });
               },
-              ...inventoryItem.movements,
-            ],
-          };
-        })
+            }
+          : undefined
       );
-
-      closeModal();
     };
 
     const handleCancelAdjustment = async (adjustment) => {
@@ -1584,7 +1666,7 @@
     };
 
     return (
-      <section className="space-y-6">
+      <section className="space-y-4 sm:space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
            
@@ -1592,7 +1674,7 @@
 
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
           <SummaryCard
             theme={theme}
             title="ទំនិញក្នុងស្តុក"
@@ -1658,68 +1740,8 @@
 
         {activeTab === "stock" && (
           <>
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_230px_180px_220px]">
-            <div className="relative">
-              <FiSearch
-                className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
-              />
-
-              <input
-                id="inventory-search"
-                type="text"
-                placeholder="ស្វែងរកស្តុក ទំនិញ បំពង លេខកូដ..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
-              />
-            </div>
-
-            <div className="relative">
-              <InventoryDropdown
-                value={statusFilter}
-                onChange={setStatusFilter}
-                theme={theme}
-                icon={<FiFilter />}
-                options={[
-                  { value: "All", label: "ស្ថានភាពទាំងអស់" },
-                  { value: "In Stock", label: "មានស្តុក" },
-                  { value: "Low Stock", label: "ស្តុកស្ទើរអស់" },
-                  { value: "Out of Stock", label: "អស់ស្តុក" },
-                ]}
-                heightClass="h-12"
-                roundedClass="rounded-2xl"
-              />
-            </div>
-
-            <div className="relative">
-              <InventoryDropdown
-                value={perPage}
-                onChange={(value) => setPerPage(Number(value))}
-                theme={theme}
-                icon={<FiHash />}
-                options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / ទំព័រ` }))}
-                heightClass="h-12"
-                roundedClass="rounded-2xl"
-                fontClass="font-semibold"
-              />
-            </div>
-
-            <PermissionGate permission="stock.receive">
-              <button
-                type="button"
-                onClick={openConfirmStockInModal}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-              >
-                <FiCheckCircle className="text-lg" />
-                បញ្ជាក់ស្តុកចូល
-              </button>
-            </PermissionGate>
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <PermissionGate permission="stock.receive">
+          <PermissionGate permission="purchases.stock-in">
             <ActionCard
               theme={theme}
               icon={<FiTruck className="text-4xl text-emerald-500" />}
@@ -1735,9 +1757,9 @@
             <ActionCard
               theme={theme}
               icon={<FiEdit2 className="text-4xl text-blue-500" />}
-              title="ការកែតម្រូវស្តុក"
-              subtitle="សម្រាប់អ្នកគ្រប់គ្រងប៉ុណ្ណោះ"
-              buttonText="ការកែតម្រូវស្តុក"
+              title="បន្ថែមស្តុក"
+              subtitle="ករណីទិញច្រឡំ និងរាប់ស្តុកពិតឃើញលើសពីប្រព័ន្ធ"
+              buttonText="បន្ថែមស្តុក"
               buttonClass="bg-blue-600 hover:bg-blue-700"
               onClick={() => openAdjustmentModal("adjustment_in")}
             />
@@ -1768,11 +1790,12 @@
           </PermissionGate>
         </div>
 
-        <div
-          className={`flex flex-col gap-4 rounded-2xl border p-5 shadow-sm md:flex-row md:items-center md:justify-between ${theme.card}`}
-        >
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div
+            className={`flex h-full flex-col gap-4 rounded-2xl border p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between ${theme.card}`}
+          >
           <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
+            <div className="summary-icon-3d flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10">
               <FiClipboard className="text-4xl text-emerald-500" />
             </div>
 
@@ -1789,30 +1812,30 @@
             </div>
           </div>
 
-          <PermissionGate permission="stock.receive">
+          <PermissionGate permission="purchases.stock-in">
             <button
               type="button"
               disabled={pendingPurchases.length === 0}
               onClick={openConfirmStockInModal}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FiCheckCircle />
               ពិនិត្យ & បញ្ជាក់
             </button>
           </PermissionGate>
-        </div>
+          </div>
 
-        {lowStockList.length > 0 && (
-          <div
-            className={`flex flex-col gap-4 rounded-2xl border p-5 shadow-sm md:flex-row md:items-center md:justify-between ${theme.card}`}
-          >
+          {lowStockList.length > 0 && (
+            <div
+              className={`flex h-full flex-col gap-4 rounded-2xl border p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between ${theme.card}`}
+            >
             <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10">
+              <div className="summary-icon-3d flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10">
                 <FiAlertTriangle className="text-4xl text-amber-500" />
               </div>
 
               <div>
-                <h3 className="text-base font-bold">ជូនដំណឹងស្តុកស្ទើរអស់</h3>
+                <h3 className="text-base font-bold">ជូនដំណឹងស្តុកត្រូវការ</h3>
 
                 <p className={`mt-1 text-sm ${theme.muted}`}>
                   {lowStockList.length} មុខត្រូវការចាត់វិធានការ
@@ -1822,14 +1845,66 @@
 
             <button
               type="button"
-              onClick={() => setStatusFilter("Low Stock")}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white hover:bg-amber-600"
+              onClick={() => setStatusFilter("Needs Action")}
+              className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-amber-600"
             >
               <FiList />
-              មើលស្តុកស្ទើរអស់
+              មើលស្តុកត្រូវការ
             </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_230px_180px]">
+            <div className="relative">
+              <FiSearch
+                className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
+              />
+
+              <input
+                id="inventory-search"
+                type="text"
+                placeholder="ស្វែងរកស្តុក ទំនិញ បំពង លេខកូដ..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className={`h-12 w-full rounded-2xl border pl-11 pr-4 text-sm outline-none transition focus:ring-4 ${theme.input}`}
+              />
+            </div>
+
+            <div className="relative">
+              <InventoryDropdown
+                value={statusFilter}
+                onChange={setStatusFilter}
+                theme={theme}
+                icon={<FiFilter />}
+                options={[
+                  { value: "All", label: "ស្ថានភាពទាំងអស់" },
+                  { value: "Needs Action", label: "ត្រូវការចាត់វិធានការ" },
+                  { value: "Expiring Stock", label: "ជិតផុតកំណត់" },
+                  { value: "In Stock", label: "មានស្តុក" },
+                  { value: "Low Stock", label: "ស្តុកស្ទើរអស់" },
+                  { value: "Out of Stock", label: "អស់ស្តុក" },
+                ]}
+                heightClass="h-12"
+                roundedClass="rounded-2xl"
+              />
+            </div>
+
+            <div className="relative">
+              <InventoryDropdown
+                value={perPage}
+                onChange={(value) => setPerPage(Number(value))}
+                theme={theme}
+                icon={<FiHash />}
+                options={[10, 25, 50, 100].map((value) => ({ value, label: `${value} / ទំព័រ` }))}
+                heightClass="h-12"
+                roundedClass="rounded-2xl"
+                fontClass="font-semibold"
+              />
+            </div>
           </div>
-        )}
+        </div>
 
         <InventoryTable
           theme={theme}
@@ -2049,6 +2124,7 @@
             theme={theme}
             onClose={closeModal}
             onConfirm={handleConfirmStockIn}
+            isLoading={pendingPurchasesQuery.isLoading}
             isConfirming={confirmStockInMutation.isPending}
           />
         )}

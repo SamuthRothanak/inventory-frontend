@@ -66,15 +66,18 @@ export function normalizeStockAlert(item = {}) {
       0
   );
 
+  // unit_name before unit_code — unit_code is an internal identifier that can be a meaningless
+  // auto-generated placeholder (e.g. "UNIT28811") for a real Khmer unit name (e.g. "ដប"). Same
+  // fallback-order fix already applied in Inventory.jsx's own unit-label helpers.
   const baseUnit =
     item.base_unit ||
     item.baseUnit ||
     item.unit_name ||
     item.unitName ||
-    unit.unit_code ||
-    unit.unitCode ||
     unit.unit_name ||
     unit.unitName ||
+    unit.unit_code ||
+    unit.unitCode ||
     variant.package_type ||
     variant.packageType ||
     "unit";

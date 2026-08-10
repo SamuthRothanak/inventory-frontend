@@ -1,18 +1,19 @@
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import TableLoading from "../../../../components/TableLoading";
 
+// Matches App\Enums\StockMovementType's actual case values — keep in sync with that enum,
+// not with any other module's own vocabulary (e.g. ref_type below is a separate enum).
 const MOVEMENT_TYPE_KH = {
   purchase_in: "ទិញចូល",
   sale_out: "លក់ចេញ",
+  purchase_return_out: "ត្រឡប់ការទិញចេញ",
+  sale_return_in: "ត្រឡប់ការលក់ចូល",
+  sale_return_replacement_out: "ប្តូរជំនួសចេញ",
   damage_out: "ខូចខាតចេញ",
   adjustment_in: "ការកែតម្រូវចូល",
   adjustment_out: "ការកែតម្រូវចេញ",
-  stock_count: "រាប់ស្តុកពិតប្រាកដ",
-  correction: "ការកែតម្រូវ",
-  return_in: "ត្រឡប់ចូល",
-  return_out: "ត្រឡប់ចេញ",
-  internal_use: "ដកប្រើប្រាស់ខ្លួនឯង",
   expired_out: "ផុតកំណត់ចេញ",
+  internal_use_out: "ដកប្រើប្រាស់ខ្លួនឯងចេញ",
   lost_out: "បាត់ចេញ",
   transfer_in: "ផ្ទេរចូល",
   transfer_out: "ផ្ទេរចេញ",
@@ -49,6 +50,8 @@ export const translateNote = (note = "") => {
   if (note === "Purchase stock") return "ស្តុកទិញ";
   if (note === "POS sales") return "ការលក់ POS";
   if (note === "Sold out") return "លក់អស់";
+  if (note === "Stock out from purchase return.") return "ស្តុកចេញពីការត្រឡប់ការទិញ។";
+
   const m1 = note.match(/^Stock in confirmed from (.+)$/);
   if (m1) return `ស្តុកចូលបានបញ្ជាក់ពី ${m1[1]}`;
   const m2 = note.match(/^Stock out from sale (.+)$/i);
@@ -57,13 +60,42 @@ export const translateNote = (note = "") => {
   if (m3) return `ស្តុកចេញពី ${m3[1]}`;
   const m4 = note.match(/^Stock in from (.+)$/i);
   if (m4) return `ស្តុកចូលពី ${m4[1]}`;
+  const m5 = note.match(/^Stock returned from (.+)$/i);
+  if (m5) return `ស្តុកបានត្រឡប់ពី ${m5[1]}`;
+  const m6 = note.match(/^Replacement stock issued for (.+)$/i);
+  if (m6) return `ស្តុកជំនួសបានចេញសម្រាប់ ${m6[1]}`;
+  const m7 = note.match(/^Replacement stock in from purchase return claim (.+)$/i);
+  if (m7) return `ស្តុកជំនួសបានចូលពីការទាមទារត្រឡប់ការទិញ ${m7[1]}`;
   if (note === "accepted purchase quantity.") return "ទទួលចំនួនស្តុកទិញ";
   return note;
 };
 
+// Matches App\Enums\StockMovementRefType's case values, as rendered by Inventory.jsx's
+// normalizeStockMovement() — either "Claim {purchase_return_no}" (purchase_return with a known
+// claim number) or "{ref_type with underscores as spaces} #{id}" (every other ref_type, or
+// purchase/purchase_return without their own number resolved).
+const REF_TYPE_KH = {
+  purchase: "ការទិញ",
+  sale: "ការលក់",
+  "purchase return": "ត្រឡប់ការទិញ",
+  "sale return": "ត្រឡប់ការលក់",
+  adjustment: "ការកែតម្រូវស្តុក",
+  transfer: "ការផ្ទេរ",
+  damage: "ខូចខាត",
+};
+
 const translateReferenceLabel = (label = "") => {
-  const m = label.match(/^purchase\s+#(\d+)$/i);
-  if (m) return `ការទិញ #${m[1]}`;
+  const claimMatch = label.match(/^Claim (.+)$/);
+  if (claimMatch) return `ត្រឡប់ការទិញ ${claimMatch[1]}`;
+
+  const refMatch = label.match(/^([a-z][a-z_\s]*[a-z])(?:\s+#(\d+))?$/i);
+  if (refMatch) {
+    const key = refMatch[1].toLowerCase();
+    if (key in REF_TYPE_KH) {
+      return REF_TYPE_KH[key] + (refMatch[2] ? ` #${refMatch[2]}` : "");
+    }
+  }
+
   return label;
 };
 
@@ -179,22 +211,22 @@ export default function StockMovementTable({
         <div className="flex items-center gap-2">
           <button type="button" disabled={pagination.currentPage <= 1}
             onClick={() => onPageChange(pagination.currentPage - 1)}
-            className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+            className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
             <FiChevronLeft /> មុន
           </button>
           {pageNumbers.map((p) => (
             <button key={p} type="button" onClick={() => onPageChange(p)}
-              className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition ${
+              className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition hover:-translate-y-0.5 ${
                 p === pagination.currentPage
-                  ? "bg-red-600 text-white"
-                  : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                  ? "quick-action-icon-3d bg-red-600 text-white"
+                  : "table-icon-3d border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
               }`}>
               {p}
             </button>
           ))}
           <button type="button" disabled={pagination.currentPage >= pagination.lastPage}
             onClick={() => onPageChange(pagination.currentPage + 1)}
-            className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
+            className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10">
             បន្ទាប់ <FiChevronRight />
           </button>
         </div>

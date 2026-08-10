@@ -64,3 +64,8 @@ export const bulkDeleteSuppliersApi = async (ids = []) => {
   const response = await api.post("/suppliers/bulk-delete", { ids });
   return response.data;
 };
+
+export const getSupplierCreditBalanceApi = async (id) => {
+  const response = await api.get(`/suppliers/${id}/credit-balance`);
+  return response.data;
+};

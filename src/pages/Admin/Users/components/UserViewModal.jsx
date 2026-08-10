@@ -16,14 +16,14 @@ export default function UserViewModal({ user, theme, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:px-4 sm:py-6"
       onMouseDown={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="user-view-title"
-        className={`flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border shadow-2xl ${theme.modal}`}
+        className={`flex max-h-[88dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border shadow-2xl sm:max-h-[90dvh] sm:rounded-3xl ${theme.modal}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className={`flex items-start justify-between gap-4 border-b px-6 py-5 ${theme.modalHeader}`}>
@@ -40,7 +40,7 @@ export default function UserViewModal({ user, theme, onClose }) {
             type="button"
             onClick={onClose}
             aria-label="បិទ"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
           >
             <FiX size={20} />
           </button>
@@ -48,7 +48,7 @@ export default function UserViewModal({ user, theme, onClose }) {
 
         <div className={`min-h-0 flex-1 overflow-y-auto px-6 py-6 ${theme.modalBody}`}>
           <div className={`flex flex-col gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center ${theme.section}`}>
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+            <div className="summary-icon-3d flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
               <FiUser size={30} />
             </div>
             <div className="min-w-0 flex-1">
@@ -79,7 +79,7 @@ export default function UserViewModal({ user, theme, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="h-10 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+            className="table-icon-3d h-10 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
           >
             បិទ
           </button>
@@ -92,7 +92,7 @@ export default function UserViewModal({ user, theme, onClose }) {
 function InfoItem({ icon, label, value, theme }) {
   return (
     <div className={`flex min-w-0 items-start gap-3 rounded-xl border p-4 ${theme.softCard}`}>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+      <div className="table-icon-3d flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
         {icon}
       </div>
       <div className="min-w-0">

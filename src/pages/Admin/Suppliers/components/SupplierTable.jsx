@@ -17,7 +17,6 @@
   FiXCircle,
 } from "react-icons/fi";
 
-import TableLoading from "../../../../components/TableLoading";
 import PermissionGate from "../../../../components/PermissionGate";
 
 function StatusBadge({ status }) {
@@ -97,7 +96,7 @@ export default function SupplierTable({
                   type="button"
                   onClick={onCancelBulkSelect}
                   disabled={bulkDeleteIsPending}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-xs font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+                  className="table-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
                 >
                   <FiX />
                   បោះបង់
@@ -107,7 +106,7 @@ export default function SupplierTable({
                   type="button"
                   onClick={onBulkDelete}
                   disabled={selectedSupplierIds.length === 0 || bulkDeleteIsPending}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="quick-action-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <FiTrash2 />
                   {bulkDeleteIsPending
@@ -120,7 +119,7 @@ export default function SupplierTable({
                 type="button"
                 onClick={onOpenBulkSelect}
                 disabled={suppliers.length === 0 || isLoading || isError}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-xs font-semibold text-red-500 shadow-sm transition hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                className="table-icon-3d inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-xs font-semibold text-red-500 transition hover:-translate-y-0.5 hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <FiCheckSquare />
                 ជ្រើសរើសច្រើន
@@ -131,7 +130,7 @@ export default function SupplierTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1040px]">
+        <table className="responsive-card-table w-full min-w-[1040px]">
           <thead className="bg-red-600 text-white">
             <tr>
               {bulkSelectMode && (
@@ -170,10 +169,9 @@ export default function SupplierTable({
 
           <tbody>
             {isLoading ? (
-              <TableLoading
+              <Supplier3DLoading
                 theme={theme}
                 colSpan={tableColSpan}
-                text="រង់ចាំបន្តិច..."
               />
             ) : isError ? (
               <tr className={`border-t ${theme.row}`}>
@@ -190,7 +188,7 @@ export default function SupplierTable({
                   className={`border-t transition ${theme.row}`}
                 >
                   {bulkSelectMode && (
-                    <td className="px-5 py-4">
+                    <td data-label="ជ្រើសរើស" className="px-5 py-4">
                       <input
                         type="checkbox"
                         checked={selectedSupplierIds.some(
@@ -203,9 +201,9 @@ export default function SupplierTable({
                     </td>
                   )}
 
-                  <td className="px-5 py-4">
+                  <td data-label="អ្នកផ្គត់ផ្គង់" className="px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                      <div className="table-icon-3d flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
                         <FiTruck size={20} />
                       </div>
 
@@ -229,7 +227,7 @@ export default function SupplierTable({
                     </div>
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td data-label="ទំនាក់ទំនង" className="px-5 py-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 text-sm font-medium">
                         <FiUser className={theme.muted} />
@@ -250,7 +248,7 @@ export default function SupplierTable({
                     </div>
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td data-label="អាសយដ្ឋាន" className="px-5 py-4">
                     <div className="space-y-2">
                       <div
                         className={`flex max-w-[380px] gap-2 text-sm leading-6 ${theme.address}`}
@@ -272,17 +270,17 @@ export default function SupplierTable({
                     </div>
                   </td>
 
-                  <td className="px-5 py-4 text-center">
+                  <td data-label="ស្ថានភាព" className="px-5 py-4 text-center">
                     <StatusBadge status={item.status} />
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td data-label="សកម្មភាព" className="px-5 py-4">
                     <div className="flex items-center justify-center gap-2">
                       <Tooltip label="មើលអ្នកផ្គត់ផ្គង់">
                         <button
                           type="button"
                           onClick={() => onView(item)}
-                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-amber-400 to-orange-500 text-white shadow-md shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-amber-500 hover:to-orange-600 hover:shadow-lg hover:shadow-orange-500/25 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0"
+                          className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white shadow-md shadow-orange-500/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-orange-600 hover:shadow-lg hover:shadow-orange-500/25 focus:outline-none focus:ring-4 focus:ring-orange-500/20 active:translate-y-0"
                         >
                           <FiEye size={16} />
                         </button>
@@ -293,7 +291,7 @@ export default function SupplierTable({
                           <button
                             type="button"
                             onClick={() => onEdit(item)}
-                             className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-blue-600 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0"
+                            className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-600/25 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:translate-y-0"
                           >
                             <FiEdit2 size={16} />
                           </button>
@@ -306,7 +304,7 @@ export default function SupplierTable({
                             type="button"
                             disabled={isDeleting}
                             onClick={() => onDelete(item)}
-                             className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-700 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <FiTrash2 size={16} />
                           </button>
@@ -321,7 +319,7 @@ export default function SupplierTable({
                 <td colSpan={tableColSpan} className="px-4 py-14 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <div
-                      className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}
+                      className={`summary-icon-3d flex h-16 w-16 items-center justify-center rounded-2xl border ${theme.softCard}`}
                     >
                       <FiSearch className={`text-3xl ${theme.muted}`} />
                     </div>
@@ -354,7 +352,7 @@ export default function SupplierTable({
               type="button"
               disabled={currentPage <= 1 || isFetching}
               onClick={() => onPageChange(currentPage - 1)}
-              className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
             >
               <FiChevronLeft />
               ថយក្រោយ
@@ -374,7 +372,7 @@ export default function SupplierTable({
                   type="button"
                   disabled={isFetching}
                   onClick={() => onPageChange(item)}
-                  className={`h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  className={`table-icon-3d h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
                     item === currentPage
                       ? "bg-red-600 text-white"
                       : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
@@ -389,7 +387,7 @@ export default function SupplierTable({
               type="button"
               disabled={currentPage >= totalPages || isFetching}
               onClick={() => onPageChange(currentPage + 1)}
-              className="inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
+              className="table-icon-3d inline-flex h-9 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
             >
               បន្ទាប់
               <FiChevronRight />
@@ -398,6 +396,52 @@ export default function SupplierTable({
         </div>
       )}
     </div>
+  );
+}
+
+function Supplier3DLoading({ theme, colSpan }) {
+  return (
+    <tr className={`border-t ${theme.row}`}>
+      <td colSpan={colSpan} className="px-4 py-16 text-center">
+        <div
+          className="flex min-h-[230px] flex-col items-center justify-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="relative flex h-32 w-32 items-center justify-center"
+            style={{ perspective: "700px" }}
+          >
+            <div className="absolute bottom-1 h-5 w-20 animate-pulse rounded-[50%] bg-indigo-500/25 blur-md" />
+
+            <div className="absolute inset-2 animate-spin rounded-full border border-dashed border-indigo-400/50 [animation-duration:3s]" />
+            <div className="absolute inset-5 animate-spin rounded-full border-2 border-transparent border-l-violet-300 border-r-indigo-600 [animation-direction:reverse] [animation-duration:1.8s]" />
+
+            <div
+              className="relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-white/40 bg-gradient-to-br from-violet-300 via-indigo-500 to-blue-700 text-white"
+              style={{
+                transform: "rotateX(12deg) rotateY(-18deg) translateZ(18px)",
+                boxShadow:
+                  "14px 18px 24px rgba(55, 48, 163, 0.3), inset 4px 4px 10px rgba(255,255,255,0.38), inset -5px -7px 12px rgba(30,64,175,0.3)",
+              }}
+            >
+              <div className="absolute inset-1 rounded-[16px] border border-white/20" />
+              <FiTruck className="relative text-3xl drop-shadow-md" />
+              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-400 text-[11px] font-black text-emerald-950 shadow-lg shadow-emerald-400/40">
+                ✓
+              </span>
+            </div>
+          </div>
+
+          <p className={`mt-3 text-sm font-bold ${theme.pageTitle}`}>
+            រង់ចាំបន្តិច...
+          </p>
+          <p className={`mt-1 text-xs ${theme.muted}`}>
+            កំពុងរៀបចំបញ្ជីអ្នកផ្គត់ផ្គង់
+          </p>
+        </div>
+      </td>
+    </tr>
   );
 }
 

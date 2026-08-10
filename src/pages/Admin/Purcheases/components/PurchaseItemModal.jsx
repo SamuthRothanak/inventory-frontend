@@ -8,7 +8,6 @@ import {
   FiCreditCard,
   FiDollarSign,
   FiHash,
-  FiInfo,
   FiPackage,
   FiSave,
   FiTruck,
@@ -107,12 +106,11 @@ export function PurchaseItemModal({
     inputUnitCost,
     exchangeRate: exchangeRateUsed,
   });
-  const payableQty = paymentMode === "pay_after_check" ? acceptedQty : paidQty;
+  const payableQty = paymentMode === "pay_after_check" ? acceptedQty : invoicedQty;
   const exactInvoiceTotal = Number(form.invoiceTotal || 0);
-  const exactPaidAmount = Number(form.paidAmount || 0);
   let inputLineTotal = payableQty * inputUnitCost;
-  if (paymentMode !== "pay_after_check" && exactPaidAmount > 0) {
-    inputLineTotal = exactPaidAmount;
+  if (paymentMode === "pay_after_check" && exactInvoiceTotal > 0) {
+    inputLineTotal = exactInvoiceTotal;
   } else if (exactInvoiceTotal > 0 && invoicedQty > 0 && Math.abs(payableQty - invoicedQty) < 0.0001) {
     inputLineTotal = exactInvoiceTotal;
   }
@@ -123,7 +121,7 @@ export function PurchaseItemModal({
   const isPartialPrepaidCreate = !isReceiveMode && (paymentMode === "partial_prepaid" || paymentMode === "pay_after_check" || paymentMode === "prepaid");
   const modalTitle = mode === "add" ? "បន្ថែមទំនិញការទិញ" : isReceiveMode ? "ទទួលទំនិញការទិញ" : "កែទំនិញការទិញ";
   const modalSubtitle = isReceiveMode
-    ? "បញ្ចូលចំនួនទទួល, ខូច, ទទួលបាន, និងថ្ងៃផុតកំណត់សម្រាប់បន្ទាត់វិក្កយបត្រនេះ។"
+    ? "បញ្ចូលចំនួនមកដល់, ខូច, ទទួលយក, និងថ្ងៃផុតកំណត់សម្រាប់បន្ទាត់វិក្កយបត្រនេះ។"
     : "កំណត់តម្លៃ, ចំនួន, លទ្ធផលទទួល, និងថ្ងៃផុតកំណត់សម្រាប់បន្ទាត់វិក្កយបត្រនេះ។";
 
   return (
@@ -138,14 +136,14 @@ export function PurchaseItemModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បោះបង់
           </button>
           <button
             type="button"
-            onClick={handleSubmit(() => onSave())}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600"
+            onClick={handleSubmit((values) => onSave(values))}
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600"
           >
             <FiSave /> {isReceiveMode ? "រក្សាទំនិញទទួល" : "រក្សាទំនិញ"}
           </button>
@@ -171,7 +169,7 @@ export function PurchaseItemModal({
                 <SummaryMiniBox theme={theme} label="ចំនួនកម្មង់" value={`${invoicedQty} ${selectedUnit.unitName}`} />
                 <SummaryMiniBox theme={theme} label="បានបង់" value={`${paidQty} ${selectedUnit.unitName}`} />
                 <SummaryMiniBox theme={theme} label="តម្លៃទិញចូល" value={formatCurrencyPair(unitCostUsd, unitCostKhr)} />
-                <SummaryMiniBox theme={theme} label="សរុបបច្ចុប្បន្ន" value={formatCurrencyPair(lineTotalUsd, lineTotalKhr)} />
+                <SummaryMiniBox theme={theme} label="សរុបទំនិញនេះ" value={formatCurrencyPair(lineTotalUsd, lineTotalKhr)} />
               </div>
             </div>
           )}
@@ -241,7 +239,7 @@ export function PurchaseItemModal({
               name="invoiceTotal"
               render={({ field }) => (
                 <FormInput
-                  label="សរុបលុយវិក្កយបត្រ"
+                  label="សរុបតម្លៃទំនិញនេះ"
                   required
                   type="number"
                   value={field.value}
@@ -271,32 +269,12 @@ export function PurchaseItemModal({
                 />
               )}
             />}
-            {!isReceiveMode && paymentMode === "partial_prepaid" && (
-              <Controller
-                control={control}
-                name="paidAmount"
-                render={({ field }) => (
-                  <FormInput
-                    label="ទឹកប្រាក់បានបង់"
-                    required
-                    type="number"
-                    value={field.value}
-                    error={fieldError("paidAmount")}
-                    onChange={bindField("paidAmount", field.onChange)}
-                    theme={theme}
-                    placeholder="0.00"
-                    decimalPlaces={2}
-                    icon={form.inputCurrency === "KHR" ? <span className="text-base font-bold">៛</span> : <FiDollarSign />}
-                  />
-                )}
-              />
-            )}
             {!isPartialPrepaidCreate && <Controller
               control={control}
               name="receivedQty"
               render={({ field }) => (
                 <FormInput
-                  label="ចំនួនទទួល"
+                  label="ចំនួនមកដល់"
                   required
                   type="number"
                   value={field.value}
@@ -329,7 +307,7 @@ export function PurchaseItemModal({
               name="acceptedQty"
               render={({ field }) => (
                 <FormInput
-                  label="ចំនួនទទួលយក"
+                  label="ចំនួនទទួលយកប្រើប្រាស់"
                   required
                   type="number"
                   value={field.value}
@@ -360,29 +338,11 @@ export function PurchaseItemModal({
 
           {isPartialPrepaidCreate && (
             <div className="mt-4 rounded-xl bg-blue-500/10 p-4 text-sm text-blue-700 dark:text-blue-300">
-              ចំនួនទទួល, ខូច, ទទួលយក និងថ្ងៃផុតកំណត់ នឹងបំពេញនៅពេល "ទទួលទំនិញ"។
+              ចំនួនមកដល់, ខូច, ទទួលយក និងថ្ងៃផុតកំណត់ នឹងបំពេញនៅពេល "ទទួលទំនិញ"។
             </div>
           )}
         </FormSection>
 
-        {selectedUnit && !isReceiveMode && paymentMode === "partial_prepaid" && (() => {
-          const paid = Number(form.paidAmount || 0);
-          const total = Number(form.invoiceTotal || 0);
-          const balance = Math.max(0, total - paid);
-          return (
-            <FormSection
-              title="សង្ខេបការបង់ប្រាក់"
-              subtitle="ទឹកប្រាក់បានបង់ និងចំនួននៅខ្វះ"
-              icon={<FiInfo />}
-              theme={theme}
-            >
-              <div className="grid grid-cols-2 gap-4">
-                <SummaryMiniBox theme={theme} label="ទឹកប្រាក់បានបង់" value={`$${paid.toFixed(2)}`} />
-                <SummaryMiniBox theme={theme} label="ទឹកប្រាក់នៅខ្វះ" value={`$${balance.toFixed(2)}`} strong />
-              </div>
-            </FormSection>
-          );
-        })()}
       </div>
     </ModalShell>
   );

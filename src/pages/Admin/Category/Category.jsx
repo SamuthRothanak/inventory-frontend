@@ -471,13 +471,13 @@ export default function Category() {
     deleteCategoryMutation.isPending || bulkDeleteCategoryMutation.isPending;
 
   return (
-    <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+    <section className="space-y-4 sm:space-y-6">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
         <CategorySummaryCard
           theme={theme}
           title="ប្រភេទទាំងអស់"
           value={summary.total}
-          icon={<FiGrid className="text-[44px] text-red-500" />}
+          icon={<FiGrid className="text-[34px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
 
@@ -485,7 +485,7 @@ export default function Category() {
           theme={theme}
           title="ប្រភេទដំណើរការ"
           value={summary.active}
-          icon={<FiCheckCircle className="text-[44px] text-emerald-500" />}
+          icon={<FiCheckCircle className="text-[34px] text-emerald-500" />}
           iconBg="bg-emerald-500/10"
         />
 
@@ -493,7 +493,7 @@ export default function Category() {
           theme={theme}
           title="ប្រភេទមិនដំណើរការ"
           value={summary.inactive}
-          icon={<FiXCircle className="text-[44px] text-red-500" />}
+          icon={<FiXCircle className="text-[34px] text-red-500" />}
           iconBg="bg-red-500/10"
         />
       </div>
@@ -505,8 +505,8 @@ export default function Category() {
         </div>
       )}
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full grid-cols-1 gap-3 xl:max-w-4xl xl:grid-cols-[1fr_220px_160px]">
+      <div className="flex flex-col gap-3 sm:gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:max-w-4xl xl:grid-cols-[1fr_220px_160px]">
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -533,23 +533,25 @@ export default function Category() {
             ]}
           />
 
-          <CategoryDropdown
-            icon={<FiHash />}
-            value={perPage}
-            onChange={(value) => setPerPage(Number(value))}
-            theme={theme}
-            options={[10, 25, 50].map((value) => ({
-              value,
-              label: `${value} / ទំព័រ`,
-            }))}
-          />
+          <div className="sm:col-span-2 xl:col-span-1">
+            <CategoryDropdown
+              icon={<FiHash />}
+              value={perPage}
+              onChange={(value) => setPerPage(Number(value))}
+              theme={theme}
+              options={[10, 25, 50].map((value) => ({
+                value,
+                label: `${value} / ទំព័រ`,
+              }))}
+            />
+          </div>
         </div>
 
         <PermissionGate permission="categories.create">
           <button
             type="button"
             onClick={openAddModal}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 xl:min-w-[170px]"
+            className="quick-action-icon-3d inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 active:translate-y-0 sm:w-auto xl:min-w-[170px]"
           >
             <FiPlusCircle className="text-lg" />
             បន្ថែមប្រភេទ

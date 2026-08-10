@@ -146,11 +146,19 @@ function ReceiptView({ receiptData, onClose, onNewSale, onPrint }) {
   } = receiptData;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col bg-white">
       <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-        <div className={`flex items-center gap-2 ${isCredit ? "text-blue-600" : "text-green-600"}`}>
-          <CheckCircle className="h-5 w-5" />
-          <span className="font-bold text-slate-900">{isCredit ? "លក់មិនទាន់ទូទាត់ — ទំនិញបានផ្តល់" : "ការលក់បញ្ចប់"}</span>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className={cn(
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
+            isCredit ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"
+          )}>
+            <CheckCircle className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-base font-extrabold text-slate-900">{isCredit ? "លក់មិនទាន់ទូទាត់ — ទំនិញបានផ្តល់" : "ការលក់បញ្ចប់"}</p>
+            <p className="mt-0.5 text-xs font-medium text-slate-400">{invoiceNo}</p>
+          </div>
         </div>
         <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100">
           <X className="h-4 w-4" />
@@ -159,22 +167,34 @@ function ReceiptView({ receiptData, onClose, onNewSale, onPrint }) {
 
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {/* Invoice header */}
-        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 text-center">
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <Hash className="h-4 w-4 text-red-400" />
-            <span className="text-xl font-bold text-slate-900">{invoiceNo}</span>
+        <div className={cn(
+          "rounded-2xl border p-5 text-center shadow-sm",
+          isCredit ? "border-blue-100 bg-blue-50/70" : "border-emerald-100 bg-emerald-50/70"
+        )}>
+          <div className="mb-1 flex items-center justify-center gap-2">
+            <Hash className={cn("h-4 w-4", isCredit ? "text-blue-500" : "text-emerald-500")} />
+            <span className="text-2xl font-extrabold tracking-tight text-slate-950">{invoiceNo}</span>
           </div>
-          <div className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
+          <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
             <Clock className="h-3 w-3" />{saleDate}
           </div>
-          <div className="mt-3 flex flex-wrap justify-center gap-3 text-xs text-slate-500">
-            <span>អតិថិជន: <strong className="text-slate-800">{customerName}</strong></span>
-            <span>·</span>
-            <span>អ្នកគិតលុយ: <strong className="text-slate-800">{cashierName}</strong></span>
-            <span>·</span>
-            <span>ប្រភេទ: <strong className="text-slate-800">{saleMode === "wholesale" ? "លក់ដុំ" : "លក់រាយ"}</strong></span>
-            <span>·</span>
-            <span>បណ្ដាញ: <strong className="text-slate-800">{saleChannel === "pos" ? "POS" : saleChannel === "phone_order" ? "ទូរស័ព្ទ" : "អនឡាញ"}</strong></span>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-left text-xs md:grid-cols-4">
+            <div className="rounded-xl bg-white/80 px-3 py-2">
+              <p className="text-slate-400">អតិថិជន</p>
+              <p className="truncate font-bold text-slate-900">{customerName}</p>
+            </div>
+            <div className="rounded-xl bg-white/80 px-3 py-2">
+              <p className="text-slate-400">អ្នកគិតលុយ</p>
+              <p className="truncate font-bold text-slate-900">{cashierName}</p>
+            </div>
+            <div className="rounded-xl bg-white/80 px-3 py-2">
+              <p className="text-slate-400">ប្រភេទ</p>
+              <p className="font-bold text-slate-900">{saleMode === "wholesale" ? "លក់ដុំ" : "លក់រាយ"}</p>
+            </div>
+            <div className="rounded-xl bg-white/80 px-3 py-2">
+              <p className="text-slate-400">បណ្ដាញ</p>
+              <p className="font-bold text-slate-900">{saleChannel === "pos" ? "POS" : saleChannel === "phone_order" ? "ទូរស័ព្ទ" : "អនឡាញ"}</p>
+            </div>
           </div>
         </div>
 
@@ -183,10 +203,10 @@ function ReceiptView({ receiptData, onClose, onNewSale, onPrint }) {
           <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">ទំនិញ</p>
           <div className="space-y-2">
             {items.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-2.5">
+              <div key={item.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-slate-900">{item.productName}</p>
-                  <p className="text-xs text-slate-400">{item.variantName} · {item.qty} {item.unitName} × {usd(item.unitPrice)}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{item.variantName} · {item.qty} {item.unitName} × {usd(item.unitPrice)}</p>
                 </div>
                 <span className="ml-3 shrink-0 text-sm font-bold text-slate-900">{usd(item.lineTotal)}</span>
               </div>
@@ -195,15 +215,15 @@ function ReceiptView({ receiptData, onClose, onNewSale, onPrint }) {
         </div>
 
         {/* Totals */}
-        <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-2">
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm shadow-sm space-y-2">
           <div className="flex justify-between text-slate-500"><span>តម្លៃមុនបញ្ចុះ</span><span>{usd(subtotal)}</span></div>
           {discountAmount > 0 && <div className="flex justify-between text-emerald-600"><span>បញ្ចុះ</span><span>−{usd(discountAmount)}</span></div>}
           {deliveryFeeUsd > 0 && <div className="flex justify-between text-slate-500"><span>ដឹកជញ្ជូន</span><span>+{usd(deliveryFeeUsd)}</span></div>}
-          <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900">
+          <div className="flex items-end justify-between border-t border-slate-200 pt-3 font-bold text-slate-900">
             <span>សរុបទាំងអស់</span>
             <div className="text-right">
-              <p>{usd(total)}</p>
-              <p className="text-[11px] font-normal text-slate-400">{khr(total * exchangeRate)}</p>
+              <p className="text-2xl font-extrabold text-slate-950">{usd(total)}</p>
+              <p className="text-xs font-semibold text-slate-500">{khr(total * exchangeRate)}</p>
             </div>
           </div>
         </div>
@@ -211,7 +231,7 @@ function ReceiptView({ receiptData, onClose, onNewSale, onPrint }) {
         {/* Payments / Balance Due */}
         <div className="mt-4">
           {isCredit ? (
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 shadow-sm">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-blue-500">មិនទាន់ទូទាត់</p>
                 <p className="mt-0.5 text-xs text-blue-500">{customerName} — មិនទាន់កត់ត្រាវិធីបង់ប្រាក់</p>
@@ -226,7 +246,7 @@ function ReceiptView({ receiptData, onClose, onNewSale, onPrint }) {
               <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">ការទូទាត់</p>
               <div className="space-y-2">
                 {payments.map((p, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-sm">
+                  <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
                     <div>
                       <p className="font-semibold text-slate-900">{p.providerName}</p>
                       <p className="text-xs text-slate-400">{p.currencyCode} · អត្រា: {p.exchangeRateUsed.toLocaleString()} KHR/USD</p>
@@ -251,20 +271,20 @@ function ReceiptView({ receiptData, onClose, onNewSale, onPrint }) {
         </p>
       </div>
 
-      <div className="border-t border-slate-100 px-6 py-4 flex gap-3">
+      <div className="flex gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
         <button
           type="button"
           onClick={onPrint}
-          className="flex flex-1 h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="table-icon-3d flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-bold text-emerald-700 transition hover:-translate-y-0.5 hover:bg-emerald-100"
         >
           <Printer className="h-4 w-4" /> បោះពុម្ព
         </button>
         <button
           type="button"
           onClick={onNewSale}
-          className="flex flex-1 h-11 items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white shadow-sm hover:bg-red-600"
+          className="quick-action-icon-3d flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0"
         >
-          <ShoppingCart className="h-4 w-4" /> ការលក់ថ្មី
+          <ShoppingCart className="h-4 w-4" /> ចាប់ផ្តើមការលក់ថ្មី
         </button>
       </div>
     </div>
@@ -497,6 +517,10 @@ export default function PaymentModal({
         total,
         payments:      builtPayments,
         exchangeRate,
+        // Was missing — the note WAS already being sent to the backend (salePayload.note above),
+        // but never carried into the receipt/print data, so SalePrintModal's own "📝 {sale.note}"
+        // section (which already existed) had nothing to show.
+        note,
       };
 
       setReceipt(receiptData);
@@ -566,6 +590,7 @@ export default function PaymentModal({
         payments:      [],
         exchangeRate,
         isCredit:      true,
+        note,
       };
 
       setReceipt(receiptData);
@@ -778,7 +803,7 @@ export default function PaymentModal({
                   type="button"
                   disabled={!canCompleteCash || isSubmitting}
                   onClick={handleComplete}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="quick-action-icon-3d flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSubmitting
                     ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -938,7 +963,7 @@ export default function PaymentModal({
                   type="button"
                   disabled={!canCompleteTransfer || isSubmitting}
                   onClick={handleComplete}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="quick-action-icon-3d flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSubmitting
                     ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -1141,7 +1166,7 @@ export default function PaymentModal({
                   type="button"
                   disabled={!canCompleteSplit || isSubmitting}
                   onClick={handleComplete}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="quick-action-icon-3d flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSubmitting
                     ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -1186,7 +1211,7 @@ export default function PaymentModal({
                   type="button"
                   disabled={isSubmitting}
                   onClick={handleCreditComplete}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="quick-action-icon-3d flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-blue-700 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSubmitting
                     ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />

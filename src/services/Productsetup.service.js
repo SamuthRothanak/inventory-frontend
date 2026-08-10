@@ -47,6 +47,9 @@ const hasFileUpload = (payload) => {
   );
 };
 
+const hasPriceRules = (payload) =>
+  (payload?.variants || []).some((variant) => (variant.priceRules || []).length > 0);
+
 const buildSetupPayload = (payload) => ({
   product: {
     name: payload.product?.name,
@@ -67,6 +70,7 @@ const buildSetupPayload = (payload) => ({
       local_key: unit.local_key,
       unit_id: Number(unit.unit_id),
       conversion_qty: Number(unit.conversion_qty || 1),
+      barcode: unit.barcode || null,
       is_base_unit: Boolean(unit.is_base_unit),
       is_default_sale_unit: Boolean(unit.is_default_sale_unit),
       is_default_purchase_unit: Boolean(unit.is_default_purchase_unit),
@@ -131,7 +135,7 @@ const createProductSetupLegacyApi = async (payload) => {
   try {
     const exchangeRateUsed = Number(payload.exchangeRate || 0);
 
-    if (!exchangeRateUsed) {
+    if (hasPriceRules(payload) && !exchangeRateUsed) {
       throw new Error(
         "No active exchange rate found. Please create and activate an exchange rate before saving product prices."
       );
@@ -183,6 +187,7 @@ const createProductSetupLegacyApi = async (payload) => {
           product_variant_id: variantId,
           unit_id: unit.unit_id,
           conversion_qty: unit.conversion_qty,
+          barcode: unit.barcode || null,
           is_base_unit: unit.is_base_unit,
           is_default_sale_unit: unit.is_default_sale_unit,
           is_default_purchase_unit: unit.is_default_purchase_unit,

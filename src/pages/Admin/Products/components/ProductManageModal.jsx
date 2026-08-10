@@ -15,8 +15,8 @@ import { QuickCreateUnitBox } from "./ProductSetupFormModal";
 function VariantThumb({ variant, size = "normal" }) {
   const className =
     size === "small"
-      ? "h-12 w-12 rounded-xl object-cover"
-      : "h-24 w-24 rounded-2xl object-cover";
+      ? "table-icon-3d h-12 w-12 rounded-xl object-cover"
+      : "summary-icon-3d h-24 w-24 rounded-2xl object-cover";
 
   const placeholderClass =
     size === "small" ? "h-12 w-12 rounded-xl" : "h-24 w-24 rounded-2xl";
@@ -33,7 +33,7 @@ function VariantThumb({ variant, size = "normal" }) {
 
   return (
     <div
-      className={`flex shrink-0 items-center justify-center bg-red-500/10 ${placeholderClass}`}
+      className={`${size === "small" ? "table-icon-3d" : "summary-icon-3d"} flex shrink-0 items-center justify-center bg-red-500/10 ${placeholderClass}`}
     >
       <FiImage
         className={
@@ -107,7 +107,7 @@ function SmallActionButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${colorClass}`}
+      className={`quick-action-icon-3d inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 ${colorClass}`}
     >
       {children}
     </button>
@@ -133,6 +133,15 @@ function getRuleVariantUnitId(rule) {
     rule?.variant_unit_id ||
     null
   );
+}
+
+function getUnitPriceRuleCount(variant = {}, unit = {}) {
+  const unitId = getVariantUnitId(unit);
+  if (!unitId) return 0;
+
+  return (variant.priceRules || []).filter((rule) =>
+    Number(getRuleVariantUnitId(rule)) === Number(unitId)
+  ).length;
 }
 
 function formatInputPrice(rule) {
@@ -189,6 +198,7 @@ export default function ProductManageModal({
 
   return (
     <ModalShell
+      mobileFullScreen
       title={`គ្រប់គ្រងផលិតផល: ${product.name}`}
       subtitle={`${product.categoryName || "គ្មានប្រភេទ"} · ${product.variants?.length || 0} មុខទំនិញ`}
       theme={theme}
@@ -199,7 +209,7 @@ export default function ProductManageModal({
           <button
             type="button"
             onClick={() => onEditProduct?.(product)}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700"
           >
             <FiEdit2 />
             កែព័ត៌មានផលិតផល
@@ -208,7 +218,7 @@ export default function ProductManageModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បិទ
           </button>
@@ -217,7 +227,7 @@ export default function ProductManageModal({
     >
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">
         <div className={`rounded-2xl border p-4 shadow-sm ${theme.section}`}>
-          <div className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-red-500/10">
+          <div className="summary-icon-3d flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-red-500/10">
             {product.imagePath ? (
               <img
                 src={product.imagePath}
@@ -263,7 +273,9 @@ export default function ProductManageModal({
             <div
               className={`rounded-2xl border p-8 text-center ${theme.section}`}
             >
-              <FiAlertTriangle className="mx-auto text-4xl text-amber-500" />
+              <span className="summary-icon-3d mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10">
+                <FiAlertTriangle className="text-4xl text-amber-500" />
+              </span>
               <p className="mt-3 text-sm font-semibold">
                 គ្មានមុខទំនិញសម្រាប់ផលិតផលនេះ
               </p>
@@ -328,6 +340,12 @@ export default function ProductManageModal({
                       >
                         ស្តុកក្រោម: {formatLowStockThreshold(variant)}
                       </span>
+
+                      {variant.status !== "active" && (
+                        <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-500">
+                          មិនដំណើរការ
+                        </span>
+                      )}
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -421,13 +439,14 @@ export default function ProductManageModal({
                     <div className={`rounded-xl border p-4 text-sm ${theme.softCard}`}>
                       <p className="font-semibold">គ្មានខ្នាតទំនិញ</p>
                       <p className={`mt-1 text-xs ${theme.muted}`}>
-                        បន្ថែមខ្នាតទំនិញ យ៉ាងតិច ១ មុនពេលបន្ថែមតម្លៃ ។
+                        បន្ថែមខ្នាតទំនិញ យ៉ាងតិច ១ មុនពេលកំណត់តម្លៃ ។
                       </p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                       {variant.units.map((unit) => {
                         const unitId = getVariantUnitId(unit);
+                        const unitPriceRuleCount = getUnitPriceRuleCount(variant, unit);
                         return (
                           <div key={unitId || unit.id}
                             className={`rounded-xl border p-3 text-sm ${theme.softCard}`}>
@@ -438,17 +457,21 @@ export default function ProductManageModal({
                                   {unit.isBaseUnit ? "ខ្នាតស្តុក" : "ខ្នាតដូរ"}
                                   {unit.isDefaultSaleUnit ? " · លក់ក្នុង POS" : ""}
                                   {unit.isDefaultPurchaseUnit ? " · ទិញពីអ្នកលក់" : ""}
+                                  {unit.status && unit.status !== "active" ? " · អសកម្ម" : ""}
                                 </p>
+                                {unit.barcode && (
+                                  <p className={`mt-1 text-xs ${theme.muted}`}>បាកូដ: {unit.barcode}</p>
+                                )}
                               </div>
                               <div className="flex shrink-0 gap-1">
                                 <button type="button"
                                   onClick={() => onEditVariantUnit?.(variant, { ...unit, id: unitId })}
-                                  className="rounded-lg bg-blue-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-blue-700">
+                                  className="quick-action-icon-3d rounded-lg bg-blue-600 px-2 py-1 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700">
                                   កែ
                                 </button>
                                 <button type="button"
                                   onClick={() => onDeleteVariantUnit?.({ ...unit, id: unitId })}
-                                  className="rounded-lg bg-red-500 px-2 py-1 text-xs font-semibold text-white transition hover:bg-red-600">
+                                  className="quick-action-icon-3d rounded-lg bg-red-500 px-2 py-1 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">
                                   លុប
                                 </button>
                               </div>
@@ -456,7 +479,7 @@ export default function ProductManageModal({
                             <div className="mt-3">
                               <SmallActionButton variant="green" disabled={!unitId}
                                 onClick={() => unitId && onAddPriceRule?.(variant, { ...unit, id: unitId })}>
-                                <FiPlus /> បន្ថែមតម្លៃ
+                                <FiPlus /> {unitPriceRuleCount > 0 ? "បន្ថែមតម្លៃ" : "កំណត់តម្លៃ"}
                               </SmallActionButton>
                             </div>
                           </div>
@@ -472,7 +495,7 @@ export default function ProductManageModal({
                 <div className="mt-4">
                   {variant.units.length === 0 && (
                     <p className="mb-2 text-xs text-amber-500">
-                      បន្ថែមខ្នាតទំនិញ មុនពេលបន្ថែមតម្លៃ ។
+                      បន្ថែមខ្នាតទំនិញ មុនពេលកំណត់តម្លៃ ។
                     </p>
                   )}
                   <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
@@ -519,12 +542,12 @@ export default function ProductManageModal({
                                 <div className="flex items-center justify-center gap-2">
                                   <button type="button" disabled={!safeRelatedUnit}
                                     onClick={() => safeRelatedUnit && onEditPriceRule?.(variant, safeRelatedUnit, rule)}
-                                    className="rounded-lg bg-blue-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+                                    className="quick-action-icon-3d rounded-lg bg-blue-600 px-2 py-1 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
                                     កែ
                                   </button>
                                   <button type="button"
                                     onClick={() => onDeletePriceRule?.(rule)}
-                                    className="rounded-lg bg-red-500 px-2 py-1 text-xs font-semibold text-white transition hover:bg-red-600">
+                                    className="quick-action-icon-3d rounded-lg bg-red-500 px-2 py-1 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600">
                                     លុប
                                   </button>
                                 </div>

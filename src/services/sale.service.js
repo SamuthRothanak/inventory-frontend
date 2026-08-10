@@ -10,6 +10,16 @@ export const getSalesApi = async (params = {}) => {
   return response.data;
 };
 
+export const getSalesSummaryApi = async (period = "today") => {
+  const response = await api.get("/sales/summary", { params: { period } });
+  return response.data;
+};
+
+export const getSalesActivityChartApi = async (period = "today") => {
+  const response = await api.get("/sales/activity-chart", { params: { period } });
+  return response.data;
+};
+
 export const getSaleByIdApi = async (id) => {
   const response = await api.get(`/sales/${id}`);
   return response.data;

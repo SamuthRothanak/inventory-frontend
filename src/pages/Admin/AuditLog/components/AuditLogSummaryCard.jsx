@@ -12,7 +12,7 @@ export default function AuditLogSummaryCard({ title, value, caption, icon, tone 
   return (
     <div className={`rounded-2xl border p-5 shadow-sm ${isDark ? "border-white/10 bg-[#18181b]" : "border-zinc-200 bg-white"}`}>
       <div className="flex items-center gap-4">
-        <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-3xl ${tones[tone] || tones.red}`}>
+        <div className={`summary-icon-3d flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-3xl ${tones[tone] || tones.red}`}>
           {icon}
         </div>
         <div className="min-w-0">
@@ -24,4 +24,3 @@ export default function AuditLogSummaryCard({ title, value, caption, icon, tone 
     </div>
   );
 }
-

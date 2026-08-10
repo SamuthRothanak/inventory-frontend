@@ -11,7 +11,7 @@ export default function ProductThumb({ product }) {
       <img
         src={image}
         alt={product.name}
-        className="h-12 w-12 rounded-2xl object-cover"
+        className="table-icon-3d h-12 w-12 rounded-2xl object-cover"
         onError={(event) => {
           event.currentTarget.style.display = "none";
         }}
@@ -20,7 +20,7 @@ export default function ProductThumb({ product }) {
   }
 
   return (
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10">
+    <div className="table-icon-3d flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10">
       <FiPackage className="text-xl text-red-500" />
     </div>
   );

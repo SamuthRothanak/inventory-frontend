@@ -149,8 +149,8 @@ export default function BackupData() {
   }
 
   return (
-    <div className={`space-y-6 px-5 pb-8 pt-6 ${theme.page}`}>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className={`space-y-4 pb-6 sm:space-y-6 sm:pb-8 ${theme.page}`}>
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         {summaryCards.map((item, index) => (
           <BackupSummaryCard
             key={item.title}

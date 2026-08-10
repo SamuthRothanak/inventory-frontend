@@ -32,11 +32,11 @@ export function ModalShell({ title, subtitle, theme, onClose, children, footer }
   return (
     <div
       onMouseDown={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:px-4 sm:py-6"
     >
       <div
         onMouseDown={(event) => event.stopPropagation()}
-        className={`flex h-auto max-h-[90dvh] w-full max-w-[760px] flex-col overflow-hidden rounded-3xl border shadow-2xl ${theme.modal}`}
+        className={`flex h-dvh max-h-dvh w-full max-w-[760px] flex-col overflow-hidden border-0 shadow-2xl sm:h-auto sm:max-h-[90dvh] sm:rounded-3xl sm:border ${theme.modal}`}
       >
         <div className={`shrink-0 border-b px-6 py-5 ${theme.modalHeader}`}>
           <div className="flex items-start justify-between gap-4">
@@ -54,7 +54,7 @@ export function ModalShell({ title, subtitle, theme, onClose, children, footer }
               type="button"
               onClick={onClose}
               aria-label="បិទផ្ទាំង"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
+              className="table-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <FiX className="text-lg" />
             </button>
@@ -132,7 +132,7 @@ export default function CustomerFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
+            className="table-icon-3d h-11 rounded-xl border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white"
           >
             បោះបង់
           </button>
@@ -141,7 +141,7 @@ export default function CustomerFormModal({
             type="submit"
             form="customer-form"
             disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
+            className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <FiSave />
             {isSaving ? "កំពុងរក្សាទុក..." : "រក្សាទុកអតិថិជន"}
@@ -262,7 +262,7 @@ export default function CustomerFormModal({
 function SectionTitle({ icon, title, subtitle, theme }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+      <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
         {icon}
       </div>
 

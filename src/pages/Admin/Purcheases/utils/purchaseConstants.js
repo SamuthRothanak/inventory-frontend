@@ -19,21 +19,21 @@ export const RETURN_STATUS = {
 
 export const STATUS_LABEL = {
   [STATUS.DRAFT]: "ព្រាង",
-  [STATUS.PENDING_RECEIVE]: "រង់ចាំទទួល",
+  [STATUS.PENDING_RECEIVE]: "រង់ចាំទទួលទំនិញ",
   [STATUS.PENDING_STOCK_IN]: "រង់ចាំបញ្ចូលក្នុងស្តុក",
   [STATUS.PENDING_CLAIM]: "រង់ចាំការទាមទារ",
-  [STATUS.RECEIVED]: "បានទទួល",
+  [STATUS.RECEIVED]: "ស្តុកចូលរួចរាល់អស់",
   [STATUS.CANCELLED]: "បានលុបចោល",
 };
 
 export const RETURN_STATUS_LABEL = {
   [RETURN_STATUS.DRAFT]: "ព្រាង",
-  [RETURN_STATUS.SUBMITTED]: "បានដាក់ស្នើ",
-  [RETURN_STATUS.APPROVED]: "បានអនុម័ត",
+  [RETURN_STATUS.SUBMITTED]: "រង់ចាំដំណោះស្រាយ",
+  [RETURN_STATUS.APPROVED]: "កំពុងដោះស្រាយ",
   [RETURN_STATUS.WAITING_REPLACEMENT]: "រង់ចាំជំនួស",
   [RETURN_STATUS.REJECTED]: "បានបដិសេធ",
-  [RETURN_STATUS.COMPLETED]: "បានបញ្ចប់",
-  [RETURN_STATUS.CANCELLED]: "បានលុបចោល",
+  [RETURN_STATUS.COMPLETED]: "ដោះស្រាយរួច",
+  [RETURN_STATUS.CANCELLED]: "បានបោះបង់",
 };
 
 export const paymentModeOptions = [
@@ -49,15 +49,15 @@ export const paymentStatusOptions = [
 ];
 
 export const deliveryOptions = [
-  { value: "none", label: "គ្មាន" },
+  { value: "", label: "ជម្រើសដឹកមិនទាន់មាន" },
   { value: "supplier_delivery", label: "ដឹកដោយ អ្នកផ្គត់ផ្គង់" },
-  { value: "self_pickup", label: "ទៅយកផ្ទាល់" },
-  { value: "third_party", label: "ដឹកដោយភាគីទីបី" },
+  { value: "self_pickup", label: "ហាងទៅយកផ្ទាល់" },
+  { value: "third_party", label: "ជួលអ្នកដឹកខាងក្រៅ" },
 ];
 
 export const deliveryPaidByOptions = [
-  { value: "buyer", label: "អ្នកទិញ" },
-  { value: "supplier", label: "អ្នកផ្គត់ផ្គង់" },
+  { value: "buyer", label: "ហាងបង់" },
+  { value: "supplier", label: "អ្នកផ្គត់ផ្គង់បង់" },
 ];
 
 export const initialSuppliers = [

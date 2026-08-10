@@ -51,14 +51,16 @@ const CONDITION_LABEL_KH = {
   good:          "ល្អ",
   over_supplied: "ដឹកលើស",
   quality_issue: "បញ្ហាគុណភាព",
+  defective:     "គ្មានគុណភាព",
   other:         "ផ្សេងទៀត",
 };
 
 const RESOLUTION_LABEL_KH = {
-  replacement: "ជំនួស",
-  refund:      "ការសង",
-  credit_note: "Credit Note",
-  none:        "គ្មាន",
+  replacement:  "ជំនួសទំនិញថ្មី",
+  refund:       "សងលុយ",
+  credit_note:  "កាត់លុយលើវិក្កយបត្រក្រោយ",
+  store_credit: "ក្រេឌីតហាង",
+  none:         "លះបង់ការទាមទារ",
 };
 
 export function formatCondition(value = "") {
@@ -157,6 +159,16 @@ export function formatCurrencyPair(usd, khr) {
   return `$${Number(usd || 0).toFixed(2)} / \u17db${Number(khr || 0).toLocaleString()}`;
 
 
+}
+
+export function formatAmountInCurrency(usd, khr, currency) {
+  const normalized = normalizeCurrency(currency || "USD");
+  if (normalized === "KHR") return `៛${Math.round(Number(khr || 0)).toLocaleString("en-US")}`;
+  return `$${Number(usd || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export function formatCreditAppliedAmount(purchase = {}) {
+  return formatAmountInCurrency(purchase.creditAppliedUsd, purchase.creditAppliedKhr, purchase.creditAppliedCurrency);
 }
 
 export function formatActualPaidAmount(purchase = {}) {
@@ -290,19 +302,67 @@ export function convertCost({ inputCurrency, inputUnitCost, exchangeRate }) {
 
 
 
+function getPurchaseItemPreviewTotal(item = {}, rate = 0, paymentMode = "") {
+  const isPayAfterCheck = paymentMode === "pay_after_check";
+  const checkedQty =
+    Number(item.receivedQty ?? item.received_qty ?? 0) > 0 ||
+    Number(item.acceptedQty ?? item.accepted_qty ?? 0) > 0 ||
+    Number(item.damagedQty ?? item.damaged_qty ?? 0) > 0;
+
+  if (isPayAfterCheck && checkedQty) {
+    const acceptedQty = Number(item.acceptedQty ?? item.accepted_qty ?? 0);
+    const invoicedQty = Number(item.invoicedQty ?? item.invoiced_qty ?? 0);
+    const invoiceTotal = Number(item.invoiceTotal || 0);
+    const inputUnitCost = Number(item.inputUnitCost ?? item.unitCost ?? item.unitCostUsd ?? 0);
+    const inputTotal = invoiceTotal > 0 && invoicedQty > 0
+      ? (invoiceTotal / invoicedQty) * acceptedQty
+      : inputUnitCost * acceptedQty;
+
+    if (!inputTotal) return { usd: 0, khr: 0 };
+
+    const inputCurrency = String(item.inputCurrency || "USD").toUpperCase();
+    if (inputCurrency === "KHR") {
+      return {
+        usd: rate > 0 ? inputTotal / rate : 0,
+        khr: inputTotal,
+      };
+    }
+
+    return {
+      usd: inputTotal,
+      khr: rate > 0 ? inputTotal * rate : 0,
+    };
+  }
+
+  const lineTotalUsd = Number(item.lineTotalUsd ?? item.lineTotal ?? 0);
+  const lineTotalKhr = Number(item.lineTotalKhr || 0);
+  if (lineTotalUsd > 0 || lineTotalKhr > 0) {
+    return { usd: lineTotalUsd, khr: lineTotalKhr };
+  }
+
+  const inputTotal =
+    Number(item.invoiceTotal || 0) ||
+    Number(item.inputUnitCost ?? item.unitCost ?? item.unitCostUsd ?? 0) *
+      Number(item.invoicedQty || 0);
+  if (!inputTotal) return { usd: 0, khr: 0 };
+
+  const inputCurrency = String(item.inputCurrency || "USD").toUpperCase();
+  if (inputCurrency === "KHR") {
+    return {
+      usd: rate > 0 ? inputTotal / rate : 0,
+      khr: inputTotal,
+    };
+  }
+
+  return {
+    usd: inputTotal,
+    khr: rate > 0 ? inputTotal * rate : 0,
+  };
+}
+
 export function calculateCurrencyPreview({ items = [], form = {} }) {
 
   const rate = Number(form.exchangeRateUsed || 0);
-
-  const discount = convertCost({
-
-    inputCurrency: form.discountCurrency || "USD",
-
-    inputUnitCost: form.discountTotal || 0,
-
-    exchangeRate: rate,
-
-  });
 
   const delivery = convertCost({
 
@@ -326,9 +386,39 @@ export function calculateCurrencyPreview({ items = [], form = {} }) {
 
 
 
-  const subtotalUsd = items.reduce((total, item) => total + Number(item.lineTotalUsd ?? item.lineTotal ?? 0), 0);
+  const subtotalUsd = items.reduce(
+    (total, item) => total + getPurchaseItemPreviewTotal(item, rate, form.paymentMode).usd,
+    0
+  );
 
-  const subtotalKhr = items.reduce((total, item) => total + Number(item.lineTotalKhr || 0), 0);
+  const subtotalKhr = items.reduce(
+    (total, item) => total + getPurchaseItemPreviewTotal(item, rate, form.paymentMode).khr,
+    0
+  );
+
+  const isPercentDiscount = form.discountType === "percent";
+  const invoiceCurrencies = Array.from(
+    new Set(
+      items
+        .map((item) => String(item.inputCurrency || "").toUpperCase())
+        .filter((currency) => currency === "USD" || currency === "KHR")
+    )
+  );
+  const invoiceCurrency =
+    invoiceCurrencies.length === 1
+      ? invoiceCurrencies[0]
+      : normalizeCurrency(form.discountCurrency || form.inputCurrency || "USD");
+  const discountPercent = Math.min(Math.max(Number(form.discountPercent || 0), 0), 100);
+  const discount = isPercentDiscount
+    ? {
+        unitCostUsd: subtotalUsd * discountPercent / 100,
+        unitCostKhr: subtotalKhr * discountPercent / 100,
+      }
+    : convertCost({
+        inputCurrency: form.discountCurrency || "USD",
+        inputUnitCost: form.discountTotal || 0,
+        exchangeRate: rate,
+      });
 
   const discountUsd = discount.unitCostUsd;
 
@@ -342,9 +432,30 @@ export function calculateCurrencyPreview({ items = [], form = {} }) {
 
   const grandTotalKhr = Math.max(0, subtotalKhr - discountKhr + deliveryKhr);
 
-  const paidAmountUsd = form.paymentStatus === "paid" ? grandTotalUsd : paid.unitCostUsd;
+  const partialClaimDeduction = calculatePartialPrepaidClaimDeduction(items, form.paymentMode);
 
-  const paidAmountKhr = form.paymentStatus === "paid" ? grandTotalKhr : paid.unitCostKhr;
+  // Supplier credit the user chose to apply to THIS purchase (from an available balance issued
+  // by an earlier credit_note claim on a DIFFERENT purchase — see Supplier Credit Balance) —
+  // reduces what's owed here the same way partialClaimDeduction does. Capped elsewhere (against
+  // both the supplier's actual available balance and this purchase's own total) before submit.
+  const creditApplied = convertCost({
+    inputCurrency: form.creditAppliedCurrency || "USD",
+    inputUnitCost: form.creditApplied || 0,
+    exchangeRate: rate,
+  });
+  const creditAppliedUsd = creditApplied.unitCostUsd;
+  const creditAppliedKhr = creditApplied.unitCostKhr;
+
+  // "paid in full" must mean paid enough CASH to cover what's left after credit — not the full
+  // grandTotal regardless of credit, or applying credit here would silently overstate paid_amount
+  // (recording cash that was never actually paid) once credit is also applied server-side.
+  const paidAmountUsd = form.paymentStatus === "paid" ? Math.max(0, grandTotalUsd - creditAppliedUsd) : paid.unitCostUsd;
+
+  const paidAmountKhr = form.paymentStatus === "paid" ? Math.max(0, grandTotalKhr - creditAppliedKhr) : paid.unitCostKhr;
+
+  const balanceBaseUsd = Math.max(0, grandTotalUsd - partialClaimDeduction.usd - creditAppliedUsd);
+
+  const balanceBaseKhr = Math.max(0, grandTotalKhr - partialClaimDeduction.khr - creditAppliedKhr);
 
 
 
@@ -370,12 +481,46 @@ export function calculateCurrencyPreview({ items = [], form = {} }) {
 
     paidAmountKhr,
 
-    balanceUsd: Math.max(0, grandTotalUsd - paidAmountUsd),
+    claimDeductionUsd: partialClaimDeduction.usd,
 
-    balanceKhr: Math.max(0, grandTotalKhr - paidAmountKhr),
+    claimDeductionKhr: partialClaimDeduction.khr,
+
+    creditAppliedUsd,
+
+    creditAppliedKhr,
+
+    balanceUsd: Math.max(0, balanceBaseUsd - paidAmountUsd),
+
+    balanceKhr: Math.max(0, balanceBaseKhr - paidAmountKhr),
+
+    discountInputAmount: isPercentDiscount ? (invoiceCurrency === "KHR" ? discount.unitCostKhr : discount.unitCostUsd) : Number(form.discountTotal || 0),
+
+    discountInputCurrency: isPercentDiscount ? invoiceCurrency : (form.discountCurrency || invoiceCurrency),
 
   };
 
+}
+
+function calculatePartialPrepaidClaimDeduction(items = [], paymentMode = "") {
+  if (paymentMode !== "partial_prepaid") return { usd: 0, khr: 0 };
+
+  return items.reduce(
+    (total, item) => {
+      const claimQty = Number(item.claimQty ?? item.claim_qty ?? 0);
+      const invoicedQty = Number(item.invoicedQty ?? item.invoiced_qty ?? 0);
+
+      if (claimQty <= 0 || invoicedQty <= 0) return total;
+
+      const lineTotalUsd = Number(item.lineTotalUsd ?? item.lineTotal ?? item.line_total_usd ?? 0);
+      const lineTotalKhr = Number(item.lineTotalKhr ?? item.line_total_khr ?? 0);
+
+      return {
+        usd: total.usd + (lineTotalUsd / invoicedQty) * claimQty,
+        khr: total.khr + (lineTotalKhr / invoicedQty) * claimQty,
+      };
+    },
+    { usd: 0, khr: 0 }
+  );
 }
 
 
@@ -386,6 +531,15 @@ export function formatPaymentMode(value = "") {
 
   return found?.label || value || "-";
 
+}
+
+export function formatDeliveryOption(value = "") {
+  const labels = {
+    supplier_delivery: "ដឹកដោយ អ្នកផ្គត់ផ្គង់",
+    self_pickup: "ហាងទៅយកផ្ទាល់",
+    third_party: "ជួលអ្នកដឹកខាងក្រៅ",
+  };
+  return labels[normalizeDeliveryOption(value)] || "";
 }
 
 export function getPurchaseItemSummary(purchase = {}) {
@@ -455,7 +609,9 @@ export function buildTheme(isDark) {
 
       : "border-zinc-300 bg-white text-zinc-900 focus:border-red-400 focus:ring-red-400/20",
 
-    tableWrap: isDark ? "border-white/10 bg-zinc-900" : "border-zinc-200 bg-white",
+    tableWrap: isDark
+      ? "border-zinc-800 bg-zinc-900 text-zinc-100"
+      : "border-zinc-200 bg-white text-zinc-900",
 
     row: isDark ? "border-white/10 text-zinc-200 hover:bg-white/[0.04]" : "border-zinc-200 text-zinc-700 hover:bg-zinc-50",
 
@@ -865,6 +1021,23 @@ export function normalizePurchase(item) {
     grandTotalUsd,
 
     grandTotalKhr,
+
+    creditAppliedUsd: Number(item.credit_applied_usd ?? item.creditAppliedUsd ?? 0),
+
+    creditAppliedKhr: Number(item.credit_applied_khr ?? item.creditAppliedKhr ?? 0),
+
+    creditAppliedCurrency: normalizeCurrency(item.credit_applied_currency ?? item.creditAppliedCurrency ?? "USD"),
+
+    // Which OTHER purchase(s) creditAppliedUsd/Khr actually came from — only present on the
+    // single-purchase detail fetch (see PurchaseRepository::find), empty/absent on list rows.
+    usedCredits: Array.isArray(item.used_credits ?? item.usedCredits)
+      ? (item.used_credits ?? item.usedCredits).map((credit) => ({
+          id: credit.id,
+          amountUsd: Number(credit.amount_usd ?? credit.amountUsd ?? 0),
+          amountKhr: Number(credit.amount_khr ?? credit.amountKhr ?? 0),
+          sourcePurchaseNo: credit.source_purchase_no ?? credit.sourcePurchaseNo ?? "",
+        }))
+      : [],
 
     paidAmount: Number(item.paid_amount_input ?? item.paidAmountInput ?? paidAmountUsd),
 

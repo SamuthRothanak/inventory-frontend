@@ -65,7 +65,7 @@ export function SummaryCard({ theme, title, value, icon, iconBg, rawValue }) {
   return (
     <div className={`rounded-2xl border px-5 py-5 shadow-sm ${theme.card}`}>
       <div className="flex items-center gap-4">
-        <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${iconBg}`}>
+        <div className={`summary-icon-3d flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${iconBg}`}>
           {icon}
         </div>
 
@@ -82,7 +82,7 @@ export function ActionCard({ theme, title, subtitle, icon, buttonText, buttonLab
   return (
     <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
       <div className="flex items-center gap-4">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-red-500/10">
+        <div className="summary-icon-3d flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-red-500/10">
           {icon}
         </div>
 
@@ -95,7 +95,7 @@ export function ActionCard({ theme, title, subtitle, icon, buttonText, buttonLab
       <button
         type="button"
         onClick={onClick}
-        className={`mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white transition ${buttonClass}`}
+        className={`quick-action-icon-3d mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 ${buttonClass}`}
       >
         <FiPlusCircle />
         {buttonText || buttonLabel}
@@ -115,7 +115,7 @@ export function InventoryThumb({ item, size = "normal" }) {
       <img
         src={item.imagePath}
         alt={item.variantName}
-        className={`${sizeClass} object-cover`}
+        className={`${size === "normal" ? "table-icon-3d" : ""} ${sizeClass} object-cover`}
         onError={(event) => {
           event.currentTarget.style.display = "none";
         }}
@@ -124,23 +124,23 @@ export function InventoryThumb({ item, size = "normal" }) {
   }
 
   return (
-    <div className={`flex shrink-0 items-center justify-center bg-red-500/10 ${sizeClass}`}>
+    <div className={`flex shrink-0 items-center justify-center bg-red-500/10 ${size === "normal" ? "table-icon-3d" : ""} ${sizeClass}`}>
       <FiPackage className={size === "large" ? "text-5xl text-red-500" : "text-xl text-red-500"} />
     </div>
   );
 }
 
-export function ModalShell({ title, subtitle, theme, onClose, children, footer, width = "max-w-5xl" }) {
+export function ModalShell({ title, subtitle, theme, onClose, children, footer, width = "max-w-5xl", mobileFullScreen = false }) {
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:px-4 sm:py-6"
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className={`flex h-auto max-h-[90dvh] w-full ${width} flex-col overflow-hidden rounded-3xl border shadow-2xl ${theme.modal}`}
+        className={`flex w-full ${width} flex-col overflow-hidden shadow-2xl sm:h-auto sm:max-h-[90dvh] sm:rounded-3xl sm:border ${mobileFullScreen ? "h-dvh max-h-dvh border-0" : "h-auto max-h-[88dvh] rounded-t-3xl border"} ${theme.modal}`}
       >
-        <div className={`shrink-0 border-b px-6 py-5 ${theme.modalHeader}`}>
+        <div className={`shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5 ${theme.modalHeader}`}>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h2 className="text-xl font-bold tracking-tight">{title}</h2>
@@ -151,19 +151,23 @@ export function ModalShell({ title, subtitle, theme, onClose, children, footer, 
               type="button"
               onClick={onClose}
               aria-label="Close modal"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:bg-zinc-200 hover:text-zinc-950 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
+              className={`table-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition hover:-translate-y-0.5 ${
+                theme.isDark
+                  ? "border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white"
+                  : "border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-950"
+              }`}
             >
               <FiX className="text-lg" />
             </button>
           </div>
         </div>
 
-        <div className={`custom-modal-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 ${theme.modalBody}`}>
+        <div className={`custom-modal-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 ${theme.modalBody}`}>
           {children}
         </div>
 
         {footer && (
-          <div className={`shrink-0 border-t px-6 py-4 ${theme.modalHeader}`}>
+          <div className={`shrink-0 border-t px-4 py-3 sm:px-6 sm:py-4 ${theme.modalHeader}`}>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               {footer}
             </div>
@@ -177,7 +181,7 @@ export function ModalShell({ title, subtitle, theme, onClose, children, footer, 
 export function SectionTitle({ icon, title, subtitle, theme }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+      <div className="summary-icon-3d mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
         {icon}
       </div>
 
@@ -205,17 +209,25 @@ export function StockStatusBadge({ status, getStatusClass }) {
 }
 
 export function FormInput({ label, value, onChange, theme, error = "", type = "text", placeholder = "", icon, allowDecimal = true }) {
+  // Rendered as type="text" even when the caller asks for type="number" — a native
+  // <input type="number"> silently reports event.target.value as "" for anything that doesn't
+  // parse as a valid number (garbage pasted in, e.g. "2klk--=="), so sanitizeNumber() below never
+  // even sees the real characters to strip and the field ends up displaying whatever the browser
+  // left there, unfiltered. type="text" always gives onChange the real typed/pasted string, so
+  // sanitizeNumber can actually do its job; inputMode="decimal" still gets mobile devices to show
+  // a numeric keypad.
+  const isNumeric = type === "number";
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
       <div className="relative">
         {icon && <span className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${theme.muted}`}>{icon}</span>}
         <input
-          type={type}
+          type={isNumeric ? "text" : type}
           value={value}
           placeholder={placeholder}
-          inputMode={type === "number" ? "decimal" : undefined}
-          onChange={(event) => onChange(type === "number" ? sanitizeNumber(event.target.value, allowDecimal) : event.target.value)}
+          inputMode={isNumeric ? "decimal" : undefined}
+          onChange={(event) => onChange(isNumeric ? sanitizeNumber(event.target.value, allowDecimal) : event.target.value)}
           className={`h-11 w-full rounded-xl border ${icon ? "pl-10" : "px-3"} pr-3 text-sm outline-none transition focus:ring-4 ${theme.input} ${error ? "border-red-500 focus:border-red-500" : ""}`}
         />
       </div>
@@ -341,7 +353,7 @@ export function InventoryDropdown({
   );
 }
 
-export function FormSelect({ label, value, onChange, theme, error = "", icon, options = [], disabled = false, searchable = false }) {
+export function FormSelect({ label, value, onChange, theme, error = "", icon, options = [], disabled = false, searchable = false, helper = "" }) {
   return (
     <label className="block">
       <span className={`mb-2 block text-xs font-semibold ${theme.muted}`}>{label}</span>
@@ -355,6 +367,7 @@ export function FormSelect({ label, value, onChange, theme, error = "", icon, op
         disabled={disabled}
         searchable={searchable}
       />
+      {helper && !error && <p className={`mt-1.5 text-xs ${theme.muted}`}>{helper}</p>}
       {error && <p className="mt-1.5 text-xs text-red-400">{error}</p>}
     </label>
   );

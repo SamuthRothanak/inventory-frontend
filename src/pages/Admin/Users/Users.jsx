@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConfirm } from "../../../components/ConfirmDialog";
+import { useNotification } from "../../../components/AppNotification";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -72,6 +73,7 @@ export default function Users() {
   const isDark = outlet?.isDark ?? false;
   const queryClient = useQueryClient();
   const confirm = useConfirm();
+  const notify = useNotification();
 
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -85,6 +87,7 @@ export default function Users() {
     handleSubmit,
     reset,
     watch,
+    setValue,
     setError,
     formState: { errors },
   } = useForm({
@@ -275,6 +278,7 @@ export default function Users() {
     onSuccess: () => {
       invalidateUsers();
       closeModal();
+      notify.success("បានកែអ្នកប្រើប្រាស់", "ព័ត៌មាន និងលេខសម្ងាត់ថ្មីត្រូវបានរក្សាទុករួចហើយ។");
     },
     onError: (err) => handleServerError(err, "មិនអាចកំណត់លេខសម្ងាត់ឡើងវិញបានទេ ។"),
   });
@@ -287,6 +291,7 @@ export default function Users() {
       } else {
         invalidateUsers();
         closeModal();
+        notify.success("បានកែអ្នកប្រើប្រាស់", "ព័ត៌មានអ្នកប្រើប្រាស់ត្រូវបានរក្សាទុករួចហើយ។");
       }
     },
     onError: (err) => handleServerError(err, "មិនអាចកែអ្នកប្រើប្រាស់បានទេ ។"),
@@ -386,6 +391,8 @@ export default function Users() {
         <UserFormModal
           isEdit={isEdit}
           register={register}
+          watch={watch}
+          setValue={setValue}
           handleSubmit={handleSubmit}
           onSubmit={onSubmit}
           errors={errors}

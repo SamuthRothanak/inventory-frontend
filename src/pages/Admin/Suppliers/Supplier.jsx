@@ -19,6 +19,7 @@ import {
   bulkDeleteSuppliersApi,
   createSupplierApi,
   deleteSupplierApi,
+  getSupplierCreditBalanceApi,
   getSuppliersApi,
   updateSupplierApi,
 } from "../../../services/supplier.service";
@@ -161,6 +162,15 @@ export default function Supplier() {
   const suppliers = useMemo(() => {
     return extractSuppliers(suppliersQuery.data);
   }, [suppliersQuery.data]);
+
+  // Only fetched while the view modal is actually open — no need to know every supplier's
+  // credit balance up front just to render the list/table.
+  const supplierCreditQuery = useQuery({
+    queryKey: ["supplier-credit-balance", selectedSupplier?.id],
+    queryFn: () => getSupplierCreditBalanceApi(selectedSupplier.id),
+    enabled: modalMode === "view" && Boolean(selectedSupplier?.id),
+  });
+  const supplierCreditBalance = supplierCreditQuery.data?.data || null;
 
   const pagination = useMemo(() => {
     return getPaginationMeta(suppliersQuery.data, suppliers.length);
@@ -423,16 +433,17 @@ export default function Supplier() {
 
   const handleExport = (type) => {
     setExportMenuOpen(false);
+    const exportFilters = { search: searchTerm, status: statusFilter };
     if (type === "pdf") {
-      const opened = exportSuppliersPdf(exportSuppliers);
+      const opened = exportSuppliersPdf(exportSuppliers, exportFilters);
       if (!opened) window.alert("Browser បាន block popup។ សូមអនុញ្ញាត popup រួច Export ម្តងទៀត។");
       return;
     }
     if (type === "excel") {
-      exportSuppliersExcel(exportSuppliers);
+      exportSuppliersExcel(exportSuppliers, exportFilters);
       return;
     }
-    exportSuppliersCsv(exportSuppliers);
+    exportSuppliersCsv(exportSuppliers, exportFilters);
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
@@ -448,7 +459,7 @@ export default function Supplier() {
 
   return (
     <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
         <SummaryCard
           theme={theme}
           title="ចំនួនអ្នកផ្គត់ផ្គង់សរុប"
@@ -474,7 +485,7 @@ export default function Supplier() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,1fr)_220px_160px_auto] xl:items-center">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_220px_160px_auto] xl:items-center">
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -518,7 +529,7 @@ export default function Supplier() {
               type="button"
               onClick={() => exportSuppliers.length > 0 && setExportMenuOpen((open) => !open)}
               disabled={exportSuppliers.length === 0}
-              className={`inline-flex h-12 min-w-[142px] items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${theme.badge} hover:border-red-400 hover:text-red-500`}
+              className={`table-icon-3d inline-flex h-12 min-w-[142px] items-center justify-center gap-2 rounded-xl border px-5 text-sm font-bold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${theme.badge} hover:border-red-400 hover:text-red-500`}
             >
               <FiDownload className="text-lg" />
               Export
@@ -550,7 +561,7 @@ export default function Supplier() {
             <button
               type="button"
               onClick={openAddModal}
-              className="inline-flex h-12 min-w-[210px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+              className="quick-action-icon-3d inline-flex h-12 min-w-[210px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-600 active:translate-y-0"
             >
               <FiPlusCircle className="text-lg" />
               បន្ថែមអ្នកផ្គត់ផ្គង់
@@ -602,6 +613,8 @@ export default function Supplier() {
           theme={theme}
           onClose={closeModal}
           onEdit={() => openEditModal(selectedSupplier)}
+          creditBalance={supplierCreditBalance}
+          creditBalanceLoading={supplierCreditQuery.isLoading}
         />
       )}
 

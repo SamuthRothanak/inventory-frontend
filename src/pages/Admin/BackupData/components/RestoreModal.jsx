@@ -26,20 +26,20 @@ export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfir
   const canSubmit = confirmed && (isFromExisting || file);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
       <div className={`w-full max-w-lg rounded-2xl border shadow-2xl ${theme.card}`}>
-        <div className={`flex items-center justify-between border-b p-6 ${theme.divider}`}>
+        <div className={`flex items-center justify-between border-b p-4 sm:p-6 ${theme.divider}`}>
           <h2 className="text-xl font-extrabold">ស្ដារទិន្នន័យ</h2>
           <button
             type="button"
             onClick={onClose}
-            className={`flex h-9 w-9 items-center justify-center rounded-xl transition hover:opacity-80 ${theme.softCard}`}
+            className={`table-icon-3d flex h-9 w-9 items-center justify-center rounded-xl transition hover:-translate-y-0.5 hover:opacity-80 ${theme.softCard}`}
           >
             <FiX size={18} />
           </button>
         </div>
 
-        <div className="space-y-5 p-6">
+        <div className="space-y-5 p-4 sm:p-6">
           <div className="flex items-start gap-3 rounded-2xl bg-red-500/10 p-4 text-red-500">
             <FiAlertTriangle className="mt-0.5 shrink-0 text-xl" />
             <p className="text-sm leading-6 font-semibold">
@@ -65,7 +65,9 @@ export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfir
               className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 transition hover:opacity-80 ${theme.softCard}`}
               onClick={() => fileRef.current?.click()}
             >
-              <FiUploadCloud className="text-4xl text-zinc-400" />
+              <span className="summary-icon-3d flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-500">
+                <FiUploadCloud className="text-3xl" />
+              </span>
               {file ? (
                 <div className="text-center">
                   <p className="font-bold text-emerald-500">{file.name}</p>
@@ -102,11 +104,11 @@ export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfir
           </label>
         </div>
 
-        <div className={`flex justify-end gap-3 border-t p-6 ${theme.divider}`}>
+        <div className={`flex flex-col-reverse gap-2 border-t p-4 sm:flex-row sm:justify-end sm:gap-3 sm:p-6 [&>button]:w-full sm:[&>button]:w-auto ${theme.divider}`}>
           <button
             type="button"
             onClick={onClose}
-            className={`h-11 rounded-xl border px-5 font-semibold transition hover:opacity-80 ${theme.softCard}`}
+            className={`table-icon-3d h-11 rounded-xl border px-5 font-semibold transition hover:-translate-y-0.5 hover:opacity-80 ${theme.softCard}`}
           >
             បោះបង់
           </button>
@@ -114,7 +116,7 @@ export default function RestoreModal({ theme, onClose, onConfirmUpload, onConfir
             type="button"
             onClick={handleSubmit}
             disabled={!canSubmit || isLoading}
-            className="h-11 rounded-xl bg-red-600 px-5 font-bold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="quick-action-icon-3d h-11 rounded-xl bg-red-600 px-5 font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-700 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? "កំពុងស្ដារ..." : "ស្ដារឥឡូវ"}
           </button>

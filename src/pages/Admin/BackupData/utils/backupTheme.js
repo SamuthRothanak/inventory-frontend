@@ -7,6 +7,8 @@ export function getBackupTheme(isDark) {
     softCard: isDark
       ? "border-white/10 bg-white/[0.04]"
       : "border-zinc-200 bg-zinc-50",
+    title: isDark ? "text-zinc-200" : "text-zinc-700",
+    row: isDark ? "border-white/10" : "border-zinc-200",
     muted: isDark ? "text-zinc-400" : "text-zinc-500",
     input: isDark
       ? "border-white/10 bg-[#111113] text-white placeholder:text-zinc-500 focus:border-red-500 focus:ring-red-500/20"
@@ -26,4 +28,3 @@ export function toneClasses(tone = "red") {
 
   return tones[tone] || tones.red;
 }
-
