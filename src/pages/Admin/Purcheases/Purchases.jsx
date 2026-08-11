@@ -1531,13 +1531,16 @@ export default function Purchases() {
         const receivedQty = Number(value || 0);
         const damagedQty = Number(next.damagedQty || 0);
         next.acceptedQty = Math.max(0, receivedQty - damagedQty);
+        if (purchaseForm.paymentMode === "prepaid") {
+          next.claimQty = Math.max(0, Number(next.invoicedQty || 0) - next.acceptedQty);
+        }
       }
 
       if (field === "damagedQty") {
         const receivedQty = Number(next.receivedQty || 0);
         const damagedQty = Number(value || 0);
         next.acceptedQty = Math.max(0, receivedQty - damagedQty);
-        if (purchaseForm.paymentMode === "prepaid") next.claimQty = damagedQty;
+        if (purchaseForm.paymentMode === "prepaid") next.claimQty = Math.max(0, Number(next.invoicedQty || 0) - next.acceptedQty);
         if (purchaseForm.paymentMode === "pay_after_check") next.claimQty = 0;
       }
 
@@ -1546,6 +1549,9 @@ export default function Purchases() {
         if (purchaseForm.paymentMode === "pay_after_check") {
           next.paidQty = acceptedQty;
           next.claimQty = 0;
+        }
+        if (purchaseForm.paymentMode === "prepaid") {
+          next.claimQty = Math.max(0, Number(next.invoicedQty || 0) - acceptedQty);
         }
       }
 
@@ -1617,7 +1623,7 @@ export default function Purchases() {
 
     if (paymentMode === "prepaid") {
       paidQty = invoicedQty;
-      claimQty = damagedQty;
+      claimQty = Math.max(0, invoicedQty - acceptedQty);
     }
 
     if (paymentMode === "partial_prepaid") {

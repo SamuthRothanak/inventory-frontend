@@ -258,7 +258,17 @@ export default function Pos() {
   const [paymentOpen,        setPaymentOpen]        = useState(false);
 
   // ── New feature states ──
-  const [heldOrders,     setHeldOrders]     = useState([]);
+  // Held orders never touch the backend (holding doesn't create a Sale row — only checkout
+  // does), so plain useState alone loses every paused order on refresh/browser-crash with zero
+  // warning to the cashier. Persisting to localStorage is the only place left to keep them.
+  const [heldOrders,     setHeldOrders]     = useState(() => {
+    try {
+      const saved = localStorage.getItem("pos_held_orders");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [completedSales, setCompletedSales] = useState([]);
   const [showHeld,       setShowHeld]       = useState(false);
   const [showSales,      setShowSales]      = useState(false);
@@ -267,6 +277,14 @@ export default function Pos() {
   const [saleNote,       setSaleNote]       = useState("");
 
   const [showBarcodeCameraModal, setShowBarcodeCameraModal] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("pos_held_orders", JSON.stringify(heldOrders));
+    } catch {
+      // localStorage full/unavailable — held orders stay in-memory only for this session.
+    }
+  }, [heldOrders]);
 
   const notify = useNotification();
 
@@ -351,6 +369,24 @@ export default function Pos() {
     });
   }, [appliesTo, products]);
 
+  // Base qty already "spoken for" by the live cart or a held (paused, not cancelled) order,
+  // per product — neither one has actually left backend stock yet (only checkout does that),
+  // so every stock number shown anywhere in the POS screen needs this subtracted, or it looks
+  // like adding to cart / holding an order didn't reserve anything at all.
+  const reservedBaseQtyByProductId = useMemo(() => {
+    const map = {};
+    const addQty = (productId, baseQty) => {
+      map[productId] = (map[productId] || 0) + (Number(baseQty) || 0);
+    };
+    cart.forEach((item) => addQty(item.productId, item.baseQty));
+    heldOrders.forEach((order) => order.items.forEach((item) => addQty(item.productId, item.baseQty)));
+    return map;
+  }, [cart, heldOrders]);
+
+  // Left as raw stockBaseQty here on purpose — this feeds selectedProduct (via openQuickAdd)
+  // and addProductUnitToCart's own stock-limit math, which already subtracts the live cart's
+  // usage itself. ProductBrowser applies reservedBaseQtyByProductId separately, only for what
+  // it displays on each tile, so the two don't end up double-subtracting the same reservation.
   const filteredProducts = useMemo(() => {
     const kw = search.toLowerCase().trim();
     return products.filter((item) => {
@@ -369,8 +405,12 @@ export default function Pos() {
   const appliedRule    = selectedUnit ? getAppliedRule(selectedUnit, qty, appliesTo) : null;
   const unitPrice      = appliedRule?.usd || 0;
   const lineTotal      = qty * unitPrice;
+  // Includes held orders, not just the live cart — holding doesn't return those units to
+  // stock (the order is paused, not cancelled/abandoned), so they must keep counting against
+  // "available" the same way the live cart does, or the number appears to jump back up the
+  // moment an order is held.
   const cartBaseQtyForSelectedProduct = selectedProduct
-    ? cart.reduce((sum, item) => item.productId === selectedProduct.id ? sum + (Number(item.baseQty) || 0) : sum, 0)
+    ? (reservedBaseQtyByProductId[selectedProduct.id] || 0)
     : 0;
   const availableUnits = selectedProduct && selectedUnit
     ? Math.floor(Math.max(0, selectedProduct.stockBaseQty - cartBaseQtyForSelectedProduct) / selectedUnit.conversionQty) : 0;
@@ -430,7 +470,11 @@ export default function Pos() {
     // function has already returned.
     const reqQty = Math.max(0, Number(requestedQty) || 0);
     const requestedBaseQty = reqQty * unit.conversionQty;
-    const usedBaseQty = cart.reduce((sum, item) => (
+    // Held orders count too — holding pauses a sale, it doesn't return those units to stock.
+    const heldBaseQty = heldOrders.reduce((sum, order) => sum + order.items.reduce(
+      (s, item) => item.productId === product.id ? s + (Number(item.baseQty) || 0) : s, 0,
+    ), 0);
+    const usedBaseQty = heldBaseQty + cart.reduce((sum, item) => (
       item.productId === product.id ? sum + (Number(item.baseQty) || 0) : sum
     ), 0);
     const remainingBaseQty = Math.max(0, product.stockBaseQty - usedBaseQty);
@@ -439,7 +483,7 @@ export default function Pos() {
 
     setCart((prev) => {
       // Recalculate against `prev` as well, so queued cart updates can never exceed stock.
-      const latestUsedBaseQty = prev.reduce((sum, item) => (
+      const latestUsedBaseQty = heldBaseQty + prev.reduce((sum, item) => (
         item.productId === product.id ? sum + (Number(item.baseQty) || 0) : sum
       ), 0);
       const latestRemainingBaseQty = Math.max(0, product.stockBaseQty - latestUsedBaseQty);
@@ -528,29 +572,45 @@ export default function Pos() {
     }
   }
 
+  // Shared by the +/- stepper (delta-based) and the typed qty input (absolute) — both need the
+  // same stock-limit clamp + reprice, just starting from a different target qty.
+  function nextCartItemForQty(item, prev, requestedQty) {
+    const product = products.find((p) => p.id === item.productId);
+    const unit = product?.units?.find((u) => u.id === item.unitId);
+    const conversionQty = unit?.conversionQty || (item.baseQty / item.qty) || 1;
+    const heldBaseQty = heldOrders.reduce((sum, order) => sum + order.items.reduce(
+      (s, held) => held.productId === item.productId ? s + (Number(held.baseQty) || 0) : s, 0,
+    ), 0);
+    const otherBaseQty = heldBaseQty + prev.reduce((sum, row) => (
+      row.id !== item.id && row.productId === item.productId ? sum + (Number(row.baseQty) || 0) : sum
+    ), 0);
+    const maxQty = product ? Math.floor(Math.max(0, product.stockBaseQty - otherBaseQty) / conversionQty) : Infinity;
+    const nextQty = Math.max(1, Math.min(requestedQty, maxQty));
+    const newRule = unit ? getAppliedRule(unit, nextQty, appliesTo) : null;
+    const newPrice = newRule?.usd ?? item.unitPrice;
+    return {
+      ...item,
+      qty: nextQty,
+      baseQty: conversionQty * nextQty,
+      unitPrice: newPrice,
+      lineTotal: newPrice * nextQty,
+      appliedRuleId: newRule?.id ?? item.appliedRuleId,
+      appliedRuleLabel: newRule?.label ?? item.appliedRuleLabel,
+    };
+  }
+
   function updateQtyInCart(id, delta) {
-    setCart((prev) => prev.map((item) => {
-      if (item.id !== id) return item;
-      const product = products.find((p) => p.id === item.productId);
-      const unit = product?.units?.find((u) => u.id === item.unitId);
-      const conversionQty = unit?.conversionQty || (item.baseQty / item.qty) || 1;
-      const otherBaseQty = prev.reduce((sum, row) => (
-        row.id !== item.id && row.productId === item.productId ? sum + (Number(row.baseQty) || 0) : sum
-      ), 0);
-      const maxQty = product ? Math.floor(Math.max(0, product.stockBaseQty - otherBaseQty) / conversionQty) : Infinity;
-      const nextQty = Math.max(1, Math.min(item.qty + delta, maxQty));
-      const newRule = unit ? getAppliedRule(unit, nextQty, appliesTo) : null;
-      const newPrice = newRule?.usd ?? item.unitPrice;
-      return {
-        ...item,
-        qty: nextQty,
-        baseQty: conversionQty * nextQty,
-        unitPrice: newPrice,
-        lineTotal: newPrice * nextQty,
-        appliedRuleId: newRule?.id ?? item.appliedRuleId,
-        appliedRuleLabel: newRule?.label ?? item.appliedRuleLabel,
-      };
-    }));
+    setCart((prev) => prev.map((item) => (
+      item.id === id ? nextCartItemForQty(item, prev, item.qty + delta) : item
+    )));
+  }
+
+  // For the click-to-type qty field — sets an absolute quantity instead of stepping by 1.
+  function setQtyInCart(id, newQty) {
+    const requestedQty = Math.max(1, Math.floor(Number(newQty) || 1));
+    setCart((prev) => prev.map((item) => (
+      item.id === id ? nextCartItemForQty(item, prev, requestedQty) : item
+    )));
   }
 
   function removeFromCart(id) { setCart((prev) => prev.filter((item) => item.id !== id)); }
@@ -816,6 +876,7 @@ export default function Pos() {
           search={search}
           setSearch={setSearch}
           filteredProducts={filteredProducts}
+          reservedBaseQtyByProductId={reservedBaseQtyByProductId}
           onOpenQuickAdd={openQuickAdd}
           onOpenBarcodeCamera={() => setShowBarcodeCameraModal(true)}
         />
@@ -845,6 +906,7 @@ export default function Pos() {
             deliveryFeeUsd={deliveryFeeUsd}
             total={grandTotal}
             onUpdateQty={updateQtyInCart}
+            onSetQty={setQtyInCart}
             onRemove={removeFromCart}
             onClear={clearCart}
             onHold={holdOrder}
