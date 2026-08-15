@@ -652,7 +652,7 @@ export default function Sale() {
       provider_other_name: "",
       exchange_rate_used: Number(sale.exchangeRateKhrPerUsd || 4100),
       reference_no: "",
-      paid_at: new Date().toISOString().slice(0, 10),
+      paid_at: toLocalDateKey(new Date()),
       note: "",
     });
     setModalMode("record-payment");

@@ -14,7 +14,7 @@ import {
 } from "react-icons/fi";
 import { getStockMovementsApi } from "../../../../services/inventory.service";
 import { STATUS, STATUS_LABEL } from "../utils/purchaseConstants";
-import { extractApiData, formatAmountInCurrency, formatCondition, formatCreditAppliedAmount, formatCurrencyPair, formatDateOnly, formatDeliveryOption, formatPaymentMode, formatResolutionType } from "../utils/purchaseUtils";
+import { extractApiData, formatAmountInCurrency, formatCondition, formatCreditAppliedAmount, formatCurrencyPair, formatDateOnly, formatDateTimeLocal, formatDeliveryOption, formatPaymentMode, formatResolutionType } from "../utils/purchaseUtils";
 import { EmptyState, FormSection, ModalShell, StatusBadge, SummaryMiniBox } from "./PurchaseCommon";
 
 export function ViewPurchaseModal({
@@ -613,6 +613,39 @@ export function ViewPurchaseModal({
               )}
             </div>
           </FormSection>
+
+          {Array.isArray(purchase.payments) && purchase.payments.length > 0 && (
+            <FormSection
+              title="ប្រវត្តិទូទាត់"
+              subtitle="ការទូទាត់នីមួយៗដែលបានកត់ត្រាសម្រាប់ការទិញនេះ។"
+              icon={<FiCreditCard />}
+              theme={theme}
+            >
+              <div className="space-y-2">
+                {purchase.payments.map((payment) => (
+                  <div key={payment.id} className={`flex items-center justify-between rounded-xl border p-3 ${theme.softCard}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="table-icon-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                        <FiCreditCard size={14} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">{formatDateTimeLocal(payment.paidAt)}</p>
+                        {payment.receiverName && (
+                          <p className={`text-xs ${theme.muted}`}>{payment.receiverName}</p>
+                        )}
+                        {payment.note && (
+                          <p className={`text-xs ${theme.muted}`}>{payment.note}</p>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm font-bold text-emerald-500">
+                      {formatAmountInCurrency(payment.amountUsd, payment.amountKhr, payment.paidCurrency)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </FormSection>
+          )}
 
           <FormSection title="ស្ថានភាពលំហូរ" subtitle="សកម្មភាពណែនាំ។" icon={<FiInfo />} theme={theme}>
             <FlowTimeline

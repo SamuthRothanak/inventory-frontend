@@ -777,7 +777,6 @@ export default function VariantSetupFormModal({
                               options={[
                                 { value: "retail", label: "លក់រាយ" },
                                 { value: "wholesale", label: "លក់ដុំ" },
-                                { value: "both", label: "ទាំងពីរ" },
                               ]} />
                             <FormInput label="លក់ចាប់ពីចំនួន" required sanitize="number" allowDecimal={false} theme={theme} icon={<FiHash />}
                               value={rule.min_qty}

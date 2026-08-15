@@ -113,8 +113,67 @@ function HeldOrdersModal({ heldOrders, onResume, onDelete, onClose }) {
 }
 
 // ─── Today Sales Modal ────────────────────────────────────────────
-function TodaySalesModal({ completedSales, onClose }) {
+function TodaySalesModal({ completedSales, cashierName, onClose }) {
   const totalRevenue = completedSales.reduce((s, sale) => s + sale.total, 0);
+  const totalCash = completedSales.reduce((s, sale) => s + (sale.cashUsd || 0), 0);
+  const totalElectronic = completedSales.reduce((s, sale) => s + (sale.electronicUsd || 0), 0);
+
+  // Shift/hand-off report — a cashier finishing their shift prints this to reconcile the cash
+  // drawer before the next cashier logs in and starts a fresh "ការលក់ថ្ងៃនេះ" list of their own
+  // (already scoped to created_by, see the effect above that hydrates completedSales).
+  const handlePrint = () => {
+    const rows = completedSales.map((sale) => `
+      <tr>
+        <td>${sale.invoiceNo}</td>
+        <td>${sale.saleDate}</td>
+        <td>${sale.customerName || "-"}</td>
+        <td>${sale.itemsSummary || "-"}</td>
+        <td style="text-align:right">${usd(sale.total)}</td>
+      </tr>`).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      <title>ការវេនលក់</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@100..900&display=swap" />
+      <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: "Noto Sans Khmer", Arial, sans-serif; font-size: 13px; padding: 24px; color: #111; }
+        h1 { font-size: 18px; margin-bottom: 2px; }
+        .sub { color: #666; font-size: 12px; margin-bottom: 16px; }
+        table { width:100%; border-collapse:collapse; margin-bottom:16px; }
+        th { background:#10b981; color:#fff; padding:6px 8px; text-align:left; font-size:12px; }
+        td { padding:6px 8px; border-bottom:1px solid #eee; font-size:12px; }
+        .total-row td { font-weight:700; font-size:14px; border-top:2px solid #10b981; border-bottom:none; }
+        .footer { margin-top:20px; text-align:center; font-size:11px; color:#999; border-top:1px dashed #ccc; padding-top:10px; }
+      </style></head><body>
+      <h1>ការវេនលក់ថ្ងៃនេះ</h1>
+      <div class="sub">អ្នកលក់: ${cashierName || "-"} · ${new Date().toLocaleString()}</div>
+      <table>
+        <thead><tr><th>វិក្កយបត្រ</th><th>ម៉ោង</th><th>អតិថិជន</th><th>ទំនិញ</th><th style="text-align:right">សរុប</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr class="total-row">
+            <td colspan="4">សរុប (${completedSales.length} ប្រតិបត្តិការ)</td>
+            <td style="text-align:right">${usd(totalRevenue)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <table>
+        <thead><tr><th>បែងចែកតាមការទូទាត់</th><th style="text-align:right">ចំនួន</th></tr></thead>
+        <tbody>
+          <tr><td>សាច់ប្រាក់ (ត្រូវរាប់ក្នុងថត)</td><td style="text-align:right">${usd(totalCash)}</td></tr>
+          <tr><td>ធនាគារ / QR</td><td style="text-align:right">${usd(totalElectronic)}</td></tr>
+        </tbody>
+      </table>
+      <div class="footer">សូមរាប់លុយផ្ទៀងផ្ទាត់មុនប្រគល់វេន</div>
+      </body></html>`;
+
+    const win = window.open("", "_blank", "width=680,height=900");
+    win.document.write(html);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onMouseDown={onClose}>
@@ -130,15 +189,24 @@ function TodaySalesModal({ completedSales, onClose }) {
               <p className="text-[10px] text-slate-400">{completedSales.length} ប្រតិបត្តិការ</p>
             </div>
           </div>
-          <button type="button" onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {completedSales.length > 0 && (
+              <button type="button" onClick={handlePrint}
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                <Receipt className="h-3.5 w-3.5" />
+                បោះពុម្ព
+              </button>
+            )}
+            <button type="button" onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* Summary strip */}
         {completedSales.length > 0 && (
-          <div className="flex items-center gap-4 border-b border-slate-100 bg-emerald-50 px-5 py-3">
+          <div className="flex flex-wrap items-center gap-4 border-b border-slate-100 bg-emerald-50 px-5 py-3">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">ចំណូលសរុប</p>
               <p className="text-xl font-extrabold text-emerald-600">{usd(totalRevenue)}</p>
@@ -147,6 +215,16 @@ function TodaySalesModal({ completedSales, onClose }) {
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">ប្រតិបត្តិការ</p>
               <p className="text-xl font-extrabold text-emerald-600">{completedSales.length}</p>
+            </div>
+            <div className="h-8 w-px bg-emerald-200" />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">សាច់ប្រាក់</p>
+              <p className="text-lg font-extrabold text-emerald-600">{usd(totalCash)}</p>
+            </div>
+            <div className="h-8 w-px bg-emerald-200" />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">ធនាគារ / QR</p>
+              <p className="text-lg font-extrabold text-emerald-600">{usd(totalElectronic)}</p>
             </div>
           </div>
         )}
@@ -174,6 +252,11 @@ function TodaySalesModal({ completedSales, onClose }) {
                       {sale.customerName} · {sale.items?.length ?? 0} មុខ
                       {sale.discountAmount > 0 && ` · -${usd(sale.discountAmount)} បញ្ចុះ`}
                     </p>
+                    {sale.itemsSummary && (
+                      <p className="mt-0.5 truncate text-[11px] text-slate-400" title={sale.itemsSummary}>
+                        {sale.itemsSummary}
+                      </p>
+                    )}
                   </div>
                   <div className="ml-3 shrink-0 text-right">
                     <p className="text-sm font-extrabold text-emerald-600">{usd(sale.total)}</p>
@@ -322,17 +405,48 @@ export default function Pos() {
         const todaySales = list
           .filter((s) => toLocalDateKey(new Date(s.sold_at || s.created_at)) === todayKey)
           .sort((a, b) => new Date(b.sold_at || b.created_at) - new Date(a.sold_at || a.created_at))
-          .map((s) => ({
-            id: s.id,
-            invoiceNo: s.sale_no,
-            saleDate: new Date(s.sold_at || s.created_at).toLocaleString("en-US", {
-              year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-            }),
-            customerName: s.customer_name_snapshot || "អតិថិជនទូទៅ",
-            items: s.items || [],
-            discountAmount: Number(s.discount_total_usd || 0),
-            total: Number(s.grand_total_usd || 0),
-          }));
+          .map((s) => {
+            // Net cash-vs-electronic split (change subtracted from cash the same way the
+            // Reports page already nets it) — the shift hand-off cares about how much CASH
+            // should physically be in the drawer, which is smaller than the sale total
+            // whenever any of it was paid by QR/bank transfer.
+            let cashUsd = 0;
+            let electronicUsd = 0;
+            (Array.isArray(s.payments) ? s.payments : []).forEach((p) => {
+              if (p.voided_at) return;
+              const changeCurrency = String(p.change_currency || "").toUpperCase();
+              const changeUsd = changeCurrency === "USD"
+                ? Number(p.change_amount || 0)
+                : (changeCurrency === "KHR" && Number(p.exchange_rate_used) > 0
+                  ? Number(p.change_amount || 0) / Number(p.exchange_rate_used)
+                  : 0);
+              const netUsd = Math.max(0, Number(p.amount_received_usd || 0) - changeUsd);
+              if (p.payment_method === "cash") cashUsd += netUsd;
+              else electronicUsd += netUsd;
+            });
+
+            return {
+              id: s.id,
+              invoiceNo: s.sale_no,
+              saleDate: new Date(s.sold_at || s.created_at).toLocaleString("en-US", {
+                year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+              }),
+              customerName: s.customer_name_snapshot || "អតិថិជនទូទៅ",
+              items: s.items || [],
+              itemsSummary: (s.items || [])
+                .map((item) => {
+                  const qty = Number(item.qty || 0);
+                  const qtyText = Number.isInteger(qty) ? String(qty) : qty.toFixed(2).replace(/\.?0+$/, "");
+                  const name = item.variant_name_snapshot || item.product_name_snapshot || "";
+                  return `${name} × ${qtyText} ${item.unit_name_snapshot || ""}`.trim();
+                })
+                .join(", "),
+              discountAmount: Number(s.discount_total_usd || 0),
+              total: Number(s.grand_total_usd || 0),
+              cashUsd,
+              electronicUsd,
+            };
+          });
 
         if (!cancelled) setCompletedSales(todaySales);
       } catch {
@@ -967,6 +1081,7 @@ export default function Pos() {
       {showSales && (
         <TodaySalesModal
           completedSales={completedSales}
+          cashierName={currentUser?.name || currentUser?.username || ""}
           onClose={() => setShowSales(false)}
         />
       )}

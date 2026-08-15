@@ -357,13 +357,15 @@ export default function ProductManageModal({
                         កែមុខទំនិញ
                       </SmallActionButton>
 
-                      <SmallActionButton
-                        variant="red"
-                        onClick={() => onDeleteVariant?.(variant)}
-                      >
-                        <FiTrash2 />
-                        លុបមុខទំនិញ
-                      </SmallActionButton>
+                      {variant.canDelete && (
+                        <SmallActionButton
+                          variant="red"
+                          onClick={() => onDeleteVariant?.(variant)}
+                        >
+                          <FiTrash2 />
+                          លុបមុខទំនិញ
+                        </SmallActionButton>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -531,7 +533,6 @@ export default function ProductManageModal({
                               <td className="px-3 py-3">
                                 {rule.appliesTo === "retail" ? "លក់រាយ"
                                   : rule.appliesTo === "wholesale" ? "លក់ដុំ"
-                                  : rule.appliesTo === "both" ? "ទាំងពីរ"
                                   : rule.appliesTo}
                               </td>
                               <td className="px-3 py-3">{rule.unitName || safeRelatedUnit?.unitName || "-"}</td>

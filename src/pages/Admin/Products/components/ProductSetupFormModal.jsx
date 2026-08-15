@@ -1195,7 +1195,6 @@ function VariantSetupCard({
                               options={[
                                 { value: "retail",    label: "លក់រាយ" },
                                 { value: "wholesale", label: "លក់ដុំ" },
-                                { value: "both",      label: "ទាំងពីរ" },
                               ]} />
                             <FormInput label="លក់ចាប់ពីចំនួន" required type="number" sanitize="number" allowDecimal={false} error={ruleErrors?.min_qty?.message} theme={theme} icon={<FiHash />}
                               hint="ឧ. តម្លៃនេះប្រើពេលលក់ចាប់ពីចំនួននេះឡើងទៅ"

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const priceRuleSchema = z.object({
   local_unit_key: z.string().min(1, "សូមបញ្ជាក់ ខ្នាតទំនិញ ។"),
-  applies_to: z.enum(["retail", "wholesale", "both"], {
+  applies_to: z.enum(["retail", "wholesale"], {
     message: "សូមជ្រើស ប្រើសម្រាប់ ។",
   }),
   min_qty: z.coerce.number().min(1, "លក់ចាប់ពីចំនួន ត្រូវ ≥ 1 ។"),

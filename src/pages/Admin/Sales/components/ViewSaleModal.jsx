@@ -39,7 +39,7 @@ const RETURN_STATUS_STYLE = {
 const RETURN_STATUS_LABEL  = { pending_approval: "រង់ចាំ", approved: "យល់ព្រម", completed: "បញ្ចប់ហើយ", rejected: "បដិសេធ" };
 const RESOLUTION_LABEL     = { refund: "សងប្រាក់ជូនអតិថិជន", replacement: "ដូរទំនិញ" };
 const RETURN_TYPE_LABEL    = { full: "ត្រឡប់ទាំងអស់", partial: "ត្រឡប់មួយចំណែក" };
-const CONDITION_LABEL      = { good: "ល្អ", damaged: "ខូច", defective: "មានបញ្ហា", expired: "ផុតកំណត់" };
+const CONDITION_LABEL      = { good: "ល្អ", damaged: "មានបញ្ហា", defective: "មានបញ្ហា", expired: "ផុតកំណត់" };
 const CONDITION_COLOR      = { good: "text-emerald-600", damaged: "text-red-500", defective: "text-red-500", expired: "text-amber-600" };
 const STOCK_ACTION_LABEL   = { restock: "ដាក់ចូលស្តុកវិញ", damaged_write_off: "មិនដាក់ចូលស្តុកវិញទេ", discard: "បោះចោល" };
 
@@ -63,7 +63,7 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
   })();
 
   function printReturnReceipt(ret) {
-    const conditionLabel   = { good: "ល្អ", damaged: "ខូច", defective: "មានបញ្ហា", expired: "ផុតកំណត់" };
+    const conditionLabel   = { good: "ល្អ", damaged: "មានបញ្ហា", defective: "មានបញ្ហា", expired: "ផុតកំណត់" };
     const stockLabel       = { restock: "ដាក់ចូលស្តុកវិញ", damaged_write_off: "មិនដាក់ចូលស្តុកវិញទេ", discard: "បោះចោល" };
     const resolutionLabel  = { refund: "សងប្រាក់ជូនអតិថិជន", replacement: "ដូរទំនិញ" };
     const returnTypeLabel  = { full: "ត្រឡប់ទាំងអស់", partial: "ត្រឡប់មួយចំណែក" };
@@ -87,9 +87,12 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
       <title>${ret.sales_return_no}</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@100..900&display=swap" />
       <style>
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family: Arial, sans-serif; font-size: 13px; padding: 32px; color: #111; }
+        body { font-family: "Noto Sans Khmer", Arial, sans-serif; font-size: 13px; padding: 32px; color: #111; }
         h1 { font-size: 20px; margin-bottom: 2px; }
         .sub { color: #666; font-size: 12px; margin-bottom: 20px; }
         .badge { display:inline-block; background:#fee2e2; color:#dc2626; border-radius:6px; padding:2px 10px; font-size:11px; font-weight:700; margin-bottom:16px; }
@@ -129,6 +132,9 @@ export function ViewSaleModal({ sale, theme, onClose, onPrint }) {
           ${refundRow}
         </tfoot>
       </table>
+      ${ret.resolution_type === "replacement" ? `<div class="reason"><strong>ទំនិញជំនួសដែលប្រគល់ជូន:</strong> ${
+        (ret.items ?? []).map((item) => `${item.variant_name_snapshot || item.product_name_snapshot || "—"} × ${item.qty} ${item.unit_name_snapshot}`).join(", ")
+      }</div>` : ""}
       <div class="footer">អរគុណ · ${new Date().toLocaleString()}</div>
       </body></html>`;
 

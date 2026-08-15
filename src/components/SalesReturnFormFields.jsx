@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { FiAlertTriangle, FiCheck, FiChevronDown, FiDollarSign, FiFileText, FiHash, FiInfo, FiPackage, FiRefreshCcw, FiShield } from "react-icons/fi";
 
 const CONDITION_OPTIONS = [
-  { value: "good",      label: "ល្អ" },
-  { value: "damaged",   label: "ខូច" },
-  { value: "defective", label: "មានបញ្ហា" },
-  { value: "expired",   label: "ផុតកំណត់" },
+  { value: "good",    label: "ល្អ" },
+  { value: "damaged", label: "មានបញ្ហា" },
+  { value: "expired", label: "ផុតកំណត់" },
 ];
 
 const STOCK_ACTION_OPTIONS = [

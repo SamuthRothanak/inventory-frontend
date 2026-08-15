@@ -1531,7 +1531,10 @@ export default function Purchases() {
         const receivedQty = Number(value || 0);
         const damagedQty = Number(next.damagedQty || 0);
         next.acceptedQty = Math.max(0, receivedQty - damagedQty);
-        if (purchaseForm.paymentMode === "prepaid") {
+        // Only meaningful once the item is actually being checked in through "ទទួលទំនិញ" —
+        // computing this during initial purchase creation would flag the full invoiced qty as
+        // an immediate claim before anything was ever attempted to be received.
+        if (purchaseForm.paymentMode === "prepaid" && modalMode === "receive_goods") {
           next.claimQty = Math.max(0, Number(next.invoicedQty || 0) - next.acceptedQty);
         }
       }
@@ -1540,7 +1543,7 @@ export default function Purchases() {
         const receivedQty = Number(next.receivedQty || 0);
         const damagedQty = Number(value || 0);
         next.acceptedQty = Math.max(0, receivedQty - damagedQty);
-        if (purchaseForm.paymentMode === "prepaid") next.claimQty = Math.max(0, Number(next.invoicedQty || 0) - next.acceptedQty);
+        if (purchaseForm.paymentMode === "prepaid" && modalMode === "receive_goods") next.claimQty = Math.max(0, Number(next.invoicedQty || 0) - next.acceptedQty);
         if (purchaseForm.paymentMode === "pay_after_check") next.claimQty = 0;
       }
 
@@ -1550,7 +1553,7 @@ export default function Purchases() {
           next.paidQty = acceptedQty;
           next.claimQty = 0;
         }
-        if (purchaseForm.paymentMode === "prepaid") {
+        if (purchaseForm.paymentMode === "prepaid" && modalMode === "receive_goods") {
           next.claimQty = Math.max(0, Number(next.invoicedQty || 0) - acceptedQty);
         }
       }
@@ -1623,7 +1626,11 @@ export default function Purchases() {
 
     if (paymentMode === "prepaid") {
       paidQty = invoicedQty;
-      claimQty = Math.max(0, invoicedQty - acceptedQty);
+      // Gated on actually being in the receive-goods flow (not just receivedQty > 0, since
+      // entering 0 there is how a total non-delivery gets flagged) — otherwise a freshly added
+      // item defaults acceptedQty to 0 before anything was ever received, which would flag the
+      // full invoiced qty as an immediate claim on every new prepaid purchase.
+      claimQty = modalMode === "receive_goods" ? Math.max(0, invoicedQty - acceptedQty) : 0;
     }
 
     if (paymentMode === "partial_prepaid") {

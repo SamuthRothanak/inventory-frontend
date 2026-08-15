@@ -1039,6 +1039,21 @@ export function normalizePurchase(item) {
         }))
       : [],
 
+    // Individual payment history — only present on the single-purchase detail fetch, same as
+    // usedCredits above.
+    payments: Array.isArray(item.payments)
+      ? item.payments.map((payment) => ({
+          id: payment.id,
+          paidCurrency: normalizeCurrency(payment.paid_currency ?? payment.paidCurrency ?? "USD"),
+          amountInput: Number(payment.amount_input ?? payment.amountInput ?? 0),
+          amountUsd: Number(payment.amount_usd ?? payment.amountUsd ?? 0),
+          amountKhr: Number(payment.amount_khr ?? payment.amountKhr ?? 0),
+          paidAt: payment.paid_at ?? payment.paidAt ?? "",
+          receiverName: payment.receiver_name ?? payment.receiverName ?? "",
+          note: payment.note ?? "",
+        }))
+      : [],
+
     paidAmount: Number(item.paid_amount_input ?? item.paidAmountInput ?? paidAmountUsd),
 
     paidCurrency: normalizeCurrency(item.paid_currency || item.paidCurrency || "USD"),

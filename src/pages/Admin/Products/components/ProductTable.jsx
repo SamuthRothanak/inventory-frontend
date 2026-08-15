@@ -1,7 +1,6 @@
 ﻿import React from "react";
 import {
   FiCheckCircle,
-  FiCheckSquare,
   FiChevronLeft,
   FiChevronRight,
   FiEdit2,
@@ -10,7 +9,6 @@ import {
   FiSearch,
   FiTag,
   FiTrash2,
-  FiX,
   FiXCircle,
 } from "react-icons/fi";
 
@@ -28,18 +26,10 @@ export default function ProductTable({
   isLoading,
   isError,
   isDeleting,
-  bulkSelectMode = false,
-  selectedProductIds = [],
-  bulkDeleteIsPending = false,
   onViewProduct,
   onEditProduct,
   onDeleteProduct,
   onToggleStatus,
-  onOpenBulkSelect,
-  onCancelBulkSelect,
-  onToggleSelect,
-  onToggleSelectAll,
-  onBulkDelete,
 }) {
   const totalPages = Number(pagination?.lastPage || 1);
   const currentPage = Number(pagination?.currentPage || page || 1);
@@ -47,11 +37,7 @@ export default function ProductTable({
   const to = Number(pagination?.to || 0);
 
   const pageNumbers = getPageNumbers(currentPage, totalPages);
-  const tableColSpan = bulkSelectMode ? 7 : 6;
-  const pageProductIds = products.map((p) => Number(p.id));
-  const allVisibleSelected =
-    pageProductIds.length > 0 &&
-    pageProductIds.every((id) => selectedProductIds.some((sid) => Number(sid) === id));
+  const tableColSpan = 6;
 
   return (
     <div
@@ -69,63 +55,12 @@ export default function ProductTable({
               : `បង្ហាញ ${from || 0}-${to || products.length} នៃ ${totalProducts} ផលិតផល`}
           </p>
         </div>
-
-        <PermissionGate permission="products.delete">
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-            {bulkSelectMode ? (
-              <>
-                <button
-                  type="button"
-                  onClick={onCancelBulkSelect}
-                  disabled={bulkDeleteIsPending}
-                  className="table-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 sm:h-10 sm:px-4"
-                >
-                  <FiX />
-                  បោះបង់
-                </button>
-                <button
-                  type="button"
-                  onClick={onBulkDelete}
-                  disabled={selectedProductIds.length === 0 || bulkDeleteIsPending}
-                  className="quick-action-icon-3d inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:px-4"
-                >
-                  <FiTrash2 />
-                  {bulkDeleteIsPending
-                    ? "កំពុងលុប..."
-                    : `លុបដែលបានជ្រើស (${selectedProductIds.length})`}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={onOpenBulkSelect}
-                disabled={products.length === 0 || isLoading || isError}
-                className="table-icon-3d col-span-2 inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 text-xs font-semibold text-red-500 transition hover:-translate-y-0.5 hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 sm:col-auto sm:h-10"
-              >
-                <FiCheckSquare />
-                ជ្រើសរើសច្រើន
-              </button>
-            )}
-          </div>
-        </PermissionGate>
       </div>
 
       <div className="overflow-x-auto">
         <table className="responsive-card-table w-full min-w-220">
           <thead className="bg-red-600 text-white">
             <tr>
-              {bulkSelectMode && (
-                <th className="w-14 px-5 py-4 text-left text-sm font-semibold">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={onToggleSelectAll}
-                    aria-label="ជ្រើសផលិតផលទាំងអស់លើទំព័រនេះ"
-                    className="h-4 w-4 rounded border-white/60 text-red-500 focus:ring-red-500"
-                  />
-                </th>
-              )}
-
               <th className="px-4 py-4 text-left text-sm font-semibold">
                 ផលិតផល
               </th>
@@ -177,19 +112,8 @@ export default function ProductTable({
                 return (
                   <tr
                     key={product.id}
-                    className={`border-t transition ${theme.row} ${bulkSelectMode && selectedProductIds.some((id) => Number(id) === Number(product.id)) ? "bg-red-500/5" : ""}`}
+                    className={`border-t transition ${theme.row}`}
                   >
-                    {bulkSelectMode && (
-                      <td data-label="ជ្រើសរើស" className="px-5 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedProductIds.some((id) => Number(id) === Number(product.id))}
-                          onChange={() => onToggleSelect(product.id)}
-                          aria-label={`ជ្រើស ${product.name}`}
-                          className="h-4 w-4 rounded border-zinc-300 text-red-500 focus:ring-red-500 dark:border-white/20"
-                        />
-                      </td>
-                    )}
                     <td data-label="ផលិតផល" className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <ProductThumb product={product} />
@@ -267,18 +191,20 @@ export default function ProductTable({
                           </Tooltip>
                         </PermissionGate>
 
-                        <PermissionGate permission="products.delete">
-                          <Tooltip label="លុបផលិតផល">
-                            <button
-                              type="button"
-                              disabled={isDeleting}
-                              onClick={() => onDeleteProduct(product)}
-                              className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              <FiTrash2 size={16} />
-                            </button>
-                          </Tooltip>
-                        </PermissionGate>
+                        {product.canDelete && (
+                          <PermissionGate permission="products.delete">
+                            <Tooltip label="លុបផលិតផល">
+                              <button
+                                type="button"
+                                disabled={isDeleting}
+                                onClick={() => onDeleteProduct(product)}
+                                className="quick-action-icon-3d flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white shadow-md shadow-red-600/20 ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-red-700 hover:shadow-lg hover:shadow-red-600/25 focus:outline-none focus:ring-4 focus:ring-red-500/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <FiTrash2 size={16} />
+                              </button>
+                            </Tooltip>
+                          </PermissionGate>
+                        )}
                       </div>
                     </td>
                   </tr>

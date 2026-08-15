@@ -141,6 +141,8 @@ const REPORT_TYPE_OPTIONS = {
     { key: "customer", label: "លក់តាមអតិថិជន" },
     { key: "cashier", label: "លក់តាមអ្នកលក់" },
     { key: "return", label: "ការត្រឡប់ការលក់" },
+    { key: "payments", label: "ប្រវត្តិទូទាត់អតិថិជន" },
+    { key: "debt_payments", label: "ប្រវត្តិទូទាត់អតិថិជនជំពាក់" },
   ],
   purchases: [
     { key: "all", label: "ទាំងអស់" },
@@ -150,6 +152,7 @@ const REPORT_TYPE_OPTIONS = {
     { key: "supplier", label: "ទិញតាមអ្នកផ្គត់ផ្គង់" },
     { key: "supplier_due", label: "មិនទាន់បង់អ្នកផ្គត់ផ្គង់" },
     { key: "return", label: "ការត្រឡប់ការទិញ" },
+    { key: "payments", label: "ប្រវត្តិទូទាត់អ្នកផ្គត់ផ្គង់" },
   ],
   inventory: [
     { key: "all", label: "ទាំងអស់" },
@@ -157,7 +160,7 @@ const REPORT_TYPE_OPTIONS = {
     { key: "low_stock", label: "ស្តុកស្ទើរអស់" },
     { key: "out_of_stock", label: "ស្តុកអស់" },
     { key: "valuation", label: "តម្លៃស្តុក" },
-    { key: "batch_expiry", label: "បាច់ស្តុក/ផុតកំណត់" },
+    { key: "batch_expiry", label: "បាច់ស្តុកនិងថ្ងៃផុតកំណត់ទំនិញ" },
     { key: "adjustment", label: "កែតម្រូវស្តុក" },
     { key: "damaged", label: "ស្តុកខូច" },
   ],
@@ -405,6 +408,7 @@ export default function Report() {
   const salesReturnItems = d?.sales_return_items ?? EMPTY_LIST;
   const salesReturnItemsByProduct = d?.sales_return_items_by_product ?? EMPTY_LIST;
   const paymentTransactions = d?.payment_transactions ?? EMPTY_LIST;
+  const purchasePaymentTransactions = d?.purchase_payment_transactions ?? EMPTY_LIST;
   const lowStock      = d?.low_stock      ?? EMPTY_LIST;
   const recentActs    = d?.recent_activities ?? EMPTY_LIST;
   const payBreakdown  = d?.payment_breakdown ?? EMPTY_LIST;
@@ -701,6 +705,7 @@ export default function Report() {
     paymentSummary,
     paymentBreakdown: payBreakdown,
     paymentTransactions,
+    purchasePaymentTransactions,
     lowStock,
     outstanding,
     purchaseMoney,
@@ -733,6 +738,7 @@ export default function Report() {
     topProducts,
     topPurchaseItems,
     paymentTransactions,
+    purchasePaymentTransactions,
     purchaseDetails,
     purchasesBySupplier,
     purchaseReturnItems,
@@ -764,6 +770,7 @@ export default function Report() {
       paymentSummary,
       paymentBreakdown: payBreakdown,
       paymentTransactions,
+      purchasePaymentTransactions,
       lowStock,
       outstanding,
       purchaseMoney,
@@ -797,6 +804,7 @@ export default function Report() {
     topProducts,
     topPurchaseItems,
     paymentTransactions,
+    purchasePaymentTransactions,
     purchaseDetails,
     purchasesBySupplier,
     purchaseReturnItems,
@@ -1324,8 +1332,15 @@ export default function Report() {
       </div>
     );
   };
-  const renderPaymentReceiverList = () => {
-    const txByReceiver = paymentTransactions.reduce((acc, tx) => {
+  const renderPaymentReceiverList = (paymentType, title, subtitle) => {
+    // Split into 2 separate panels by type — an immediate payment (paid in full at checkout)
+    // carries no debt-tracking meaning, so mixing it into the same list as an installment
+    // payment settling an earlier unpaid sale made it impossible to tell which rows were
+    // actually debt repayments.
+    const filtered = paymentTransactions.filter((tx) =>
+      paymentType === "immediate" ? tx.paymentType === "immediate" : tx.paymentType !== "immediate"
+    );
+    const txByReceiver = filtered.reduce((acc, tx) => {
       const key = tx.receiverName || "Unknown";
       if (!acc[key]) acc[key] = [];
       acc[key].push(tx);
@@ -1343,8 +1358,8 @@ export default function Report() {
     return (
       <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
         <div className="mb-4">
-          <h2 className={`text-base font-bold ${theme.pageTitle}`}>ប្រតិបត្តិការទូទាត់</h2>
-          <p className={`mt-1 text-sm ${theme.muted}`}>ចុចលើឈ្មោះដើម្បីមើលប្រតិបត្តិការទូទាត់ដែលអ្នកនោះទទួលក្នុងរយៈពេលដែលបានជ្រើស</p>
+          <h2 className={`text-base font-bold ${theme.pageTitle}`}>{title}</h2>
+          <p className={`mt-1 text-sm ${theme.muted}`}>{subtitle}</p>
         </div>
 
         {rows.length === 0 ? (
@@ -1354,7 +1369,7 @@ export default function Report() {
         ) : (
           <div className="space-y-3">
             {rows.map((row) => {
-              const receiverKey = row.receiverName;
+              const receiverKey = `${paymentType}:${row.receiverName}`;
               const isOpen = !!expandedReceivers[receiverKey];
 
               return (
@@ -1366,7 +1381,7 @@ export default function Report() {
                   >
                     <div className="flex items-center gap-2">
                       <FiChevronDown className={`shrink-0 transition-transform ${isOpen ? "rotate-180" : ""} ${theme.muted}`} />
-                      <span className={`font-bold ${theme.pageTitle}`}>{receiverKey}</span>
+                      <span className={`font-bold ${theme.pageTitle}`}>{row.receiverName}</span>
                       <span className={`rounded-lg border px-2 py-0.5 text-xs font-bold ${theme.badge}`}>
                         {row.count.toLocaleString("en-US")} ប្រតិបត្តិការ
                       </span>
@@ -2102,7 +2117,7 @@ export default function Report() {
       {/* â"€â"€ Summary Cards â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       <div className={suppressReport || reportTab !== "overview" ? "hidden" : ""}>
         <p className={`mb-3 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>សង្ខេបរយៈពេល</p>
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
           {SUMMARY_CARDS.map((card) => (
             <SummaryCard key={card.title} theme={theme} {...card} />
           ))}
@@ -2332,7 +2347,26 @@ export default function Report() {
         purchasesBySupplier
       )}
 
-      {!suppressReport && reportTab === "financial" && showReportType("payments") && renderDonutVisual({
+      {!suppressReport && reportTab === "purchases" && showReportType("payments") && renderReportTable(
+        "ប្រវត្តិទូទាត់អ្នកផ្គត់ផ្គង់",
+        "ការទូទាត់នីមួយៗដែលបានកត់ត្រាឲ្យអ្នកផ្គត់ផ្គង់ក្នុងរយៈពេលដែលបានជ្រើស",
+        [
+          { key: "date", label: "ថ្ងៃ" },
+          { key: "purchaseNo", label: "លេខទិញ" },
+          { key: "supplierName", label: "អ្នកផ្គត់ផ្គង់" },
+          {
+            key: "amount",
+            label: "បានបង់",
+            render: (row) => (String(row.currency).toUpperCase() === "KHR" ? formatKhr(row.amountKhr) : fmtUsd(row.amountUsd)),
+            className: "font-bold text-emerald-600",
+          },
+          { key: "receiverName", label: "អ្នកកត់ត្រា" },
+          { key: "note", label: "ចំណាំ", render: (row) => row.note || "-" },
+        ],
+        purchasePaymentTransactions
+      )}
+
+      {!suppressReport && (reportTab === "financial" || reportTab === "sales") && showReportType("payments") && renderDonutVisual({
         title: "ក្រាបចំណែកការទូទាត់",
         subtitle: "បង្ហាញវិធីទូទាត់ដែលអតិថិជនប្រើច្រើនបំផុត",
         data: paymentDonutData,
@@ -2341,7 +2375,20 @@ export default function Report() {
         icon: FiCreditCard,
       })}
 
-      {!suppressReport && reportTab === "financial" && showReportType("payments") && renderPaymentReceiverList()}
+      {!suppressReport && (reportTab === "financial" || reportTab === "sales") && showReportType("payments") && renderPaymentReceiverList(
+        "immediate",
+        "ប្រវត្តិទូទាត់អតិថិជន (ភ្លាមៗ)",
+        "ការទូទាត់ដែលបានបង់ពេញលេញភ្លាមៗពេលលក់ — ចុចលើឈ្មោះដើម្បីមើលលម្អិត"
+      )}
+
+      {!suppressReport && (
+        (reportTab === "financial" && showReportType("payments")) ||
+        (reportTab === "sales" && showAnyReportType(["payments", "debt_payments"]))
+      ) && renderPaymentReceiverList(
+        "debt_repayment",
+        "ប្រវត្តិទូទាត់អតិថិជន (សងបំណុល)",
+        "ការទូទាត់ដែលបានសងសម្រាប់ការលក់ជំពាក់ពីមុន — ចុចលើឈ្មោះដើម្បីមើលលម្អិត"
+      )}
 
       {!suppressReport && reportTab === "sales" && showReportType("return") && (
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
@@ -2523,7 +2570,7 @@ export default function Report() {
       )}
 
       {!suppressReport && reportTab === "inventory" && showReportType("batch_expiry") && renderReportTable(
-        "បាច់ស្តុក និងថ្ងៃផុតកំណត់",
+        "បាច់ស្តុកនិងថ្ងៃផុតកំណត់ទំនិញ",
         "បាច់ស្តុកដែលនៅសល់ និងមានថ្ងៃផុតកំណត់",
         [
           { key: "batchNo", label: "លេខបាច់" },

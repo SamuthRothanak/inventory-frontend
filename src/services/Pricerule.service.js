@@ -2,7 +2,7 @@ import api from "../lib/axios";
 
 // GET /price-rules response (nested):
 // { id, product_variant_unit_id, product_variant_unit: {id, unit_id, product_variant_id},
-//   applies_to ("retail"|"wholesale"|"both"), min_qty (number),
+//   applies_to ("retail"|"wholesale"), min_qty (number),
 //   unit_price_usd (string), unit_price_khr (string),
 //   input_currency ("USD"|"KHR"), input_price (string),
 //   exchange_rate_used (decimal), status ("active"|"inactive"), ... }
@@ -18,10 +18,10 @@ const normalizeStatusForApi = (status) => {
     : "inactive";
 };
 
-// applies_to: retail | wholesale | both (មិនមែន public/customer)
+// applies_to: retail | wholesale (មិនមែន public/customer)
 const normalizeAppliesTo = (value) => {
   const v = String(value || "retail").toLowerCase();
-  if (["retail", "wholesale", "both"].includes(v)) return v;
+  if (["retail", "wholesale"].includes(v)) return v;
   // map legacy
   if (v === "public") return "retail";
   if (v === "customer") return "wholesale";
