@@ -36,6 +36,8 @@ export const LogOut      = ({ className }) => <Icon className={className}><path 
 export const X           = ({ className }) => <Icon className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Icon>;
 export const CheckCircle = ({ className }) => <Icon className={className}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></Icon>;
 export const ChevronDown = ({ className }) => <Icon className={className}><path d="m6 9 6 6 6-6"/></Icon>;
+export const ChevronLeft = ({ className }) => <Icon className={className}><path d="m15 18-6-6 6-6"/></Icon>;
+export const ChevronRight= ({ className }) => <Icon className={className}><path d="m9 18 6-6-6-6"/></Icon>;
 export const Tag         = ({ className }) => <Icon className={className}><path d="M12 2H7a2 2 0 0 0-2 2v5l8.5 8.5a2 2 0 0 0 2.83 0l4.17-4.17a2 2 0 0 0 0-2.83L12 2Z"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor" stroke="none"/></Icon>;
 export const Truck       = ({ className }) => <Icon className={className}><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></Icon>;
 export const Percent     = ({ className }) => <Icon className={className}><path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></Icon>;

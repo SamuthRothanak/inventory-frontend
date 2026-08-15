@@ -1,8 +1,20 @@
 import React, { useState } from "react";
-import { Search, Package2, ScanLine } from "./posIcons";
+import { Search, Package2, ScanLine, ChevronLeft, ChevronRight } from "./posIcons";
 import { EmptyState } from "./ui";
 import { getAppliedRule, usd, cn } from "./posData";
 
+const PRODUCTS_PER_PAGE = 24;
+
+// Same "1 2 3 ... N" ellipsis pattern as the Reports page's table pagination, for a consistent
+// look across the app.
+function getPageNumbers(currentPage, totalPages) {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  if (currentPage <= 4) return [1, 2, 3, 4, 5, "...", totalPages];
+  if (currentPage >= totalPages - 3) {
+    return [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
+  return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
+}
 
 function stockBorderClass(stockBaseQty, lowStockThreshold) {
   if (stockBaseQty <= 0)                 return "border-t-red-400";
@@ -125,10 +137,29 @@ export default function ProductBrowser({
   search,
   setSearch,
   filteredProducts,
+  reservedBaseQtyByProductId = {},
   onOpenQuickAdd,
   onOpenBarcodeCamera,
 }) {
   const [viewMode, setViewMode] = useState("grid");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Jump back to page 1 whenever the visible set changes shape (new search/category/view) —
+  // otherwise a cashier filtering down to fewer results can land on a now-empty page. Adjusted
+  // during render (React's documented pattern for "reset state when a prop changes") rather
+  // than in a useEffect, which would cause an extra visible render of the stale page first.
+  const [pageResetKey, setPageResetKey] = useState(`${category}|${search}|${viewMode}`);
+  const currentResetKey = `${category}|${search}|${viewMode}`;
+  if (pageResetKey !== currentResetKey) {
+    setPageResetKey(currentResetKey);
+    setCurrentPage(1);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * PRODUCTS_PER_PAGE;
+  const pageProducts = filteredProducts.slice(pageStart, pageStart + PRODUCTS_PER_PAGE);
+  const pageNumbers = getPageNumbers(safePage, totalPages);
 
   // count per category (against ALL products, not filtered by category)
   // We receive filteredProducts which is already filtered by search — so count may reflect search
@@ -258,14 +289,18 @@ export default function ProductBrowser({
           />
         ) : viewMode === "grid" ? (
           <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
-            {filteredProducts.map((item) => {
+            {pageProducts.map((item) => {
               const publicRule = getAppliedRule(item.units[0], 1, "public");
+              // Display only — cart's own stock-limit math already accounts for reservations
+              // itself, so onOpenQuickAdd still gets the raw `item` (see productBrowser prop
+              // comment in Pos.jsx for why double-subtracting must be avoided).
+              const displayItem = { ...item, stockBaseQty: Math.max(0, item.stockBaseQty - (reservedBaseQtyByProductId[item.id] || 0)) };
               return (
                 <ProductCardGrid
                   key={item.id}
-                  item={item}
+                  item={displayItem}
                   publicRule={publicRule}
-                  isOut={item.stockBaseQty <= 0}
+                  isOut={displayItem.stockBaseQty <= 0}
                   onClick={() => onOpenQuickAdd(item)}
                 />
               );
@@ -273,14 +308,15 @@ export default function ProductBrowser({
           </div>
         ) : (
           <div className="space-y-2">
-            {filteredProducts.map((item) => {
+            {pageProducts.map((item) => {
               const publicRule = getAppliedRule(item.units[0], 1, "public");
+              const displayItem = { ...item, stockBaseQty: Math.max(0, item.stockBaseQty - (reservedBaseQtyByProductId[item.id] || 0)) };
               return (
                 <ProductCardList
                   key={item.id}
-                  item={item}
+                  item={displayItem}
                   publicRule={publicRule}
-                  isOut={item.stockBaseQty <= 0}
+                  isOut={displayItem.stockBaseQty <= 0}
                   onClick={() => onOpenQuickAdd(item)}
                 />
               );
@@ -288,6 +324,51 @@ export default function ProductBrowser({
           </div>
         )}
       </div>
+
+      {/* ── Pagination ── */}
+      {totalPages > 1 && (
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-slate-100 px-3 py-3">
+          <button
+            type="button"
+            disabled={safePage <= 1}
+            onClick={() => setCurrentPage(safePage - 1)}
+            className="flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            មុន
+          </button>
+
+          {pageNumbers.map((item, index) =>
+            item === "..." ? (
+              <span key={`ellipsis-${index}`} className="px-1 text-xs font-semibold text-slate-400">...</span>
+            ) : (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setCurrentPage(item)}
+                className={cn(
+                  "h-9 min-w-9 rounded-xl px-3 text-xs font-bold transition",
+                  item === safePage
+                    ? "bg-red-600 text-white shadow-sm"
+                    : "border border-slate-200 bg-slate-50 text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                )}
+              >
+                {item}
+              </button>
+            )
+          )}
+
+          <button
+            type="button"
+            disabled={safePage >= totalPages}
+            onClick={() => setCurrentPage(safePage + 1)}
+            className="flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            បន្ទាប់
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

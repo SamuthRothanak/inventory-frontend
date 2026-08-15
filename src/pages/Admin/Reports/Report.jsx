@@ -112,7 +112,7 @@ const adjustmentTypeLabel = (value) => ADJUSTMENT_TYPE_LABEL[String(value || "")
 const ADJUSTMENT_REASON_LABEL = Object.fromEntries(adjustmentReasons.map((r) => [r.value, r.label]));
 const adjustmentReasonLabel = (value) => ADJUSTMENT_REASON_LABEL[String(value || "").toLowerCase()] ?? value ?? "";
 
-const STOCK_SOURCE_LABEL = { purchase: "ការទិញចូល", sales_return: "ត្រឡប់ការលក់" };
+const STOCK_SOURCE_LABEL = { purchase: "ការទិញចូល", sales_return: "ត្រឡប់ការលក់", adjustment: "កែតម្រូវស្តុក" };
 const stockSourceLabel = (value) => STOCK_SOURCE_LABEL[String(value || "").toLowerCase()] ?? value ?? "";
 
 const BANK_PROVIDER_META = {
@@ -137,29 +137,30 @@ const REPORT_TYPE_OPTIONS = {
     { key: "all", label: "ទាំងអស់" },
     { key: "summary", label: "សង្ខេបការលក់" },
     { key: "details", label: "លម្អិតការលក់" },
-    { key: "product", label: "លក់តាមទំនិញ" },
+    { key: "product", label: "ទំនិញលក់ដាច់" },
     { key: "customer", label: "លក់តាមអតិថិជន" },
     { key: "cashier", label: "លក់តាមអ្នកលក់" },
     { key: "return", label: "ការត្រឡប់ការលក់" },
-    { key: "profit", label: "ប្រាក់ចំណេញ" },
+    { key: "payments", label: "ប្រវត្តិទូទាត់អតិថិជន" },
+    { key: "debt_payments", label: "ប្រវត្តិទូទាត់អតិថិជនជំពាក់" },
   ],
   purchases: [
     { key: "all", label: "ទាំងអស់" },
     { key: "summary", label: "សង្ខេបការទិញ" },
     { key: "details", label: "លម្អិតការទិញ" },
-    { key: "product", label: "ទិញតាមទំនិញ" },
+    { key: "product", label: "ទំនិញទិញច្រើន" },
     { key: "supplier", label: "ទិញតាមអ្នកផ្គត់ផ្គង់" },
     { key: "supplier_due", label: "មិនទាន់បង់អ្នកផ្គត់ផ្គង់" },
     { key: "return", label: "ការត្រឡប់ការទិញ" },
+    { key: "payments", label: "ប្រវត្តិទូទាត់អ្នកផ្គត់ផ្គង់" },
   ],
   inventory: [
     { key: "all", label: "ទាំងអស់" },
-    { key: "current", label: "ស្តុកបច្ចុប្បន្ន" },
     { key: "movement", label: "ចលនាស្តុក" },
     { key: "low_stock", label: "ស្តុកស្ទើរអស់" },
     { key: "out_of_stock", label: "ស្តុកអស់" },
     { key: "valuation", label: "តម្លៃស្តុក" },
-    { key: "batch_expiry", label: "Batch/ផុតកំណត់" },
+    { key: "batch_expiry", label: "បាច់ស្តុកនិងថ្ងៃផុតកំណត់ទំនិញ" },
     { key: "adjustment", label: "កែតម្រូវស្តុក" },
     { key: "damaged", label: "ស្តុកខូច" },
   ],
@@ -169,7 +170,6 @@ const REPORT_TYPE_OPTIONS = {
     { key: "customer_due", label: "អតិថិជនមិនទាន់ទូទាត់" },
     { key: "supplier_due", label: "មិនទាន់បង់អ្នកផ្គត់ផ្គង់" },
     { key: "payments", label: "ប្រតិបត្តិការទូទាត់" },
-    { key: "cash_flow", label: "លុយចូល/ចេញ" },
   ],
 };
 
@@ -349,6 +349,9 @@ export default function Report() {
   const [tablePages, setTablePages] = useState({});
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [expandedCashiers, setExpandedCashiers] = useState({});
+  const [expandedSuppliers, setExpandedSuppliers] = useState({});
+  const [expandedCustomers, setExpandedCustomers] = useState({});
+  const [expandedReceivers, setExpandedReceivers] = useState({});
 
   const applyPeriod = (period) => {
     const now = new Date();
@@ -400,10 +403,12 @@ export default function Report() {
   const salesByCashier = d?.sales_by_cashier ?? EMPTY_LIST;
   const purchaseDetails = d?.purchase_details ?? EMPTY_LIST;
   const purchasesBySupplier = d?.purchases_by_supplier ?? EMPTY_LIST;
-  const purchaseReturns = d?.purchase_returns ?? EMPTY_LIST;
+  const purchaseReturnItems = d?.purchase_return_items ?? EMPTY_LIST;
+  const purchaseReturnItemsByProduct = d?.purchase_return_items_by_product ?? EMPTY_LIST;
   const salesReturnItems = d?.sales_return_items ?? EMPTY_LIST;
   const salesReturnItemsByProduct = d?.sales_return_items_by_product ?? EMPTY_LIST;
   const paymentTransactions = d?.payment_transactions ?? EMPTY_LIST;
+  const purchasePaymentTransactions = d?.purchase_payment_transactions ?? EMPTY_LIST;
   const lowStock      = d?.low_stock      ?? EMPTY_LIST;
   const recentActs    = d?.recent_activities ?? EMPTY_LIST;
   const payBreakdown  = d?.payment_breakdown ?? EMPTY_LIST;
@@ -547,9 +552,6 @@ export default function Report() {
   const returnProfitImpactUsd = Number(salesProfit.returnProfitImpactUsd ?? stats.sales_return_profit_impact_usd ?? 0);
   const grossProfitUsd = Number(stats.net_gross_profit_usd ?? salesProfit.netGrossProfitUsd ?? stats.gross_profit_usd ?? 0);
   const salesPurchaseGapUsd = Number(totalSales || 0) - Number(totalPurchases || 0);
-  const profitMarginPercent = Number(totalSales || 0) > 0
-    ? (grossProfitUsd / Number(totalSales || 0)) * 100
-    : 0;
   const selectedDayCount = dateFrom && dateTo
     ? Math.max(1, Math.round((new Date(`${dateTo}T00:00:00`) - new Date(`${dateFrom}T00:00:00`)) / 86_400_000) + 1)
     : 0;
@@ -601,7 +603,7 @@ export default function Report() {
     {
       title:    "ចំណេញពីការលក់",
       value:    fmtUsd(grossProfitUsd),
-      subtitle: "ប្រាក់លក់ - ថ្លៃដើម",
+      subtitle: "ការលក់ - ថ្លៃដើម - ត្រឡប់",
       icon:     <FiDollarSign />,
       iconBg:   "bg-emerald-500/10 text-emerald-500",
       accent:   "border-l-emerald-500",
@@ -637,6 +639,16 @@ export default function Report() {
       accent:   "border-l-red-500",
       trend:    null,
       trendType: "down",
+    },
+    {
+      title:    "លុយទទួលបានពិត",
+      value:    fmtUsd(paymentSummary.netEquivalentUsd),
+      subtitle: "ក្រោយដកសងវិញ",
+      icon:     <FiDollarSign />,
+      iconBg:   "bg-emerald-500/10 text-emerald-500",
+      accent:   "border-l-emerald-500",
+      trend:    null,
+      trendType: null,
     },
     {
       title:    "លុយអតិថិជនមិនទាន់បង់",
@@ -686,10 +698,14 @@ export default function Report() {
     salesByCashier,
     purchaseDetails,
     purchasesBySupplier,
-    purchaseReturns,
+    purchaseReturnItems,
+    purchaseReturnItemsByProduct,
+    salesReturnItems,
+    salesReturnItemsByProduct,
     paymentSummary,
     paymentBreakdown: payBreakdown,
     paymentTransactions,
+    purchasePaymentTransactions,
     lowStock,
     outstanding,
     purchaseMoney,
@@ -722,9 +738,13 @@ export default function Report() {
     topProducts,
     topPurchaseItems,
     paymentTransactions,
+    purchasePaymentTransactions,
     purchaseDetails,
     purchasesBySupplier,
-    purchaseReturns,
+    purchaseReturnItems,
+    purchaseReturnItemsByProduct,
+    salesReturnItems,
+    salesReturnItemsByProduct,
   ]);
 
   const allTabsReportExport = useMemo(() => {
@@ -743,10 +763,14 @@ export default function Report() {
       salesByCashier,
       purchaseDetails,
       purchasesBySupplier,
-      purchaseReturns,
+      purchaseReturnItems,
+      purchaseReturnItemsByProduct,
+      salesReturnItems,
+      salesReturnItemsByProduct,
       paymentSummary,
       paymentBreakdown: payBreakdown,
       paymentTransactions,
+      purchasePaymentTransactions,
       lowStock,
       outstanding,
       purchaseMoney,
@@ -780,9 +804,13 @@ export default function Report() {
     topProducts,
     topPurchaseItems,
     paymentTransactions,
+    purchasePaymentTransactions,
     purchaseDetails,
     purchasesBySupplier,
-    purchaseReturns,
+    purchaseReturnItems,
+    purchaseReturnItemsByProduct,
+    salesReturnItems,
+    salesReturnItemsByProduct,
   ]);
 
   const activeFollowUpTab =
@@ -794,13 +822,18 @@ export default function Report() {
   const showReportType = (key) => isAllReport || activeReportType === key;
   const showAnyReportType = (keys) => isAllReport || keys.includes(activeReportType);
   const showPurchaseSummary = reportTab === "overview" || showReportType("summary");
-  const showPurchaseProducts = reportTab === "overview" || showAnyReportType(["summary", "product"]);
   const showSupplierDue = reportTab === "overview" || showAnyReportType(["summary", "supplier_due"]);
   const salesProductVisualData = topProducts.slice(0, 8).map((item) => ({
     name: cleanRepeatedProductName(item.name),
     originalName: item.name,
     value: Number(item.revenueUsd || 0),
     meta: `${Number(item.soldQty || 0).toLocaleString("en-US")} ${item.unit || ""}`,
+  }));
+  const purchaseProductVisualData = topPurchaseItems.map((item) => ({
+    name: cleanRepeatedProductName(item.name),
+    originalName: item.name,
+    value: Number(item.totalUsd || 0),
+    meta: `${Number(item.qty || 0).toLocaleString("en-US")} ${item.unit || ""}`,
   }));
   const purchaseSupplierVisualData = purchasesBySupplier.map((item) => ({
     name: item.supplierName,
@@ -1099,7 +1132,7 @@ export default function Report() {
                                 <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>លេខវិក្កយបត្រ</th>
                                 <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>ថ្ងៃ</th>
                                 <th className={`px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>ទំនិញលក់</th>
-                                <th className={`whitespace-nowrap px-4 py-2 text-right text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>ថ្លៃ</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-right text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>តម្លៃ</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1120,6 +1153,268 @@ export default function Report() {
                           លក់សរុប {fmtUsd(row.totalUsd)} − សងត្រឡប់ <span className="font-bold text-red-500">{fmtUsd(row.refundUsd)}</span> = ចំណូលពិត <span className="font-bold text-emerald-600">{fmtUsd(row.netUsd ?? row.totalUsd)}</span>
                         </p>
                       )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+  const renderSupplierInvoiceList = () => {
+    const rows = [...(purchaseMoney.suppliers ?? [])].sort((a, b) => Number(b.totalUsd || 0) - Number(a.totalUsd || 0));
+    const invoicesBySupplier = (purchaseMoney.invoices ?? []).reduce((acc, inv) => {
+      if (!acc[inv.supplierName]) acc[inv.supplierName] = [];
+      acc[inv.supplierName].push(inv);
+      return acc;
+    }, {});
+
+    return (
+      <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+        <div className="mb-4">
+          <h2 className={`text-base font-bold ${theme.pageTitle}`}>មិនទាន់បង់អ្នកផ្គត់ផ្គង់</h2>
+          <p className={`mt-1 text-sm ${theme.muted}`}>ចុចលើឈ្មោះដើម្បីមើលវិក្កយបត្រទិញនីមួយៗ (សមតុល្យបច្ចុប្បន្ន — មិនកំណត់តាមរយៈពេលដែលបានជ្រើស)</p>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className={`flex min-h-32 items-center justify-center rounded-xl border border-dashed ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+            <p className={`text-sm ${theme.muted}`}>គ្មានទិន្នន័យ</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((row) => {
+              const supplierKey = row.supplierName || "Unknown";
+              const isOpen = !!expandedSuppliers[supplierKey];
+              const invoices = invoicesBySupplier[supplierKey] ?? [];
+
+              return (
+                <div key={supplierKey} className={`overflow-hidden rounded-xl border ${theme.softCard}`}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedSuppliers((prev) => ({ ...prev, [supplierKey]: !prev[supplierKey] }))}
+                    className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FiChevronDown className={`shrink-0 transition-transform ${isOpen ? "rotate-180" : ""} ${theme.muted}`} />
+                      <span className={`font-bold ${theme.pageTitle}`}>{supplierKey}</span>
+                      <span className={`rounded-lg border px-2 py-0.5 text-xs font-bold ${theme.badge}`}>
+                        {Number(row.count || 0).toLocaleString("en-US")} វិក្កយបត្រ
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="block font-extrabold tabular-nums text-amber-600">{fmtUsd(row.totalUsd)}</span>
+                      <span className={`block text-xs ${theme.muted}`}>{formatKhr(row.totalKhr)}</span>
+                    </div>
+                  </button>
+
+                  {isOpen && (
+                    <div className={`border-t ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                      {invoices.length === 0 ? (
+                        <p className={`p-4 text-sm ${theme.muted}`}>គ្មានវិក្កយបត្រ</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-zinc-200/70 text-sm dark:divide-white/10">
+                            <thead className={isDark ? "bg-white/[0.03]" : "bg-zinc-50"}>
+                              <tr>
+                                <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>វិក្កយបត្រទិញ</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>ថ្ងៃ</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-right text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>សរុប</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-right text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>នៅខ្វះ USD</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-right text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>នៅខ្វះ KHR</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {invoices.map((inv) => (
+                                <tr key={inv.purchaseNo} className={`border-t ${theme.row}`}>
+                                  <td className="whitespace-nowrap px-4 py-2 font-semibold">{inv.purchaseNo}</td>
+                                  <td className={`whitespace-nowrap px-4 py-2 ${theme.muted}`}>{inv.date}</td>
+                                  <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums">{fmtUsd(inv.totalUsd)}</td>
+                                  <td className="whitespace-nowrap px-4 py-2 text-right font-bold tabular-nums text-amber-600">{fmtUsd(inv.dueUsd)}</td>
+                                  <td className={`whitespace-nowrap px-4 py-2 text-right tabular-nums ${theme.muted}`}>{formatKhr(inv.dueKhr)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+  const renderCustomerInvoiceList = () => {
+    const rows = [...(outstanding.customers ?? [])].sort((a, b) => Number(b.totalUsd || 0) - Number(a.totalUsd || 0));
+    const invoicesByCustomer = (outstanding.invoices ?? []).reduce((acc, inv) => {
+      if (!acc[inv.customerName]) acc[inv.customerName] = [];
+      acc[inv.customerName].push(inv);
+      return acc;
+    }, {});
+
+    return (
+      <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+        <div className="mb-4">
+          <h2 className={`text-base font-bold ${theme.pageTitle}`}>អតិថិជនមិនទាន់ទូទាត់</h2>
+          <p className={`mt-1 text-sm ${theme.muted}`}>ចុចលើឈ្មោះដើម្បីមើលវិក្កយបត្រនីមួយៗដែលនៅមិនទាន់ទូទាត់ (សមតុល្យបច្ចុប្បន្ន — មិនកំណត់តាមរយៈពេលដែលបានជ្រើស)</p>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className={`flex min-h-32 items-center justify-center rounded-xl border border-dashed ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+            <p className={`text-sm ${theme.muted}`}>គ្មានទិន្នន័យ</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((row) => {
+              const customerKey = row.customerName || "Unknown";
+              const isOpen = !!expandedCustomers[customerKey];
+              const invoices = invoicesByCustomer[customerKey] ?? [];
+
+              return (
+                <div key={customerKey} className={`overflow-hidden rounded-xl border ${theme.softCard}`}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedCustomers((prev) => ({ ...prev, [customerKey]: !prev[customerKey] }))}
+                    className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FiChevronDown className={`shrink-0 transition-transform ${isOpen ? "rotate-180" : ""} ${theme.muted}`} />
+                      <span className={`font-bold ${theme.pageTitle}`}>{customerKey}</span>
+                      <span className={`rounded-lg border px-2 py-0.5 text-xs font-bold ${theme.badge}`}>
+                        {Number(row.count || 0).toLocaleString("en-US")} វិក្កយបត្រ
+                      </span>
+                    </div>
+                    <span className="font-extrabold tabular-nums text-red-500">{fmtUsd(row.totalUsd)}</span>
+                  </button>
+
+                  {isOpen && (
+                    <div className={`border-t ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                      {invoices.length === 0 ? (
+                        <p className={`p-4 text-sm ${theme.muted}`}>គ្មានវិក្កយបត្រ</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-zinc-200/70 text-sm dark:divide-white/10">
+                            <thead className={isDark ? "bg-white/[0.03]" : "bg-zinc-50"}>
+                              <tr>
+                                <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>វិក្កយបត្រ</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>ថ្ងៃ/ម៉ោង</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-right text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>សរុប</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-right text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>នៅខ្វះ</th>
+                                <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>អ្នកលក់</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {invoices.map((inv) => (
+                                <tr key={inv.saleNo} className={`border-t ${theme.row}`}>
+                                  <td className="whitespace-nowrap px-4 py-2 font-semibold">{inv.saleNo}</td>
+                                  <td className={`whitespace-nowrap px-4 py-2 ${theme.muted}`}>{inv.date}</td>
+                                  <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums">{fmtUsd(inv.totalUsd)}</td>
+                                  <td className="whitespace-nowrap px-4 py-2 text-right font-bold tabular-nums text-red-500">{fmtUsd(inv.dueUsd)}</td>
+                                  <td className={`whitespace-nowrap px-4 py-2 ${theme.muted}`}>{inv.cashierName}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+  const renderPaymentReceiverList = (paymentType, title, subtitle) => {
+    // Split into 2 separate panels by type — an immediate payment (paid in full at checkout)
+    // carries no debt-tracking meaning, so mixing it into the same list as an installment
+    // payment settling an earlier unpaid sale made it impossible to tell which rows were
+    // actually debt repayments.
+    const filtered = paymentTransactions.filter((tx) =>
+      paymentType === "immediate" ? tx.paymentType === "immediate" : tx.paymentType !== "immediate"
+    );
+    const txByReceiver = filtered.reduce((acc, tx) => {
+      const key = tx.receiverName || "Unknown";
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(tx);
+      return acc;
+    }, {});
+    const rows = Object.entries(txByReceiver)
+      .map(([receiverName, items]) => ({
+        receiverName,
+        count: items.length,
+        totalUsd: items.reduce((sum, tx) => sum + Number(tx.amountUsd || 0), 0),
+        items,
+      }))
+      .sort((a, b) => b.totalUsd - a.totalUsd);
+
+    return (
+      <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+        <div className="mb-4">
+          <h2 className={`text-base font-bold ${theme.pageTitle}`}>{title}</h2>
+          <p className={`mt-1 text-sm ${theme.muted}`}>{subtitle}</p>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className={`flex min-h-32 items-center justify-center rounded-xl border border-dashed ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+            <p className={`text-sm ${theme.muted}`}>គ្មានទិន្នន័យ</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((row) => {
+              const receiverKey = `${paymentType}:${row.receiverName}`;
+              const isOpen = !!expandedReceivers[receiverKey];
+
+              return (
+                <div key={receiverKey} className={`overflow-hidden rounded-xl border ${theme.softCard}`}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedReceivers((prev) => ({ ...prev, [receiverKey]: !prev[receiverKey] }))}
+                    className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FiChevronDown className={`shrink-0 transition-transform ${isOpen ? "rotate-180" : ""} ${theme.muted}`} />
+                      <span className={`font-bold ${theme.pageTitle}`}>{row.receiverName}</span>
+                      <span className={`rounded-lg border px-2 py-0.5 text-xs font-bold ${theme.badge}`}>
+                        {row.count.toLocaleString("en-US")} ប្រតិបត្តិការ
+                      </span>
+                    </div>
+                    <span className="font-extrabold tabular-nums text-emerald-600">{fmtUsd(row.totalUsd)}</span>
+                  </button>
+
+                  {isOpen && (
+                    <div className={`border-t ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-zinc-200/70 text-sm dark:divide-white/10">
+                          <thead className={isDark ? "bg-white/[0.03]" : "bg-zinc-50"}>
+                            <tr>
+                              <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>ថ្ងៃ/ម៉ោង</th>
+                              <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>វិក្កយបត្រ</th>
+                              <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>អតិថិជន</th>
+                              <th className={`whitespace-nowrap px-4 py-2 text-left text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>វិធី</th>
+                              <th className={`whitespace-nowrap px-4 py-2 text-right text-xs font-extrabold uppercase tracking-wide ${theme.muted}`}>បានទទួល</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {row.items.map((tx, idx) => (
+                              <tr key={tx.id ?? idx} className={`border-t ${theme.row}`}>
+                                <td className={`whitespace-nowrap px-4 py-2 ${theme.muted}`}>{tx.date}</td>
+                                <td className="whitespace-nowrap px-4 py-2 font-semibold">{tx.saleNo}</td>
+                                <td className={`whitespace-nowrap px-4 py-2 ${theme.muted}`}>{tx.customerName}</td>
+                                <td className={`whitespace-nowrap px-4 py-2 ${theme.muted}`}>{METHOD_LABEL[tx.method] || tx.method}</td>
+                                <td className="whitespace-nowrap px-4 py-2 text-right font-bold tabular-nums">{Number(tx.receivedAmount || 0).toLocaleString("en-US")} {tx.currency || ""}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1197,8 +1492,7 @@ export default function Report() {
   const renderOverviewComparisonPanel = () => {
     const stockHealthy = Math.max(0, Number(stockReport.stockItemCount || 0) - Number(stockReport.lowStockCount ?? stats.low_stock_count ?? 0) - Number(stockReport.outOfStockCount || 0));
     const stockRiskCount = Number(stockReport.lowStockCount ?? stats.low_stock_count ?? 0) + Number(stockReport.outOfStockCount || 0);
-    const paymentLeaders = paymentDonutData.slice(0, 4);
-    const paymentFunnelData = paymentLeaders.map((item, index) => ({
+    const paymentFunnelData = paymentDonutData.map((item, index) => ({
       ...item,
       fill: PAYMENT_DONUT_COLORS[index % PAYMENT_DONUT_COLORS.length],
     }));
@@ -1233,23 +1527,6 @@ export default function Report() {
           <span className={`self-start rounded-xl border px-3 py-1.5 text-xs font-bold ${theme.badge}`}>
             មើលសរុបសម្រាប់អ្នកគ្រប់គ្រង
           </span>
-        </div>
-
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            ["លុយទទួលបានពិត", fmtUsd(paymentSummary.netEquivalentUsd), "text-emerald-600", "bg-emerald-500/10"],
-            ["អតិថិជននៅខ្វះ", fmtUsd(outstanding.totalUsd), "text-red-500", "bg-red-500/10"],
-            ["មិនទាន់បង់អ្នកផ្គត់ផ្គង់", fmtUsd(purchaseMoney.outstandingUsd), "text-amber-600", "bg-amber-500/10"],
-            ["តម្លៃស្តុក", fmtUsd(stockReport.valueUsd), "text-violet-600", "bg-violet-500/10"],
-          ].map(([label, value, valueClass, bgClass]) => (
-            <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
-              <div className="flex items-center justify-between gap-3">
-                <p className={`truncate text-xs font-bold ${theme.muted}`}>{label}</p>
-                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${bgClass}`} />
-              </div>
-              <p className={`mt-1 truncate text-lg font-extrabold tabular-nums ${valueClass}`}>{value}</p>
-            </div>
-          ))}
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -1840,7 +2117,7 @@ export default function Report() {
       {/* â"€â"€ Summary Cards â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       <div className={suppressReport || reportTab !== "overview" ? "hidden" : ""}>
         <p className={`mb-3 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>សង្ខេបរយៈពេល</p>
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
           {SUMMARY_CARDS.map((card) => (
             <SummaryCard key={card.title} theme={theme} {...card} />
           ))}
@@ -1937,8 +2214,8 @@ export default function Report() {
             {[
               ["លក់បានសរុប", fmtUsd(stats.total_sales_usd), formatKhr(stats.total_sales_khr), "text-emerald-600", "តម្លៃវិក្កយបត្រលក់ទាំងអស់ក្នុងរយៈពេលនេះ"],
               ["ប្រាក់លក់បានពិត", fmtUsd(realSalesUsd), formatKhr(realSalesKhr), "text-blue-600", "លុយបានទទួលជាក់ស្តែង (ក្រោយដកសងវិញរួច)"],
-              ["ត្រឡប់ - សងលុយ", fmtUsd(stats.sales_returns_cash_usd), formatKhr(stats.sales_returns_cash_khr), "text-red-500", "លុយពិតដែលបានចេញឲ្យអតិថិជនវិញ"],
-              ["ត្រឡប់ - ដូរទំនិញ", fmtUsd(stats.sales_returns_non_cash_usd), formatKhr(stats.sales_returns_non_cash_khr), "text-amber-600", "គ្មានលុយចេញពីហាង គ្រាន់តែដូរទំនិញ"],
+              ["ត្រឡប់ - សងលុយ", fmtUsd(stats.sales_returns_cash_usd), formatKhr(stats.sales_returns_cash_khr), "text-red-500", `លុយពិតដែលបានចេញឲ្យអតិថិជនវិញ (${Number(stats.sales_returns_cash_count || 0).toLocaleString("en-US")} ដង)`],
+              ["ត្រឡប់ - ដូរទំនិញ", fmtUsd(stats.sales_returns_non_cash_usd), formatKhr(stats.sales_returns_non_cash_khr), "text-amber-600", `គ្មានលុយចេញពីហាង គ្រាន់តែដូរទំនិញ (${Number(stats.sales_returns_non_cash_count || 0).toLocaleString("en-US")} ដង)`],
             ].map(([label, value, khrValue, valueClass, hint]) => (
               <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
                 <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
@@ -1979,7 +2256,6 @@ export default function Report() {
           { key: "customerName", label: "អតិថិជន" },
           { key: "cashierName", label: "អ្នកលក់" },
           { key: "totalUsd", label: "សរុប", render: (row) => fmtUsd(row.totalUsd), className: "font-bold text-emerald-600" },
-          { key: "paidUsd", label: "បានបង់", render: (row) => fmtUsd(row.paidUsd) },
           { key: "dueUsd", label: "នៅខ្វះ", render: (row) => fmtUsd(row.dueUsd), className: "font-bold text-red-500" },
           { key: "paymentStatus", label: "ស្ថានភាពបង់", render: (row) => paymentStatusLabel(row.paymentStatus) },
         ],
@@ -1988,12 +2264,13 @@ export default function Report() {
 
       {!suppressReport && reportTab === "sales" && showReportType("customer") && renderReportTable(
         "លក់តាមអតិថិជន",
-        "សរុបការលក់ បង់រួច និងនៅខ្វះតាមអតិថិជន",
+        "ចំណូលពិត (ក្រោយដកសងត្រឡប់) និងនៅខ្វះតាមអតិថិជន",
         [
           { key: "customerName", label: "អតិថិជន" },
           { key: "count", label: "វិក្កយបត្រ" },
-          { key: "totalUsd", label: "សរុប", render: (row) => fmtUsd(row.totalUsd), className: "font-bold text-emerald-600" },
-          { key: "paidUsd", label: "បានបង់", render: (row) => fmtUsd(row.paidUsd) },
+          { key: "totalUsd", label: "លក់សរុប", render: (row) => fmtUsd(row.totalUsd) },
+          { key: "refundUsd", label: "សងត្រឡប់", render: (row) => (Number(row.refundUsd || 0) > 0 ? `-${fmtUsd(row.refundUsd)}` : fmtUsd(0)), className: "text-red-500" },
+          { key: "netUsd", label: "ចំណូលពិត", render: (row) => fmtUsd(row.netUsd ?? row.totalUsd), className: "font-bold text-emerald-600" },
           { key: "dueUsd", label: "នៅខ្វះ", render: (row) => fmtUsd(row.dueUsd), className: "font-bold text-red-500" },
         ],
         salesByCustomer
@@ -2026,6 +2303,14 @@ export default function Report() {
         </div>
       )}
 
+      {!suppressReport && reportTab === "purchases" && showReportType("product") && renderBarVisual({
+        title: "ក្រាបទំនិញទិញច្រើន",
+        subtitle: "តម្លៃទិញតាមផលិតផលក្នុងរយៈពេលដែលបានជ្រើស",
+        data: purchaseProductVisualData,
+        color: "#3b82f6",
+        icon: FiPackage,
+      })}
+
       {!suppressReport && reportTab === "purchases" && showReportType("supplier") && renderBarVisual({
         title: "ក្រាបទិញតាមអ្នកផ្គត់ផ្គង់",
         subtitle: "ប្រៀបធៀបអ្នកផ្គត់ផ្គង់ដែលមានតម្លៃទិញខ្ពស់ក្នុងរយៈពេលនេះ",
@@ -2043,7 +2328,6 @@ export default function Report() {
           { key: "date", label: "ថ្ងៃ" },
           { key: "supplierName", label: "អ្នកផ្គត់ផ្គង់" },
           { key: "totalUsd", label: "សរុប", render: (row) => fmtUsd(row.totalUsd), className: "font-bold text-blue-600" },
-          { key: "paidUsd", label: "បានបង់", render: (row) => fmtUsd(row.paidUsd) },
           { key: "dueUsd", label: "នៅខ្វះ", render: (row) => fmtUsd(row.dueUsd), className: "font-bold text-amber-600" },
           { key: "paymentStatus", label: "ស្ថានភាពបង់", render: (row) => paymentStatusLabel(row.paymentStatus) },
           { key: "status", label: "ស្ថានភាព", render: (row) => statusLabel(row.status) },
@@ -2053,18 +2337,36 @@ export default function Report() {
 
       {!suppressReport && reportTab === "purchases" && showReportType("supplier") && renderReportTable(
         "ទិញតាមអ្នកផ្គត់ផ្គង់",
-        "សរុបការទិញ បង់រួច និងនៅខ្វះតាម supplier",
+        "សរុបការទិញ និងនៅខ្វះតាមអ្នកផ្គត់ផ្គង់",
         [
           { key: "supplierName", label: "អ្នកផ្គត់ផ្គង់" },
           { key: "count", label: "វិក្កយបត្រ" },
           { key: "totalUsd", label: "សរុប", render: (row) => fmtUsd(row.totalUsd), className: "font-bold text-blue-600" },
-          { key: "paidUsd", label: "បានបង់", render: (row) => fmtUsd(row.paidUsd) },
           { key: "dueUsd", label: "នៅខ្វះ", render: (row) => fmtUsd(row.dueUsd), className: "font-bold text-amber-600" },
         ],
         purchasesBySupplier
       )}
 
-      {!suppressReport && reportTab === "financial" && showReportType("payments") && renderDonutVisual({
+      {!suppressReport && reportTab === "purchases" && showReportType("payments") && renderReportTable(
+        "ប្រវត្តិទូទាត់អ្នកផ្គត់ផ្គង់",
+        "ការទូទាត់នីមួយៗដែលបានកត់ត្រាឲ្យអ្នកផ្គត់ផ្គង់ក្នុងរយៈពេលដែលបានជ្រើស",
+        [
+          { key: "date", label: "ថ្ងៃ" },
+          { key: "purchaseNo", label: "លេខទិញ" },
+          { key: "supplierName", label: "អ្នកផ្គត់ផ្គង់" },
+          {
+            key: "amount",
+            label: "បានបង់",
+            render: (row) => (String(row.currency).toUpperCase() === "KHR" ? formatKhr(row.amountKhr) : fmtUsd(row.amountUsd)),
+            className: "font-bold text-emerald-600",
+          },
+          { key: "receiverName", label: "អ្នកកត់ត្រា" },
+          { key: "note", label: "ចំណាំ", render: (row) => row.note || "-" },
+        ],
+        purchasePaymentTransactions
+      )}
+
+      {!suppressReport && (reportTab === "financial" || reportTab === "sales") && showReportType("payments") && renderDonutVisual({
         title: "ក្រាបចំណែកការទូទាត់",
         subtitle: "បង្ហាញវិធីទូទាត់ដែលអតិថិជនប្រើច្រើនបំផុត",
         data: paymentDonutData,
@@ -2073,20 +2375,19 @@ export default function Report() {
         icon: FiCreditCard,
       })}
 
-      {!suppressReport && reportTab === "financial" && showReportType("payments") && renderReportTable(
-        "ប្រតិបត្តិការទូទាត់",
-        "លម្អិតការទូទាត់តាមវិក្កយបត្រ វិធីសាស្ត្រ និងអ្នកទទួលប្រាក់",
-        [
-          { key: "date", label: "ថ្ងៃ/ម៉ោង" },
-          { key: "saleNo", label: "វិក្កយបត្រ" },
-          { key: "customerName", label: "អតិថិជន" },
-          { key: "method", label: "វិធី", render: (row) => METHOD_LABEL[row.method] || row.method },
-          { key: "provider", label: "ប្រភព" },
-          { key: "receivedAmount", label: "បានទទួល", render: (row) => `${Number(row.receivedAmount || 0).toLocaleString("en-US")} ${row.currency || ""}` },
-          { key: "amountUsd", label: "ស្មើ USD", render: (row) => fmtUsd(row.amountUsd), className: "font-bold text-emerald-600" },
-          { key: "receiverName", label: "អ្នកទទួល" },
-        ],
-        paymentTransactions
+      {!suppressReport && (reportTab === "financial" || reportTab === "sales") && showReportType("payments") && renderPaymentReceiverList(
+        "immediate",
+        "ប្រវត្តិទូទាត់អតិថិជន (ភ្លាមៗ)",
+        "ការទូទាត់ដែលបានបង់ពេញលេញភ្លាមៗពេលលក់ — ចុចលើឈ្មោះដើម្បីមើលលម្អិត"
+      )}
+
+      {!suppressReport && (
+        (reportTab === "financial" && showReportType("payments")) ||
+        (reportTab === "sales" && showAnyReportType(["payments", "debt_payments"]))
+      ) && renderPaymentReceiverList(
+        "debt_repayment",
+        "ប្រវត្តិទូទាត់អតិថិជន (សងបំណុល)",
+        "ការទូទាត់ដែលបានសងសម្រាប់ការលក់ជំពាក់ពីមុន — ចុចលើឈ្មោះដើម្បីមើលលម្អិត"
       )}
 
       {!suppressReport && reportTab === "sales" && showReportType("return") && (
@@ -2133,7 +2434,7 @@ export default function Report() {
           { key: "condition", label: "ស្ថានភាពទំនិញ", render: (row) => formatCondition(row.condition) },
           { key: "resolutionType", label: "ដំណោះស្រាយ", render: (row) => formatResolutionType(row.resolutionType) },
           { key: "amountUsd", label: "តម្លៃ", render: (row) => fmtUsd(row.amountUsd), className: "font-bold text-amber-600" },
-          { key: "status", label: "ស្ថានភាព", render: (row) => statusLabel(row.status) },
+          { key: "cashierName", label: "អ្នកលក់" },
         ],
         salesReturnItems
       )}
@@ -2158,19 +2459,36 @@ export default function Report() {
       )}
 
       {!suppressReport && reportTab === "purchases" && showReportType("return") && renderReportTable(
+        "ការត្រឡប់ការទិញតាមទំនិញ",
+        "ទំនិញណាខ្លះត្រូវបានទាមទារត្រឡប់ទៅអ្នកផ្គត់ផ្គង់ញឹកញាប់ និងដោះស្រាយបែបណា",
+        [
+          { key: "productName", label: "ទំនិញ" },
+          { key: "returnCount", label: "ចំនួនដងត្រឡប់" },
+          { key: "refundQty", label: "ចំនួនសងលុយ" },
+          { key: "refundUsd", label: "តម្លៃសងលុយ", render: (row) => fmtUsd(row.refundUsd), className: "font-bold text-red-500" },
+          { key: "replacementQty", label: "ចំនួនដូរទំនិញ" },
+          { key: "replacementUsd", label: "តម្លៃដូរទំនិញ", render: (row) => fmtUsd(row.replacementUsd), className: "font-bold text-amber-600" },
+          { key: "creditQty", label: "ចំនួនកាត់លុយនៅវិក្កយបត្រក្រោយ" },
+          { key: "creditUsd", label: "តម្លៃកាត់លុយនៅវិក្កយបត្រក្រោយ", render: (row) => fmtUsd(row.creditUsd), className: "font-bold text-violet-600" },
+        ],
+        purchaseReturnItemsByProduct
+      )}
+
+      {!suppressReport && reportTab === "purchases" && showReportType("return") && renderReportTable(
         "លម្អិតការត្រឡប់ការទិញ",
-        "បញ្ជី claim/return ទៅអ្នកផ្គត់ផ្គង់ក្នុងរយៈពេលដែលបានជ្រើស",
+        "បញ្ជីទំនិញត្រឡប់ទៅអ្នកផ្គត់ផ្គង់ម្តងមួយៗដែលបានដោះស្រាយរួចក្នុងរយៈពេលដែលបានជ្រើស",
         [
           { key: "returnNo", label: "លេខត្រឡប់" },
           { key: "date", label: "ថ្ងៃ/ម៉ោង" },
-          { key: "purchaseNo", label: "លេខទិញ" },
           { key: "supplierName", label: "អ្នកផ្គត់ផ្គង់" },
-          { key: "reason", label: "មូលហេតុ", render: (row) => formatCondition(row.reason) },
+          { key: "productName", label: "ទំនិញ" },
+          { key: "qty", label: "ចំនួន", render: (row) => `${Number(row.qty || 0).toLocaleString("en-US")} ${row.unitName || ""}` },
+          { key: "condition", label: "ស្ថានភាពទំនិញ", render: (row) => formatCondition(row.condition) },
           { key: "resolutionType", label: "ដំណោះស្រាយ", render: (row) => formatResolutionType(row.resolutionType) },
-          { key: "totalUsd", label: "សរុប", render: (row) => fmtUsd(row.totalUsd), className: "font-bold text-amber-600" },
-          { key: "resolutionStatus", label: "ស្ថានភាព", render: (row) => statusLabel(row.resolutionStatus) },
+          { key: "amountUsd", label: "តម្លៃ", render: (row) => fmtUsd(row.amountUsd), className: "font-bold text-amber-600" },
+          { key: "staffName", label: "អ្នកទទួលខុសត្រូវ" },
         ],
-        purchaseReturns
+        purchaseReturnItems
       )}
 
       {/* ── Stock report ── */}
@@ -2246,17 +2564,17 @@ export default function Report() {
         [
           { key: "name", label: "ទំនិញ" },
           { key: "current", label: "នៅសល់", render: (row) => `${Number(row.current || 0).toLocaleString("en-US")} ${row.unit || ""}`, className: "font-bold text-red-500" },
-          { key: "threshold", label: "កម្រិតអប្បបរមា" },
+          { key: "threshold", label: "កម្រិតអប្បបរមា", render: (row) => `${Number(row.threshold || 0).toLocaleString("en-US")} ${row.unit || ""}` },
         ],
         stockReport.outOfStockItems ?? EMPTY_LIST
       )}
 
       {!suppressReport && reportTab === "inventory" && showReportType("batch_expiry") && renderReportTable(
-        "Batch និងថ្ងៃផុតកំណត់",
-        "Batch ដែលនៅសល់ស្តុក និងមានថ្ងៃផុតកំណត់",
+        "បាច់ស្តុកនិងថ្ងៃផុតកំណត់ទំនិញ",
+        "បាច់ស្តុកដែលនៅសល់ និងមានថ្ងៃផុតកំណត់",
         [
-          { key: "batchNo", label: "Batch" },
-          { key: "lotNo", label: "Lot" },
+          { key: "batchNo", label: "លេខបាច់" },
+          { key: "lotNo", label: "លេខឡូត៍" },
           { key: "name", label: "ទំនិញ" },
           { key: "expiredDate", label: "ផុតកំណត់" },
           { key: "qtyRemaining", label: "នៅសល់", render: (row) => Number(row.qtyRemaining || 0).toLocaleString("en-US") },
@@ -2282,9 +2600,40 @@ export default function Report() {
         stockReport.stockAdjustments ?? EMPTY_LIST
       )}
 
+      {!suppressReport && reportTab === "inventory" && showReportType("damaged") && (
+        <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+          <div className="mb-4">
+            <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>សង្ខេបស្តុកខូច</h2>
+            <p className={`mt-1 text-sm ${theme.muted}`}>ត្រឡប់ពីអតិថិជន ឬខូចផ្ទាល់ក្នុងហាង ក្នុងរយៈពេលដែលបានជ្រើស</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+              <p className={`text-sm font-semibold ${theme.muted}`}>តម្លៃខូចសរុប</p>
+              <p className="mt-1 text-2xl font-extrabold tabular-nums text-red-500">{fmtUsd(stockReport.damagedStockSummary?.totalValueUsd)}</p>
+            </div>
+            <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
+              <p className={`text-sm font-semibold ${theme.muted}`}>ចំនួនកំណត់ត្រា</p>
+              <p className={`mt-1 text-2xl font-extrabold tabular-nums ${theme.pageTitle}`}>{stockReport.damagedStockSummary?.totalCount ?? 0}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!suppressReport && reportTab === "inventory" && showReportType("damaged") && renderReportTable(
-        "ស្តុកខូច",
-        "ទំនិញខូចពីការទិញចូល និងការត្រឡប់ពីអតិថិជន",
+        "ស្តុកខូចតាមទំនិញ",
+        "ទំនិញណាខ្លះខូចច្រើនបំផុតក្នុងរយៈពេលដែលបានជ្រើស",
+        [
+          { key: "productName", label: "ទំនិញ" },
+          { key: "count", label: "ចំនួនកំណត់ត្រា" },
+          { key: "qty", label: "ចំនួន", render: (row) => Number(row.qty || 0).toLocaleString("en-US") },
+          { key: "valueUsd", label: "តម្លៃខូច", render: (row) => fmtUsd(row.valueUsd), className: "font-bold text-red-500" },
+        ],
+        stockReport.damagedStockByProduct ?? EMPTY_LIST
+      )}
+
+      {!suppressReport && reportTab === "inventory" && showReportType("damaged") && renderReportTable(
+        "លម្អិតស្តុកខូច",
+        "បញ្ជីកំណត់ត្រាខូចម្តងមួយៗក្នុងរយៈពេលដែលបានជ្រើស",
         [
           { key: "source", label: "ប្រភព", render: (row) => stockSourceLabel(row.source) },
           { key: "referenceNo", label: "ឯកសារ" },
@@ -2292,6 +2641,7 @@ export default function Report() {
           { key: "name", label: "ទំនិញ" },
           { key: "qty", label: "ចំនួន", render: (row) => `${Number(row.qty || 0).toLocaleString("en-US")} ${row.unit || ""}`, className: "font-bold text-red-500" },
           { key: "valueUsd", label: "តម្លៃខូច", render: (row) => fmtUsd(row.valueUsd), className: "font-bold text-red-500" },
+          { key: "staffName", label: "អ្នកទទួលខុសត្រូវ", render: (row) => row.staffName || "-" },
         ],
         stockReport.damagedStock ?? EMPTY_LIST
       )}
@@ -2317,11 +2667,16 @@ export default function Report() {
         lowStock
       )}
 
-      {!suppressReport && reportTab === "financial" && showAnyReportType(["profit", "cash_flow"]) && (
+      {/* Trimmed to genuinely profit-specific figures only. Outstanding customer/supplier
+          balances already have their own dedicated tabs ("customer_due"/"supplier_due"), and
+          return totals already have dedicated cards on the Sales/Purchases tabs — repeating them
+          here just to make one "combined view" made this card's own export section balloon to
+          match, with no added value under a filter literally named "ប្រាក់ចំណេញ" (profit). */}
+      {!suppressReport && reportTab === "financial" && showReportType("profit") && (
         <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
           <div className="mb-4">
-            <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>សង្ខេបហិរញ្ញវត្ថុ</h2>
-            <p className={`mt-1 text-sm ${theme.muted}`}>ប្រាក់ចំណេញពិត លុយចូល លុយចេញ និងលុយមិនទាន់ទូទាត់</p>
+            <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>ប្រាក់ចំណេញ</h2>
+            <p className={`mt-1 text-sm ${theme.muted}`}>ប្រាក់ចំណេញ និងលុយចូល/ចេញជាក់ស្តែងក្នុងរយៈពេលនេះ</p>
           </div>
 
           <div className="space-y-5">
@@ -2352,92 +2707,13 @@ export default function Report() {
                 </div>
               </div>
             </div>
-
-            <div>
-              <p className={`mb-2 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>មិនទាន់ទូទាត់ (សមតុល្យបច្ចុប្បន្ន — មិនប្តូរតាមកាលបរិច្ឆេទ)</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
-                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>អតិថិជនមិនទាន់ទូទាត់</p>
-                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-red-500">{fmtUsd(outstanding.totalUsd)}</p>
-                </div>
-                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
-                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>មិនទាន់បង់អ្នកផ្គត់ផ្គង់</p>
-                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-amber-600">{fmtUsd(purchaseMoney.outstandingUsd)}</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <p className={`mb-2 text-xs font-bold uppercase tracking-wider ${theme.muted}`}>ការទាមទារត្រឡប់ (មិនទាន់ដកចេញពីខាងលើ)</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
-                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>ត្រឡប់ការលក់</p>
-                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-amber-600">{fmtUsd(stats.sales_returns_usd)}</p>
-                </div>
-                <div className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
-                  <p className={`truncate text-sm font-semibold ${theme.muted}`}>ត្រឡប់ការទិញ</p>
-                  <p className="mt-1 truncate text-xl font-extrabold tabular-nums text-pink-600">{fmtUsd(stats.purchase_returns_usd)}</p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
 
-      {!suppressReport && reportTab === "financial" && showReportType("cash_flow") && (() => {
-        const cashIn = Number(paymentSummary.netEquivalentUsd || 0);
-        const cashOut = Number(purchaseMoney.paidEquivalentUsd ?? purchaseMoney.paidUsd ?? 0);
-        const net = cashIn - cashOut;
-        const netClass = net > 0 ? "text-emerald-600" : net < 0 ? "text-red-500" : "text-violet-600";
-        const netHint = net > 0
-          ? "លុយចូលច្រើនជាងលុយចេញ ក្នុងរយៈពេលនេះ"
-          : net < 0
-            ? "លុយចេញច្រើនជាងលុយចូល ក្នុងរយៈពេលនេះ"
-            : "លុយចូល និងលុយចេញស្មើគ្នា";
-        return (
-        <div className={`rounded-2xl border p-5 shadow-sm ${theme.card}`}>
-          <div className="mb-4">
-            <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>លុយចូល / លុយចេញ</h2>
-            <p className={`mt-1 text-sm ${theme.muted}`}>សង្ខេប cash flow សរុប (មិនទាន់ដកសងវិញ ខុសពី "ចំណាយទិញបានពិត" ខាងលើ)</p>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {[
-              ["លុយចូល", fmtUsd(cashIn), "text-emerald-600", null],
-              ["លុយចេញ", fmtUsd(cashOut), "text-blue-600", null],
-              ["សល់ (លុយចូល ដក លុយចេញ)", fmtUsd(net), netClass, netHint],
-            ].map(([label, value, valueClass, hint]) => (
-              <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
-                <p className={`text-sm font-semibold ${theme.muted}`}>{label}</p>
-                <p className={`mt-1 truncate text-2xl font-extrabold tabular-nums ${valueClass}`}>{value}</p>
-                {hint && <p className={`mt-1.5 text-[11px] leading-snug ${theme.muted}`}>{hint}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-        );
-      })()}
+      {!suppressReport && reportTab === "financial" && showReportType("customer_due") && renderCustomerInvoiceList()}
 
-      {!suppressReport && reportTab === "financial" && showReportType("customer_due") && renderReportTable(
-        "អតិថិជនមិនទាន់ទូទាត់",
-        "អតិថិជនដែលនៅខ្វះលុយ និងចំនួនវិក្កយបត្រ",
-        [
-          { key: "customerName", label: "អតិថិជន" },
-          { key: "count", label: "វិក្កយបត្រ" },
-          { key: "totalUsd", label: "នៅខ្វះ", render: (row) => fmtUsd(row.totalUsd), className: "font-bold text-red-500" },
-        ],
-        outstanding.customers ?? EMPTY_LIST
-      )}
-
-      {!suppressReport && reportTab === "financial" && showReportType("supplier_due") && renderReportTable(
-        "មិនទាន់បង់អ្នកផ្គត់ផ្គង់",
-        "អ្នកផ្គត់ផ្គង់ដែលនៅមិនទាន់បង់ក្នុងរយៈពេលនេះ",
-        [
-          { key: "supplierName", label: "អ្នកផ្គត់ផ្គង់" },
-          { key: "count", label: "វិក្កយបត្រទិញ" },
-          { key: "totalUsd", label: "នៅខ្វះ", render: (row) => fmtUsd(row.totalUsd), className: "font-bold text-amber-600" },
-        ],
-        purchaseMoney.suppliers ?? EMPTY_LIST
-      )}
+      {!suppressReport && (reportTab === "financial" || reportTab === "purchases") && showReportType("supplier_due") && renderSupplierInvoiceList()}
 
       {/* ── Payment overview + follow-up ── */}
       <div className={`${suppressReport || reportTab === "overview" || reportTab === "inventory" || (reportTab === "sales" && !showAnyReportType(["summary", "profit"])) || (reportTab === "purchases" && showReportType("return") && !isAllReport) ? "hidden" : ""} flex flex-col gap-6`}>
@@ -2717,14 +2993,20 @@ export default function Report() {
         </div>
 
         {/* Follow-up details */}
-        <div className={`${reportTab === "sales" ? "hidden" : ""} w-full rounded-2xl border p-5 shadow-sm ${theme.card}`}>
+        {/* On the financial tab, "debt" content here (aging buckets + top customers) is
+            customer_due-specific — it only adds the aging-bucket breakdown that the dedicated
+            "អតិថិជនមិនទាន់ទូទាត់" table itself doesn't show. Not shown under "profit" anymore
+            (profit is trimmed to profit-only figures now) nor under supplier_due/payments,
+            which are unrelated to it. Its own customer list below is hidden here
+            since the dedicated table right above already shows the same customers. */}
+        <div className={`${reportTab === "sales" || (reportTab === "financial" && !showAnyReportType(["customer_due", "all"])) ? "hidden" : ""} w-full rounded-2xl border p-5 shadow-sm ${theme.card}`}>
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className={`text-lg font-extrabold ${theme.pageTitle}`}>
                 {reportTab === "purchases" ? "សេចក្តីសង្ខេបការទិញ" : "តាមដានបន្ថែម"}
               </h2>
               <p className={`mt-1 text-sm ${theme.muted}`}>
-                {reportTab === "purchases" ? "លុយបានបង់ មិនទាន់បង់ ទំនិញទិញចូល និងអ្នកផ្គត់ផ្គង់" : "តាមដានការទិញ មិនទាន់ទូទាត់ និងសកម្មភាពចុងក្រោយ"}
+                {reportTab === "purchases" ? "លុយបានបង់ មិនទាន់បង់ ទំនិញទិញចូល និងអ្នកផ្គត់ផ្គង់" : reportTab === "financial" ? "អាយុកាលបំណុលអតិថិជនមិនទាន់ទូទាត់" : "តាមដានការទិញ មិនទាន់ទូទាត់ និងសកម្មភាពចុងក្រោយ"}
               </p>
             </div>
             {reportTab === "overview" && (
@@ -2759,8 +3041,8 @@ export default function Report() {
               {showPurchaseSummary && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {[
-                  ["បានបង់", fmtUsd(purchaseMoney.paidEquivalentUsd), formatKhr(purchaseMoney.paidEquivalentKhr), theme.pageTitle],
-                  ["មិនទាន់បង់", fmtUsd(purchaseMoney.outstandingUsd), formatKhr(purchaseMoney.outstandingKhr), "text-amber-600"],
+                  ["ចំណាយទិញបានពិត", fmtUsd(purchaseMoney.netCostUsd), formatKhr(purchaseMoney.netCostKhr), theme.pageTitle],
+                  ["មិនទាន់បង់", fmtUsd(purchaseMoney.periodDueUsd), formatKhr(purchaseMoney.periodDueKhr), "text-amber-600"],
                 ].map(([label, value, khrValue, valueClass]) => (
                   <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
                     <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
@@ -2769,36 +3051,6 @@ export default function Report() {
                   </div>
                 ))}
               </div>
-              )}
-              {showPurchaseProducts && topPurchaseItems.length > 0 && (
-                <div className={`mt-4 border-t pt-4 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
-                  <div className="mb-3">
-                    <p className={`text-sm font-bold ${theme.pageTitle}`}>ទំនិញទិញចូល</p>
-                    <p className={`mt-0.5 text-xs ${theme.muted}`}>ទំនិញដែលបានទិញក្នុងរយៈពេលដែលជ្រើស</p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {topPurchaseItems.map((item) => {
-                      const displayName = cleanRepeatedProductName(item.name);
-
-                      return (
-                        <div key={`${item.name}-${item.unit}`} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className={`truncate text-sm font-bold ${theme.pageTitle}`} title={item.name}>{displayName}</p>
-                              <p className={`text-xs ${theme.muted}`}>
-                                {Number(item.qty || 0).toLocaleString("en-US")} {item.unit || ""} · {item.count || 0} វិក្កយបត្រទិញ
-                              </p>
-                            </div>
-                            <div className="shrink-0 text-right">
-                              <p className={`text-xs font-bold ${theme.muted}`}>តម្លៃទិញ</p>
-                              <p className="text-sm font-extrabold tabular-nums text-blue-600">{fmtUsd(item.totalUsd)}</p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
               )}
               {showSupplierDue && (purchaseMoney.suppliers ?? []).length > 0 && (
                 <div className={`mt-4 border-t pt-4 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
@@ -2824,10 +3076,10 @@ export default function Report() {
 
           {activeFollowUpTab === "debt" && reportTab !== "sales" && (
             <div>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 {[
                   ["សរុបមិនទាន់ទូទាត់", fmtUsd(outstanding.totalUsd), "text-red-500"],
-                  ...((outstanding.aging ?? []).slice(0, 3).map((item) => [item.label, fmtUsd(item.totalUsd), "text-red-500"])),
+                  ...((outstanding.aging ?? []).map((item) => [item.label, fmtUsd(item.totalUsd), "text-red-500"])),
                 ].map(([label, value, valueClass]) => (
                   <div key={label} className={`rounded-2xl border px-4 py-3 ${theme.softCard}`}>
                     <p className={`truncate text-sm font-semibold ${theme.muted}`}>{label}</p>
@@ -2835,7 +3087,10 @@ export default function Report() {
                   </div>
                 ))}
               </div>
-              {(outstanding.customers ?? []).length > 0 && (
+              {/* Skipped under financial/customer_due: the dedicated "អតិថិជនមិនទាន់ទូទាត់"
+                  table just above already lists the exact same customers — showing both would
+                  duplicate the same list twice on one screen. */}
+              {(outstanding.customers ?? []).length > 0 && !(reportTab === "financial" && activeReportType === "customer_due") && (
                 <div className={`mt-4 border-t pt-4 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
                   <p className={`mb-3 text-sm font-bold ${theme.pageTitle}`}>អតិថិជនមិនទាន់ទូទាត់</p>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -2858,7 +3113,7 @@ export default function Report() {
             <div className="space-y-3">
               {isLoading && <div className={`flex min-h-24 items-center justify-center rounded-xl border ${theme.softCard}`}><FiRotateCcw className={`animate-spin text-2xl ${theme.muted}`} /></div>}
               {recentActs.length === 0 && !isLoading && <p className={`py-6 text-center text-sm ${theme.muted}`}>គ្មានសកម្មភាព</p>}
-              {recentActs.slice(0, 6).map((act, i) => {
+              {recentActs.map((act, i) => {
                 const Icon  = act.type === "purchase" ? FiTruck : FiDollarSign;
                 const color = act.type === "purchase" ? "text-blue-500" : "text-emerald-500";
                 const bg    = act.type === "purchase" ? "bg-blue-500/10" : "bg-emerald-500/10";
@@ -2867,7 +3122,7 @@ export default function Report() {
                     <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${bg} ${color}`}><Icon /></div>
                     <div className="min-w-0 flex-1">
                       <p className={`truncate text-sm font-bold ${theme.pageTitle}`}>{act.label}</p>
-                      <p className={`truncate text-sm ${theme.muted}`}>{act.desc}</p>
+                      <p className={`truncate text-sm ${theme.muted}`}>{act.desc}{act.cashierName ? ` · ${act.cashierName}` : ""}</p>
                     </div>
                     <span className={`shrink-0 text-sm ${theme.muted}`}>{formatKhRelativeTime(act.time)}</span>
                   </div>

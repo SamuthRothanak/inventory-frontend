@@ -9,7 +9,6 @@ import { defaultReturnForm, validateSaleReturn } from "../pages/Admin/Sales/sche
 const CONDITION_STOCK_ACTION = {
   good: "restock",
   damaged: "damaged_write_off",
-  defective: "damaged_write_off",
   expired: "discard",
 };
 

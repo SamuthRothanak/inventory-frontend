@@ -1,3 +1,12 @@
+import { formatCondition, formatResolutionType } from "../../Purcheases/utils/purchaseUtils";
+import { adjustmentReasons } from "../../Inventory/utils/inventoryConstants";
+
+const ADJUSTMENT_TYPE_LABEL = { increase: "បន្ថែម", decrease: "កាត់" };
+const adjustmentTypeLabel = (value) => ADJUSTMENT_TYPE_LABEL[String(value || "").toLowerCase()] ?? value ?? "";
+
+const ADJUSTMENT_REASON_LABEL = Object.fromEntries(adjustmentReasons.map((r) => [r.value, r.label]));
+const adjustmentReasonLabel = (value) => ADJUSTMENT_REASON_LABEL[String(value || "").toLowerCase()] ?? value ?? "";
+
 const money = (value) => Number(value || 0).toLocaleString("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -123,9 +132,21 @@ const readableStatusLabel = (value) => ({
   expiring_soon: "ជិតផុតកំណត់",
   active: "កំពុងប្រើ",
   pending: "រង់ចាំ",
+  pending_approval: "រង់ចាំអនុម័ត",
+  approved: "បានអនុម័ត",
   completed: "បានបញ្ចប់",
   cancelled: "បានបោះបង់",
   expired: "ផុតកំណត់",
+  // Purchase status
+  draft: "ព្រាង",
+  pending_receive: "រង់ចាំទទួលទំនិញ",
+  pending_stock_in: "រង់ចាំបញ្ចូលក្នុងស្តុក",
+  pending_claim: "រង់ចាំការទាមទារ",
+  // Purchase return resolution_status
+  submitted: "រង់ចាំដំណោះស្រាយ",
+  waiting_replacement: "រង់ចាំជំនួស",
+  rejected: "បានបដិសេធ",
+  resolved: "ដោះស្រាយរួច",
 }[String(value || "").toLowerCase()] ?? value ?? "");
 
 const paymentStatusLabel = (value) => ({
@@ -140,6 +161,12 @@ const salesTypeLabel = (value) => ({
   retail: "លក់រាយ",
   wholesale: "លក់ដុំ",
 }[value] ?? value ?? "");
+
+const stockSourceLabel = (value) => ({
+  purchase: "ការទិញចូល",
+  sales_return: "ត្រឡប់ការលក់",
+  adjustment: "កែតម្រូវស្តុក",
+}[String(value || "").toLowerCase()] ?? value ?? "");
 
 const activityTypeLabel = (value) => ({
   sale: "លក់",
@@ -194,10 +221,14 @@ export const buildReportExport = ({
   salesByCashier = [],
   purchaseDetails = [],
   purchasesBySupplier = [],
-  purchaseReturns = [],
+  purchaseReturnItems = [],
+  purchaseReturnItemsByProduct = [],
+  salesReturnItems = [],
+  salesReturnItemsByProduct = [],
   paymentSummary = {},
   paymentBreakdown = [],
   paymentTransactions = [],
+  purchasePaymentTransactions = [],
   lowStock = [],
   outstanding = {},
   purchaseMoney = {},
@@ -212,9 +243,7 @@ export const buildReportExport = ({
   const generatedAt = new Date().toLocaleString("en-US");
   const filenameBase = `report-${reportTab}${reportType ? `-${reportType}` : ""}-${safeFrom}-to-${safeTo}`;
 
-  const purchaseTotalKhr = purchaseMoney.totalKhr ?? purchaseMoney.purchaseKhr ?? (
-    Number(purchaseMoney.paidKhr || 0) + Number(purchaseMoney.outstandingKhr || 0)
-  );
+  const purchaseTotalKhr = purchaseMoney.totalKhr ?? stats.total_purchases_khr;
   const purchaseTotalUsd = purchaseMoney.totalUsd ?? stats.total_purchases_usd;
   const purchaseOutstandingEquivalentUsd = purchaseMoney.outstandingEquivalentUsd
     ?? purchaseMoney.outstandingUsd
@@ -292,6 +321,32 @@ export const buildReportExport = ({
     ["ស្តុកនៅសល់", number(stats.stock_on_hand), "", "ចំនួនស្តុកបច្ចុប្បន្ន"],
   ];
 
+  // Financial-only returns total (mirrors the "ការទាមទារត្រឡប់" row on the on-screen
+  // "សង្ខេបហិរញ្ញវត្ថុ" card) — same reasoning as salesSummaryRows below: the generic
+  // summaryRows mixes in stock/low-stock/pending-claims data that's off-topic here.
+  const financialReturnsRows = [
+    ["ត្រឡប់ការលក់", usd(stats.sales_returns_usd), number(stats.sales_returns_count)],
+    ["ត្រឡប់ការទិញ", usd(stats.purchase_returns_usd), number(stats.purchase_returns_count)],
+  ];
+
+  // Mirrors the "សាច់ប្រាក់ក្នុងរយៈពេលនេះ" pair on the trimmed "ប្រាក់ចំណេញ" card — just these
+  // 2 real (post-refund) cash figures, not the full multi-row paymentSummary/purchases
+  // breakdown tables (those belong to their own payments filter, not profit).
+  const profitCashRows = [
+    ["លុយទទួលបានពិត", usd(paymentSummary.netEquivalentUsd), khr(paymentSummary.netEquivalentKhr), "លុយបានទទួលពីអតិថិជនជាក់ស្តែង (ក្រោយដកសងវិញ)"],
+    ["ចំណាយទិញបានពិត", usd(purchaseMoney.netCostUsd), khr(purchaseMoney.netCostKhr), "លុយបានចេញទៅអ្នកផ្គត់ផ្គង់ជាក់ស្តែង (ក្រោយដកសងវិញ)"],
+  ];
+
+  // Sales-only summary (mirrors the 4 on-screen "សង្ខេបការលក់" cards) — the generic
+  // summaryRows above mixes in purchases/stock/supplier data, which is off-topic for a
+  // report specifically scoped to sales.
+  const salesSummaryRows = [
+    ["លក់បានសរុប", usd(stats.total_sales_usd), khr(stats.total_sales_khr), number(stats.total_sales_count), "តម្លៃវិក្កយបត្រលក់ទាំងអស់ក្នុងរយៈពេលនេះ"],
+    ["ប្រាក់លក់បានពិត", usd(paymentSummary.netEquivalentUsd), khr(paymentSummary.netEquivalentKhr), "", "លុយបានទទួលជាក់ស្តែង (ក្រោយដកសងវិញរួច)"],
+    ["ត្រឡប់ - សងលុយ", usd(stats.sales_returns_cash_usd), khr(stats.sales_returns_cash_khr), number(stats.sales_returns_cash_count), "លុយពិតដែលបានចេញឲ្យអតិថិជនវិញ"],
+    ["ត្រឡប់ - ដូរទំនិញ", usd(stats.sales_returns_non_cash_usd), khr(stats.sales_returns_non_cash_khr), number(stats.sales_returns_non_cash_count), "គ្មានលុយចេញពីហាង គ្រាន់តែដូរទំនិញ"],
+  ];
+
   const salesByTypeRows = Object.entries(salesByType).map(([type, row]) => [
     salesTypeLabel(type),
     number(row?.count),
@@ -320,25 +375,23 @@ export const buildReportExport = ({
     item.unit,
     qty(item.soldQty),
     usd(item.revenueUsd),
-    number(item.stock),
-    readableStatusLabel(item.status),
   ]);
 
   const salesProfitRows = [
     ["ប្រាក់ចំណូល", usd(salesProfit.revenueUsd ?? stats.sales_revenue_usd)],
     ["ថ្លៃដើម", usd(salesProfit.costUsd ?? stats.sales_cost_usd)],
-    ["ប្រាក់ចំណេញដុល", usd(salesProfit.grossProfitUsd ?? stats.gross_profit_usd)],
-    ["ផលប៉ះពាល់ពីការត្រឡប់", usd(salesProfit.returnProfitImpactUsd ?? stats.sales_return_profit_impact_usd)],
-    ["ប្រាក់ចំណេញដុលសុទ្ធ", usd(salesProfit.netGrossProfitUsd ?? stats.net_gross_profit_usd)],
+    ["ប្រាក់ចំណេញ (មុនដកត្រឡប់)", usd(salesProfit.grossProfitUsd ?? stats.gross_profit_usd)],
+    ["ដកចេញ: ត្រឡប់ទំនិញ", usd(salesProfit.returnProfitImpactUsd ?? stats.sales_return_profit_impact_usd)],
+    ["ប្រាក់ចំណេញ (ក្រោយដកត្រឡប់)", usd(salesProfit.netGrossProfitUsd ?? stats.net_gross_profit_usd)],
   ];
 
   const salesDetailRows = salesDetails.map((item) => [
     item.saleNo,
     item.date,
     item.customerName,
+    item.itemsSummary || "",
     item.cashierName,
     usd(item.totalUsd),
-    usd(item.paidUsd),
     usd(item.dueUsd),
     paymentStatusLabel(item.paymentStatus),
   ]);
@@ -347,7 +400,8 @@ export const buildReportExport = ({
     item.customerName,
     number(item.count),
     usd(item.totalUsd),
-    usd(item.paidUsd),
+    usd(item.refundUsd ?? 0),
+    usd(item.netUsd ?? item.totalUsd),
     usd(item.dueUsd),
   ]);
 
@@ -357,7 +411,6 @@ export const buildReportExport = ({
     usd(item.totalUsd),
     usd(item.refundUsd ?? 0),
     usd(item.netUsd ?? item.totalUsd),
-    usd(item.paidUsd),
     usd(item.dueUsd),
   ]);
 
@@ -368,7 +421,7 @@ export const buildReportExport = ({
     note: `${number(item.count)} វិក្កយបត្រ · លក់សរុប ${usd(item.totalUsd)}${
       Number(item.refundUsd || 0) > 0 ? ` · សងត្រឡប់ ${usd(item.refundUsd)}` : ""
     } · ចំណូលពិត ${usd(item.netUsd ?? item.totalUsd)}`,
-    headers: ["លេខវិក្កយបត្រ", "ថ្ងៃ", "ទំនិញលក់", "ថ្លៃ"],
+    headers: ["លេខវិក្កយបត្រ", "ថ្ងៃ", "ទំនិញលក់", "តម្លៃ"],
     rows: (item.invoices ?? []).map((inv) => [inv.saleNo, inv.date, inv.products, usd(inv.totalUsd)]),
   }));
 
@@ -382,52 +435,48 @@ export const buildReportExport = ({
   ]);
 
   const paymentSummaryRows = [
-    ["សាច់ប្រាក់ទទួល USD", usd(paymentSummary.cashReceivedUsd), "សាច់ប្រាក់ទទួល KHR", khr(paymentSummary.cashReceivedKhr)],
-    ["សាច់ប្រាក់អាប់ USD", usd(paymentSummary.cashChangeUsd), "សាច់ប្រាក់អាប់ KHR", khr(paymentSummary.cashChangeKhr)],
     ["សាច់ប្រាក់ទទួលពិត USD", usd(paymentSummary.cashUsd), "សាច់ប្រាក់ទទួលពិត KHR", khr(paymentSummary.cashKhr)],
-    ["ធនាគារ/QR ទទួល USD", usd(paymentSummary.electronicReceivedUsd), "ធនាគារ/QR ទទួល KHR", khr(paymentSummary.electronicReceivedKhr)],
-    ["ធនាគារ/QR អាប់ USD", usd(paymentSummary.electronicChangeUsd), "ធនាគារ/QR អាប់ KHR", khr(paymentSummary.electronicChangeKhr)],
     ["ធនាគារ/QR ទទួលពិត USD", usd(paymentSummary.electronicUsd), "ធនាគារ/QR ទទួលពិត KHR", khr(paymentSummary.electronicKhr)],
-    ["លុយអាប់សរុប USD", usd(paymentSummary.changeUsd), "លុយអាប់សរុប KHR", khr(paymentSummary.changeKhr)],
     ["សងប្រាក់ USD", usd(paymentSummary.refundUsd), "សងប្រាក់ KHR", khr(paymentSummary.refundKhr)],
-    ["សរុបស្មើ USD", usd(paymentSummary.totalEquivalentUsd), "សងប្រាក់ស្មើ USD", usd(paymentSummary.refundEquivalentUsd)],
-    ["លុយទទួលសរុបគិតជា USD", usd(paymentSummary.netEquivalentUsd), "", ""],
+    ["លុយទទួលសរុបគិតជា USD", usd(paymentSummary.netEquivalentUsd), "លុយទទួលសរុបគិតជា KHR", khr(paymentSummary.netEquivalentKhr)],
   ];
 
   const paymentRows = paymentBreakdown.map((item) => [
     item.provider || paymentMethodLabel(item.method),
     paymentMethodLabel(item.method),
-    usd(item.receivedUsd),
-    khr(item.receivedKhr),
-    usd(item.changeUsd),
-    khr(item.changeKhr),
     usd(item.netUsd),
     khr(item.netKhr),
     usd(item.amountUsd),
   ]);
 
-  const outstandingAgingRows = (outstanding.aging ?? []).map((item) => [
-    item.label,
-    number(item.count),
+  const outstandingRows = (outstanding.invoices ?? []).map((item) => [
+    item.saleNo,
+    item.date,
+    item.customerName,
     usd(item.totalUsd),
+    usd(item.dueUsd),
+    item.cashierName,
   ]);
 
-  const outstandingRows = (outstanding.customers ?? []).map((item) => [
-    item.customerName,
-    number(item.count),
-    usd(item.totalUsd),
-  ]);
+  // One sub-section per customer, same reasoning as supplierInvoiceDetailSections below.
+  const outstandingInvoicesByCustomer = (outstanding.invoices ?? []).reduce((acc, item) => {
+    if (!acc[item.customerName]) acc[item.customerName] = [];
+    acc[item.customerName].push(item);
+    return acc;
+  }, {});
+  const customerInvoiceDetailSections = Object.entries(outstandingInvoicesByCustomer).map(([customerName, invoices]) => ({
+    title: `វិក្កយបត្ររបស់ ${customerName}`,
+    note: `${number(invoices.length)} វិក្កយបត្រ · នៅខ្វះសរុប ${usd(invoices.reduce((sum, inv) => sum + Number(inv.dueUsd || 0), 0))}`,
+    headers: ["វិក្កយបត្រ", "ថ្ងៃ/ម៉ោង", "សរុប", "នៅខ្វះ", "អ្នកលក់"],
+    rows: invoices.map((inv) => [inv.saleNo, inv.date, usd(inv.totalUsd), usd(inv.dueUsd), inv.cashierName]),
+  }));
 
   const purchaseRows = [
-    ["ចំនួនវិក្កយបត្រទិញ", number(purchaseMoney.count)],
-    ["សរុបលុយវិក្កយបត្រ USD", usd(purchaseTotalUsd)],
-    ["សរុបលុយវិក្កយបត្រ KHR", khr(purchaseTotalKhr)],
-    ["បានបង់ USD", usd(purchaseMoney.paidUsd)],
-    ["បានបង់ KHR", khr(purchaseMoney.paidKhr)],
-    ["បានបង់ស្មើ USD", usd(purchaseMoney.paidEquivalentUsd)],
-    ["មិនទាន់បង់ USD", usd(purchaseMoney.outstandingUsd)],
-    ["មិនទាន់បង់ KHR", khr(purchaseMoney.outstandingKhr)],
-    ["មិនទាន់បង់ស្មើ USD", usd(purchaseOutstandingEquivalentUsd)],
+    ["សរុបលុយវិក្កយបត្រ", usd(purchaseTotalUsd), khr(purchaseTotalKhr), `ចំនួន ${number(purchaseMoney.count)} វិក្កយបត្រ`],
+    ["ចំណាយទិញបានពិត", usd(purchaseMoney.netCostUsd), khr(purchaseMoney.netCostKhr), "លុយចេញជាក់ស្តែង ក្រោយដកសងវិញ"],
+    ["ត្រឡប់ការទិញ", usd(stats.purchase_returns_usd), khr(stats.purchase_returns_khr), "មិនទាន់ដកចេញពីចំណាយ"],
+    ["បានបង់", usd(purchaseMoney.paidEquivalentUsd), khr(purchaseMoney.paidEquivalentKhr), "លុយបានបង់ជូនអ្នកផ្គត់ផ្គង់សរុប"],
+    ["មិនទាន់បង់", usd(purchaseMoney.periodDueUsd), khr(purchaseMoney.periodDueKhr), "សម្រាប់តែវិក្កយបត្រក្នុងរយៈពេលនេះ (មិនរាប់បញ្ចូលបំណុលចាស់)"],
   ];
 
   const supplierRows = (purchaseMoney.suppliers ?? []).map((item) => [
@@ -437,12 +486,35 @@ export const buildReportExport = ({
     item.totalKhr != null || item.outstandingKhr != null ? khr(item.totalKhr ?? item.outstandingKhr) : "",
   ]);
 
-  const purchaseDetailRows = purchaseDetails.map((item) => [
+  const supplierInvoiceRows = (purchaseMoney.invoices ?? []).map((item) => [
     item.purchaseNo,
     item.date,
     item.supplierName,
     usd(item.totalUsd),
-    usd(item.paidUsd),
+    usd(item.dueUsd),
+    khr(item.dueKhr),
+  ]);
+
+  // One sub-section per supplier, same reasoning as salesCashierDetailSections above — easier
+  // to read than one long flat list mixing every supplier's invoices together.
+  const supplierInvoicesBySupplier = (purchaseMoney.invoices ?? []).reduce((acc, item) => {
+    if (!acc[item.supplierName]) acc[item.supplierName] = [];
+    acc[item.supplierName].push(item);
+    return acc;
+  }, {});
+  const supplierInvoiceDetailSections = Object.entries(supplierInvoicesBySupplier).map(([supplierName, invoices]) => ({
+    title: `វិក្កយបត្ររបស់ ${supplierName}`,
+    note: `${number(invoices.length)} វិក្កយបត្រ · នៅខ្វះសរុប ${usd(invoices.reduce((sum, inv) => sum + Number(inv.dueUsd || 0), 0))} / ${khr(invoices.reduce((sum, inv) => sum + Number(inv.dueKhr || 0), 0))}`,
+    headers: ["វិក្កយបត្រទិញ", "ថ្ងៃ", "សរុប", "នៅខ្វះ USD", "នៅខ្វះ KHR"],
+    rows: invoices.map((inv) => [inv.purchaseNo, inv.date, usd(inv.totalUsd), usd(inv.dueUsd), khr(inv.dueKhr)]),
+  }));
+
+  const purchaseDetailRows = purchaseDetails.map((item) => [
+    item.purchaseNo,
+    item.date,
+    item.supplierName,
+    item.itemsSummary || "",
+    usd(item.totalUsd),
     usd(item.dueUsd),
     paymentStatusLabel(item.paymentStatus),
     readableStatusLabel(item.status),
@@ -452,40 +524,92 @@ export const buildReportExport = ({
     item.supplierName,
     number(item.count),
     usd(item.totalUsd),
-    usd(item.paidUsd),
     usd(item.dueUsd),
   ]);
 
-  const purchaseReturnRows = purchaseReturns.map((item) => [
+  const purchaseReturnItemRows = purchaseReturnItems.map((item) => [
     item.returnNo,
     item.date,
-    item.purchaseNo,
     item.supplierName,
-    item.reason,
-    item.resolutionType,
-    usd(item.totalUsd),
-    usd(item.refundUsd),
-    usd(item.creditUsd),
-    readableStatusLabel(item.resolutionStatus),
+    item.productName,
+    `${qty(item.qty)} ${item.unitName || ""}`.trim(),
+    formatCondition(item.condition),
+    formatResolutionType(item.resolutionType),
+    usd(item.amountUsd),
+    item.staffName,
   ]);
 
-  const paymentTransactionRows = paymentTransactions.map((item) => [
+  const purchaseReturnByProductRows = purchaseReturnItemsByProduct.map((item) => [
+    item.productName,
+    number(item.returnCount),
+    qty(item.refundQty),
+    usd(item.refundUsd),
+    qty(item.replacementQty),
+    usd(item.replacementUsd),
+    qty(item.creditQty),
+    usd(item.creditUsd),
+  ]);
+
+  const salesReturnItemRows = salesReturnItems.map((item) => [
+    item.returnNo,
+    item.date,
+    item.productName,
+    qty(item.qty),
+    formatCondition(item.condition),
+    formatResolutionType(item.resolutionType),
+    usd(item.amountUsd),
+    item.cashierName,
+  ]);
+
+  const salesReturnByProductRows = salesReturnItemsByProduct.map((item) => [
+    item.productName,
+    number(item.returnCount),
+    qty(item.refundQty),
+    usd(item.refundUsd),
+    qty(item.replacementQty),
+    usd(item.replacementUsd),
+  ]);
+
+  const paymentTransactionColumns = (item) => [
     item.date,
     item.saleNo,
     item.customerName,
-    item.method,
+    paymentMethodLabel(item.method),
     item.provider,
     `${number(item.receivedAmount)} ${item.currency ?? ""}`,
     usd(item.amountUsd),
     item.receiverName,
     item.referenceNo,
+  ];
+
+  // Split into 2 separate tables — an immediate payment (paid in full at checkout) carries no
+  // debt-tracking meaning, so mixing it into the same table as an installment payment settling
+  // an earlier unpaid sale made it impossible to tell which rows were actually debt repayments.
+  const paymentTransactionsImmediateRows = paymentTransactions
+    .filter((item) => item.paymentType === "immediate")
+    .map(paymentTransactionColumns);
+  const paymentTransactionsDebtRepaymentRows = paymentTransactions
+    .filter((item) => item.paymentType !== "immediate")
+    .map(paymentTransactionColumns);
+
+  // Purchase-side equivalent — individual payments recorded against suppliers (see
+  // [[project_purchase_payment_history]]), same "how much, on which date" gap the sales-side
+  // table above already covers.
+  const purchasePaymentTransactionRows = purchasePaymentTransactions.map((item) => [
+    item.date,
+    item.purchaseNo,
+    item.supplierName,
+    `${number(item.amountInput)} ${item.currency ?? ""}`,
+    usd(item.amountUsd),
+    khr(item.amountKhr),
+    item.receiverName,
+    item.note || "",
   ]);
 
   const lowStockRows = lowStock.map((item) => [
     item.name,
-    number(item.current),
-    number(item.threshold),
-    item.unit,
+    `${number(item.current)} ${item.unit || ""}`.trim(),
+    `${number(item.threshold)} ${item.unit || ""}`.trim(),
   ]);
 
   const stockSummaryRows = [
@@ -498,6 +622,16 @@ export const buildReportExport = ({
     ["ចលនាស្តុក", number(stockReport.movementCount)],
     ["ចូលស្តុក", number(stockReport.stockInQty)],
     ["ចេញស្តុក", number(stockReport.stockOutQty)],
+  ];
+
+  // Value-only rows for the "តម្លៃស្តុក" report type — stockSummaryRows above is the broad
+  // overview (also used by "ទាំងអស់"), which would otherwise show low/out-of-stock counts and
+  // movement qty under a title specifically about stock VALUE.
+  const stockValuationRows = [
+    ["តម្លៃស្តុក USD", usd(stockReport.valueUsd)],
+    ["តម្លៃស្តុក KHR", khr(stockReport.valueKhr)],
+    ["ចំនួនស្តុកសរុប", number(stockReport.stockOnHand)],
+    ["ចំនួនមុខទំនិញ", number(stockReport.stockItemCount)],
   ];
 
   const stockMovementRows = [
@@ -519,9 +653,8 @@ export const buildReportExport = ({
 
   const outOfStockRows = (stockReport.outOfStockItems ?? []).map((item) => [
     item.name,
-    qty(item.current),
-    number(item.threshold),
-    item.unit,
+    `${qty(item.current)} ${item.unit || ""}`.trim(),
+    `${number(item.threshold)} ${item.unit || ""}`.trim(),
   ]);
 
   const batchExpiryRows = (stockReport.batchExpiry ?? []).map((item) => [
@@ -537,9 +670,8 @@ export const buildReportExport = ({
   const stockAdjustmentRows = (stockReport.stockAdjustments ?? []).map((item) => [
     item.adjustmentNo,
     item.date,
-    item.type,
-    item.reason,
-    readableStatusLabel(item.status),
+    adjustmentTypeLabel(item.type),
+    adjustmentReasonLabel(item.reason),
     number(item.itemCount),
     qty(item.qty),
     usd(item.cost),
@@ -547,12 +679,27 @@ export const buildReportExport = ({
   ]);
 
   const damagedStockRows = (stockReport.damagedStock ?? []).map((item) => [
-    item.source,
+    stockSourceLabel(item.source),
     item.referenceNo,
     item.partyName,
     item.name,
     qty(item.qty),
     item.unit,
+    usd(item.valueUsd),
+    item.staffName || "-",
+  ]);
+
+  const damagedSummary = stockReport.damagedStockSummary ?? {};
+  const damagedStockSummaryRows = [
+    ["សរុប", usd(damagedSummary.totalValueUsd), number(damagedSummary.totalCount)],
+    ["ត្រឡប់ពីអតិថិជន", usd(damagedSummary.salesReturnValueUsd), number(damagedSummary.salesReturnCount)],
+    ["កែតម្រូវក្នុងហាង", usd(damagedSummary.adjustmentValueUsd), number(damagedSummary.adjustmentCount)],
+  ];
+
+  const damagedStockByProductRows = (stockReport.damagedStockByProduct ?? []).map((item) => [
+    item.productName,
+    number(item.count),
+    qty(item.qty),
     usd(item.valueUsd),
   ]);
 
@@ -565,82 +712,100 @@ export const buildReportExport = ({
 
   const sectionsByKey = {
     salesProfit: { title: "ប្រាក់ចំណេញ", headers: ["ប្រភេទ", "តម្លៃ"], rows: salesProfitRows },
-    salesDetails: { title: "លម្អិតការលក់", headers: ["លេខវិក្កយបត្រ", "ថ្ងៃ", "អតិថិជន", "អ្នកលក់", "សរុប", "បានបង់", "នៅខ្វះ", "ស្ថានភាពបង់"], rows: salesDetailRows },
-    salesCustomers: { title: "លក់តាមអតិថិជន", headers: ["អតិថិជន", "វិក្កយបត្រ", "សរុប", "បានបង់", "នៅខ្វះ"], rows: salesCustomerRows },
-    salesCashiers: { title: "លក់តាមអ្នកលក់", headers: ["អ្នកលក់", "វិក្កយបត្រ", "លក់សរុប", "សងត្រឡប់", "ចំណូលពិត", "បានបង់", "នៅខ្វះ"], rows: salesCashierRows },
-    purchaseDetails: { title: "លម្អិតការទិញ", headers: ["លេខទិញ", "ថ្ងៃ", "អ្នកផ្គត់ផ្គង់", "សរុប", "បានបង់", "នៅខ្វះ", "ស្ថានភាពបង់", "ស្ថានភាព"], rows: purchaseDetailRows },
-    purchasesBySupplier: { title: "ទិញតាមអ្នកផ្គត់ផ្គង់", headers: ["អ្នកផ្គត់ផ្គង់", "វិក្កយបត្រ", "សរុប", "បានបង់", "នៅខ្វះ"], rows: purchasesBySupplierRows },
-    purchaseReturns: { title: "លម្អិតការត្រឡប់ការទិញ", headers: ["លេខត្រឡប់", "ថ្ងៃ", "លេខទិញ", "អ្នកផ្គត់ផ្គង់", "មូលហេតុ", "ដំណោះស្រាយ", "សរុប", "ប្រាក់សង", "Credit", "ស្ថានភាព"], rows: purchaseReturnRows },
-    paymentTransactions: { title: "ប្រតិបត្តិការទូទាត់", headers: ["ថ្ងៃ", "វិក្កយបត្រ", "អតិថិជន", "វិធី", "ប្រភព", "បានទទួល", "ស្មើ USD", "អ្នកទទួល", "យោង"], rows: paymentTransactionRows },
-    outOfStock: { title: "ស្តុកអស់", headers: ["ទំនិញ", "នៅសល់", "កម្រិត", "ខ្នាតទំនិញ"], rows: outOfStockRows },
-    batchExpiry: { title: "Batch និងថ្ងៃផុតកំណត់", headers: ["Batch", "Lot", "ទំនិញ", "ផុតកំណត់", "នៅសល់", "តម្លៃ", "ស្ថានភាព"], rows: batchExpiryRows },
-    stockAdjustments: { title: "កែតម្រូវស្តុក", headers: ["លេខ", "ថ្ងៃ", "ប្រភេទ", "មូលហេតុ", "ស្ថានភាព", "មុខទំនិញ", "ចំនួន", "តម្លៃ", "បង្កើតដោយ"], rows: stockAdjustmentRows },
-    damagedStock: { title: "ស្តុកខូច", headers: ["ប្រភព", "លេខសំគាល់", "ភាគី", "ទំនិញ", "ចំនួន", "ខ្នាតទំនិញ", "តម្លៃ"], rows: damagedStockRows },
+    salesDetails: { title: "លម្អិតការលក់", headers: ["លេខវិក្កយបត្រ", "ថ្ងៃ", "អតិថិជន", "ទំនិញ", "អ្នកលក់", "សរុប", "នៅខ្វះ", "ស្ថានភាពបង់"], rows: salesDetailRows },
+    salesCustomers: { title: "លក់តាមអតិថិជន", headers: ["អតិថិជន", "វិក្កយបត្រ", "លក់សរុប", "សងត្រឡប់", "ចំណូលពិត", "នៅខ្វះ"], rows: salesCustomerRows },
+    salesCashiers: { title: "លក់តាមអ្នកលក់", headers: ["អ្នកលក់", "វិក្កយបត្រ", "លក់សរុប", "សងត្រឡប់", "ចំណូលពិត", "នៅខ្វះ"], rows: salesCashierRows },
+    purchaseDetails: { title: "លម្អិតការទិញ", headers: ["លេខទិញ", "ថ្ងៃ", "អ្នកផ្គត់ផ្គង់", "ទំនិញ", "សរុប", "នៅខ្វះ", "ស្ថានភាពបង់", "ស្ថានភាព"], rows: purchaseDetailRows },
+    purchasesBySupplier: { title: "ទិញតាមអ្នកផ្គត់ផ្គង់", headers: ["អ្នកផ្គត់ផ្គង់", "វិក្កយបត្រ", "សរុប", "នៅខ្វះ"], rows: purchasesBySupplierRows },
+    purchaseReturnsByProduct: { title: "សង្ខេបការត្រឡប់ការទិញតាមទំនិញ", headers: ["ទំនិញ", "ចំនួនដងត្រឡប់", "ចំនួនសងលុយ", "តម្លៃសងលុយ", "ចំនួនដូរទំនិញ", "តម្លៃដូរទំនិញ", "ចំនួនកាត់លុយនៅវិក្កយបត្រក្រោយ", "តម្លៃកាត់លុយនៅវិក្កយបត្រក្រោយ"], rows: purchaseReturnByProductRows },
+    purchaseReturns: { title: "លម្អិតការត្រឡប់ការទិញ", headers: ["លេខត្រឡប់", "ថ្ងៃ", "អ្នកផ្គត់ផ្គង់", "ទំនិញ", "ចំនួន", "ស្ថានភាពទំនិញ", "ដំណោះស្រាយ", "តម្លៃ", "អ្នកទទួលខុសត្រូវ"], rows: purchaseReturnItemRows },
+    salesReturnsByProduct: { title: "សង្ខេបការត្រឡប់ការលក់តាមផលិតផល", headers: ["ផលិតផល", "ចំនួនដងត្រឡប់", "ចំនួនសងលុយ", "តម្លៃសងលុយ", "ចំនួនដូរទំនិញ", "តម្លៃដូរទំនិញ"], rows: salesReturnByProductRows },
+    salesReturnDetails: { title: "លម្អិតការត្រឡប់ការលក់", headers: ["លេខត្រឡប់", "ថ្ងៃ", "ផលិតផល", "ចំនួន", "ស្ថានភាពទំនិញ", "ដំណោះស្រាយ", "តម្លៃ", "អ្នកលក់"], rows: salesReturnItemRows },
+    paymentTransactionsImmediate: { title: "ប្រវត្តិទូទាត់អតិថិជន (ភ្លាមៗ)", headers: ["ថ្ងៃ", "វិក្កយបត្រ", "អតិថិជន", "វិធី", "ប្រភព", "បានទទួល", "ស្មើ USD", "អ្នកទទួល", "យោង"], rows: paymentTransactionsImmediateRows },
+    paymentTransactionsDebtRepayment: { title: "ប្រវត្តិទូទាត់អតិថិជន (សងបំណុល)", headers: ["ថ្ងៃ", "វិក្កយបត្រ", "អតិថិជន", "វិធី", "ប្រភព", "បានទទួល", "ស្មើ USD", "អ្នកទទួល", "យោង"], rows: paymentTransactionsDebtRepaymentRows },
+    purchasePaymentTransactions: { title: "ប្រវត្តិទូទាត់អ្នកផ្គត់ផ្គង់", headers: ["ថ្ងៃ", "លេខទិញ", "អ្នកផ្គត់ផ្គង់", "បានបង់", "USD", "KHR", "អ្នកកត់ត្រា", "ចំណាំ"], rows: purchasePaymentTransactionRows },
+    outOfStock: { title: "ស្តុកអស់", headers: ["ទំនិញ", "នៅសល់", "កម្រិតអប្បបរមា"], rows: outOfStockRows },
+    batchExpiry: { title: "បាច់ស្តុកនិងថ្ងៃផុតកំណត់ទំនិញ", headers: ["លេខបាច់", "លេខឡូត៍", "ទំនិញ", "ផុតកំណត់", "នៅសល់", "តម្លៃ", "ស្ថានភាព"], rows: batchExpiryRows },
+    stockAdjustments: { title: "កែតម្រូវស្តុក", headers: ["លេខ", "ថ្ងៃ", "ប្រភេទ", "មូលហេតុ", "មុខទំនិញ", "ចំនួន", "តម្លៃ", "បង្កើតដោយ"], rows: stockAdjustmentRows },
+    damagedStock: { title: "ស្តុកខូច", headers: ["ប្រភព", "លេខសំគាល់", "ភាគី", "ទំនិញ", "ចំនួន", "ខ្នាតទំនិញ", "តម្លៃ", "អ្នកទទួលខុសត្រូវ"], rows: damagedStockRows },
+    damagedSummary: { title: "សង្ខេបស្តុកខូច", headers: ["ប្រភេទទិន្នន័យ", "តម្លៃខូច", "ចំនួនកំណត់ត្រា"], rows: damagedStockSummaryRows },
+    damagedByProduct: { title: "ស្តុកខូចតាមទំនិញ", headers: ["ទំនិញ", "ចំនួនកំណត់ត្រា", "ចំនួន", "តម្លៃខូច"], rows: damagedStockByProductRows },
     closing: { title: "បិទបញ្ជីលុយ", headers: ["ក្រុមផ្ទាត់ប្រាក់", "USD", "KHR", "ស្មើ USD", "ចំណាំ"], rows: closingRows },
     summary: { title: "សរុបរបាយការណ៍", headers: ["ប្រភេទទិន្នន័យ", "តម្លៃ", "ចំនួន", "ចំណាំ"], rows: summaryRows },
+    financialReturns: { title: "ការទាមទារត្រឡប់", headers: ["ប្រភេទ", "USD", "ចំនួន"], rows: financialReturnsRows },
+    profitCash: { title: "សាច់ប្រាក់ក្នុងរយៈពេលនេះ", headers: ["ប្រភេទទិន្នន័យ", "USD", "KHR", "ចំណាំ"], rows: profitCashRows },
+    salesSummary: { title: "សង្ខេបការលក់", headers: ["ប្រភេទទិន្នន័យ", "USD", "KHR", "ចំនួន", "ចំណាំ"], rows: salesSummaryRows },
     salesType: { title: "ការលក់តាមប្រភេទ", headers: ["ប្រភេទ", "ចំនួន", "សរុប USD"], rows: salesByTypeRows },
     insights: { title: "ចំណុចសំខាន់ៗ", headers: ["ប្រភេទទិន្នន័យ", "រយៈពេល", "តម្លៃ"], rows: insightRows },
     chart: { title: "ទិន្នន័យក្រាប", note: chartGranularity ? `ការបែងចែក: ${chartGranularityLabel(chartGranularity)}` : "", headers: ["រយៈពេល", "ថ្ងៃ", "ការលក់សរុប USD", "ទិញ USD", "ត្រឡប់ទំនិញសរុប USD", "ត្រឡប់ពីការលក់ USD", "ត្រឡប់ទៅអ្នកផ្គត់ផ្គង់ USD"], rows: chartRows },
-    topProducts: { title: "ទំនិញលក់ដាច់", headers: ["ល.រ", "ទំនិញ", "ខ្នាតទំនិញ", "ចំនួនលក់", "ប្រាក់លក់ USD", "ស្តុក", "ស្ថានភាព"], rows: productRows },
+    topProducts: { title: "ទំនិញលក់ដាច់", headers: ["ល.រ", "ទំនិញ", "ខ្នាតទំនិញ", "ចំនួនលក់", "USD"], rows: productRows },
     paymentSummary: { title: "សេចក្តីសង្ខេបការទូទាត់", headers: ["ប្រភេទទិន្នន័យ", "តម្លៃ", "ប្រភេទទិន្នន័យ", "តម្លៃ"], rows: paymentSummaryRows },
-    paymentTypes: { title: "ការទូទាត់តាមប្រភេទ", headers: ["ប្រភព", "វិធីសាស្ត្រ", "ទទួល USD", "ទទួល KHR", "អាប់ USD", "អាប់ KHR", "ទទួលពិត USD", "ទទួលពិត KHR", "ស្មើ USD"], rows: paymentRows },
-    outstandingAging: { title: "អាយុកាលមិនទាន់ទូទាត់", headers: ["អាយុកាល", "វិក្កយបត្រ", "សរុប USD"], rows: outstandingAgingRows },
-    outstandingCustomers: { title: "អតិថិជនមិនទាន់ទូទាត់", headers: ["អតិថិជន", "វិក្កយបត្រ", "សរុប USD"], rows: outstandingRows },
-    purchases: { title: "លុយចេញការទិញ", headers: ["ប្រភេទទិន្នន័យ", "តម្លៃ"], rows: purchaseRows },
+    paymentTypes: { title: "ការទូទាត់តាមប្រភេទ", headers: ["ប្រភព", "វិធីសាស្ត្រ", "ទទួលពិត USD", "ទទួលពិត KHR", "ស្មើ USD"], rows: paymentRows },
+    outstandingCustomers: { title: "អតិថិជនមិនទាន់ទូទាត់", headers: ["វិក្កយបត្រ", "ថ្ងៃ", "អតិថិជន", "សរុប USD", "នៅខ្វះ USD", "អ្នកលក់"], rows: outstandingRows },
+    purchases: { title: "លុយចេញការទិញ", headers: ["ប្រភេទទិន្នន័យ", "USD", "KHR", "ចំណាំ"], rows: purchaseRows },
     purchaseProducts: { title: "ទំនិញទិញច្រើន", headers: ["ល.រ", "ទំនិញ", "ខ្នាតទំនិញ", "ចំនួនទិញ", "វិក្កយបត្រទិញ", "តម្លៃទិញ USD"], rows: purchaseProductRows },
     supplierDue: { title: "អ្នកផ្គត់ផ្គង់មិនទាន់បង់", headers: ["អ្នកផ្គត់ផ្គង់", "វិក្កយបត្រទិញ", "សរុប USD", "សរុប KHR"], rows: supplierRows },
+    supplierDueInvoices: { title: "លម្អិតវិក្កយបត្រទិញមិនទាន់បង់", headers: ["វិក្កយបត្រទិញ", "ថ្ងៃ", "អ្នកផ្គត់ផ្គង់", "សរុប", "នៅខ្វះ USD", "នៅខ្វះ KHR"], rows: supplierInvoiceRows },
     stockSummary: { title: "សង្ខេបស្តុក", headers: ["ប្រភេទទិន្នន័យ", "តម្លៃ"], rows: stockSummaryRows },
+    stockValuation: { title: "តម្លៃស្តុក", headers: ["ប្រភេទទិន្នន័យ", "តម្លៃ"], rows: stockValuationRows },
     stockMovement: { title: "ចលនាស្តុក", headers: ["ប្រភេទ", "ទំនិញ", "ចំនួន", "ខ្នាតទំនិញ", "ចំនួនចលនា"], rows: stockMovementRows },
-    lowStock: { title: "ស្តុកស្ទើរអស់", headers: ["ទំនិញ", "នៅសល់", "កម្រិត", "ខ្នាតទំនិញ"], rows: lowStockRows },
+    lowStock: { title: "ស្តុកស្ទើរអស់", headers: ["ទំនិញ", "នៅសល់", "កម្រិតអប្បបរមា"], rows: lowStockRows },
     activities: { title: "សកម្មភាពថ្មីៗ", headers: ["ប្រភេទ", "សកម្មភាព", "លម្អិត", "ពេលវេលា"], rows: activityRows },
   };
 
   const sectionKeysByReport = {
     all: [
       "summary", "insights", "chart", "activities",
-      "topProducts", "salesProfit", "salesType", "salesDetails", "salesCustomers", "salesCashiers", "outstandingAging", "outstandingCustomers",
-      "purchases", "purchaseDetails", "purchaseProducts", "purchasesBySupplier", "supplierDue", "purchaseReturns",
-      "stockSummary", "stockMovement", "lowStock", "outOfStock", "batchExpiry", "stockAdjustments", "damagedStock",
-      "paymentSummary", "paymentTypes", "paymentTransactions", "closing",
+      "topProducts", "salesProfit", "salesType", "salesDetails", "salesCustomers", "salesCashiers", "salesReturnsByProduct", "salesReturnDetails", "outstandingCustomers",
+      "purchases", "purchaseDetails", "purchaseProducts", "purchasesBySupplier", "supplierDue", "supplierDueInvoices", "purchaseReturnsByProduct", "purchaseReturns",
+      "stockSummary", "stockMovement", "lowStock", "outOfStock", "batchExpiry", "stockAdjustments",
+      "damagedSummary", "damagedByProduct", "damagedStock",
+      "paymentSummary", "paymentTypes", "paymentTransactionsImmediate", "paymentTransactionsDebtRepayment", "purchasePaymentTransactions", "closing",
     ],
-    overview: ["summary", "insights", "chart", "topProducts", "purchases", "lowStock", "activities"],
+    // Mirrors what's actually on the Overview screen: the KPI/summary row, the business chart,
+    // the profit/stock/cash-flow figures from the comparison panel, and the 3 follow-up sub-tabs
+    // (purchase due, customer due, recent activity). "insights"/"topProducts" dropped — those
+    // only ever render under the Sales tab, never here; "lowStock" (the full itemized list, not
+    // just the count) dropped too — Overview only ever shows the aggregate count, never the list.
+    overview: ["summary", "chart", "salesProfit", "profitCash", "stockSummary", "paymentSummary", "purchases", "supplierDue", "supplierDueInvoices", "outstandingCustomers", "activities"],
     sales: {
-      all: ["summary", "salesProfit", "salesType", "salesDetails", "topProducts", "salesCustomers", "salesCashiers", "paymentSummary", "paymentTypes", "outstandingAging", "outstandingCustomers", "chart"],
-      summary: ["summary", "salesProfit", "salesType", "paymentSummary", "paymentTypes", "outstandingAging", "outstandingCustomers"],
+      all: ["salesSummary", "salesProfit", "salesType", "salesDetails", "topProducts", "salesCustomers", "salesCashiers", "salesReturnsByProduct", "salesReturnDetails", "paymentSummary", "paymentTypes", "paymentTransactionsImmediate", "paymentTransactionsDebtRepayment", "outstandingCustomers", "chart"],
+      summary: ["salesSummary", "salesProfit", "salesType", "paymentSummary", "paymentTypes", "outstandingCustomers"],
       details: ["salesDetails"],
       product: ["topProducts"],
       customer: ["salesCustomers"],
       cashier: ["salesCashiers"],
-      return: ["summary", "chart"],
+      return: ["salesReturnsByProduct", "salesReturnDetails"],
       profit: ["salesProfit", "topProducts", "chart", "paymentSummary"],
+      payments: ["paymentTransactionsImmediate", "paymentTransactionsDebtRepayment", "paymentTypes"],
+      debt_payments: ["paymentTransactionsDebtRepayment"],
     },
     purchases: {
-      all: ["purchases", "purchaseDetails", "purchaseProducts", "purchasesBySupplier", "supplierDue", "purchaseReturns", "summary", "chart"],
+      all: ["purchases", "purchaseDetails", "purchaseProducts", "purchasesBySupplier", "supplierDue", "supplierDueInvoices", "purchaseReturnsByProduct", "purchaseReturns", "purchasePaymentTransactions", "summary", "chart"],
       summary: ["purchases", "purchaseProducts", "supplierDue"],
       details: ["purchaseDetails"],
       product: ["purchaseProducts"],
       supplier: ["purchasesBySupplier"],
-      supplier_due: ["supplierDue"],
-      return: ["purchaseReturns", "summary", "chart"],
+      supplier_due: ["supplierDueInvoices"],
+      return: ["purchaseReturnsByProduct", "purchaseReturns"],
+      payments: ["purchasePaymentTransactions"],
     },
     inventory: {
-      all: ["stockSummary", "stockMovement", "lowStock", "outOfStock", "batchExpiry", "stockAdjustments", "damagedStock"],
-      current: ["stockSummary"],
+      all: ["stockSummary", "stockMovement", "lowStock", "outOfStock", "batchExpiry", "stockAdjustments", "damagedSummary", "damagedByProduct", "damagedStock"],
       movement: ["stockMovement"],
       low_stock: ["lowStock"],
       out_of_stock: ["outOfStock"],
-      valuation: ["stockSummary", "lowStock"],
+      valuation: ["stockValuation"],
       batch_expiry: ["batchExpiry"],
       adjustment: ["stockAdjustments"],
-      damaged: ["damagedStock"],
+      damaged: ["damagedSummary", "damagedByProduct", "damagedStock"],
     },
     financial: {
-      all: ["salesProfit", "paymentSummary", "paymentTransactions", "paymentTypes", "closing", "outstandingAging", "outstandingCustomers", "supplierDue", "purchases"],
-      profit: ["salesProfit", "paymentSummary", "purchases"],
-      customer_due: ["outstandingAging", "outstandingCustomers"],
-      supplier_due: ["supplierDue"],
-      payments: ["paymentTransactions", "paymentTypes"],
-      cash_flow: ["closing", "paymentTypes", "purchases"],
+      all: ["salesProfit", "paymentSummary", "paymentTransactionsImmediate", "paymentTransactionsDebtRepayment", "purchasePaymentTransactions", "paymentTypes", "closing", "outstandingCustomers", "supplierDue", "supplierDueInvoices", "purchases", "financialReturns"],
+      profit: ["salesProfit", "profitCash"],
+      customer_due: ["outstandingCustomers"],
+      supplier_due: ["supplierDueInvoices"],
+      payments: ["paymentTransactionsImmediate", "paymentTransactionsDebtRepayment", "purchasePaymentTransactions", "paymentTypes"],
     },
   };
 
@@ -654,30 +819,41 @@ export const buildReportExport = ({
     chart: "សរុប",
     activities: "សរុប",
     topProducts: "ការលក់",
+    salesSummary: "ការលក់",
     salesProfit: "ការលក់",
     salesType: "ការលក់",
     salesDetails: "ការលក់",
     salesCustomers: "ការលក់",
     salesCashiers: "ការលក់",
-    outstandingAging: "ការលក់",
+    salesReturnsByProduct: "ការលក់",
+    salesReturnDetails: "ការលក់",
     outstandingCustomers: "ការលក់",
     purchases: "ការទិញ",
     purchaseDetails: "ការទិញ",
     purchaseProducts: "ការទិញ",
     purchasesBySupplier: "ការទិញ",
     supplierDue: "ការទិញ",
+    supplierDueInvoices: "ការទិញ",
+    purchaseReturnsByProduct: "ការទិញ",
     purchaseReturns: "ការទិញ",
     stockSummary: "ស្តុក",
+    stockValuation: "ស្តុក",
     stockMovement: "ស្តុក",
     lowStock: "ស្តុក",
     outOfStock: "ស្តុក",
     batchExpiry: "ស្តុក",
     stockAdjustments: "ស្តុក",
     damagedStock: "ស្តុក",
+    damagedSummary: "ស្តុក",
+    damagedByProduct: "ស្តុក",
     paymentSummary: "ហិរញ្ញវត្ថុ",
     paymentTypes: "ហិរញ្ញវត្ថុ",
-    paymentTransactions: "ហិរញ្ញវត្ថុ",
+    paymentTransactionsImmediate: "ហិរញ្ញវត្ថុ",
+    paymentTransactionsDebtRepayment: "ហិរញ្ញវត្ថុ",
+    purchasePaymentTransactions: "ការទិញ",
     closing: "ហិរញ្ញវត្ថុ",
+    financialReturns: "ហិរញ្ញវត្ថុ",
+    profitCash: "ហិរញ្ញវត្ថុ",
   };
 
   return {
@@ -691,6 +867,12 @@ export const buildReportExport = ({
       const group = sectionGroupByKey[key];
       if (key === "salesCashiers") {
         return [{ ...section, group }, ...salesCashierDetailSections.map((detail) => ({ ...detail, group }))];
+      }
+      if (key === "supplierDueInvoices") {
+        return supplierInvoiceDetailSections.map((detail) => ({ ...detail, group }));
+      }
+      if (key === "outstandingCustomers") {
+        return customerInvoiceDetailSections.map((detail) => ({ ...detail, group }));
       }
       return [{ ...section, group }];
     }),

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ShoppingCart, Trash2, Minus, Plus, Receipt,
   Wallet, Percent, Truck, Tag, Phone, Globe, Pencil,
@@ -7,6 +7,38 @@ import {
 import { EmptyState } from "./ui";
 import { usd, khr, SALE_CHANNELS, DELIVERY_OPTIONS, cn } from "./posData";
 
+// Click-to-type qty, alongside the existing +/- stepper. Keeps its own local text while the
+// cashier is typing (so "1" mid-typing "12" doesn't immediately clamp/commit), and only calls
+// onCommit on blur/Enter — same type="text"+inputMode pattern used by every other numeric input
+// in this app (a plain type="number" would silently report an empty value for invalid input).
+function QtyInput({ qty, onCommit }) {
+  const [text, setText] = useState(String(qty));
+
+  useEffect(() => { setText(String(qty)); }, [qty]);
+
+  const commit = () => {
+    const parsed = parseInt(text, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      onCommit(parsed);
+    } else {
+      setText(String(qty));
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={text}
+      onChange={(e) => setText(e.target.value.replace(/[^0-9]/g, ""))}
+      onFocus={(e) => e.target.select()}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+      className="w-8 rounded-md border-none bg-transparent text-center text-xs font-extrabold text-slate-900 outline-none focus:ring-1 focus:ring-red-300"
+    />
+  );
+}
+
 export default function CurrentSalePanel({
   saleMode, selectedCustomer, totalItems, cart, subtotal,
   discountType, setDiscountType, discountValue, setDiscountValue, discountAmount,
@@ -14,7 +46,7 @@ export default function CurrentSalePanel({
   deliveryFee, setDeliveryFee, deliveryFeeCurrency, setDeliveryFeeCurrency,
   saleChannel, setSaleChannel,
   deliveryFeeUsd, total,
-  onUpdateQty, onRemove, onClear, onHold, onOpenPayment,
+  onUpdateQty, onSetQty, onRemove, onClear, onHold, onOpenPayment,
   exchangeRate,
   note, onNoteChange,
 }) {
@@ -186,7 +218,7 @@ export default function CurrentSalePanel({
                 >
                   <Minus className="h-2.5 w-2.5" />
                 </button>
-                <span className="min-w-5 text-center text-xs font-extrabold text-slate-900">{item.qty}</span>
+                <QtyInput qty={item.qty} onCommit={(newQty) => onSetQty(item.id, newQty)} />
                 <button
                   type="button"
                   onClick={() => onUpdateQty(item.id, 1)}

@@ -5,7 +5,7 @@ const STATUS_LABEL      = { pending_approval: "រង់ចាំអនុម័
 const RESOLUTION_LABEL  = { refund: "សងប្រាក់ជូនអតិថិជន", replacement: "ដូរទំនិញ" };
 const RETURN_TYPE_LABEL = { full: "ត្រឡប់ទាំងអស់", partial: "ត្រឡប់មួយចំណែក" };
 const VERIFICATION_LABEL = { receipt: "វិក្កយបត្រ", system_lookup: "ស្វែងរកប្រព័ន្ធ", verbal: "មាត់", photo: "រូបថត" };
-const CONDITION_LABEL   = { good: "ល្អ", damaged: "ខូច", defective: "មានបញ្ហា", expired: "ផុតកំណត់" };
+const CONDITION_LABEL   = { good: "ល្អ", damaged: "មានបញ្ហា", defective: "មានបញ្ហា", expired: "ផុតកំណត់" };
 const CONDITION_COLOR   = { good: "text-emerald-600", damaged: "text-red-500", defective: "text-red-500", expired: "text-amber-600" };
 const STOCK_ACTION_LABEL = { restock: "ដាក់ចូលស្តុកវិញ", damaged_write_off: "មិនដាក់ចូលស្តុកវិញទេ", discard: "បោះចោល" };
 

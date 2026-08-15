@@ -15,15 +15,11 @@ export const DELIVERY_OPTIONS = [
 
 /**
  * Find the best price rule for a unit/qty/appliesTo combination.
- * applies_to values: 'public' (retail), 'customer' (wholesale), 'both' (any).
+ * applies_to values: 'public' (retail), 'customer' (wholesale).
  */
 export function getAppliedRule(unit, qty, appliesTo) {
   const matches = unit.priceRules
-    .filter(
-      (r) =>
-        (r.appliesTo === appliesTo || r.appliesTo === "both") &&
-        qty >= r.minQty
-    )
+    .filter((r) => r.appliesTo === appliesTo && qty >= r.minQty)
     .sort((a, b) => b.minQty - a.minQty);
   return matches[0] ?? unit.priceRules[0];
 }

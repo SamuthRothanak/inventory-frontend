@@ -334,7 +334,6 @@ export default function PriceRuleFormModal({
               options={[
                 { value: "retail", label: "លក់រាយ" },
                 { value: "wholesale", label: "លក់ដុំ" },
-                { value: "both", label: "ទាំងពីរ" },
               ]}
             />
 

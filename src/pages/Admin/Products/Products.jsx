@@ -47,7 +47,6 @@ function ConfirmModal({ open, title, body, onConfirm, onCancel, theme }) {
 import { getAllCategoriesApi } from "../../../services/category.service";
 
 import {
-  bulkDeleteProductsApi,
   deleteProductApi,
   getProductByIdApi,
   getProductStatsApi,
@@ -138,8 +137,6 @@ export default function Products() {
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [manageProductId, setManageProductId] = useState(null);
 
-  const [bulkSelectMode, setBulkSelectMode] = useState(false);
-  const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [isExportingProducts, setIsExportingProducts] = useState(false);
 
@@ -580,54 +577,6 @@ export default function Products() {
   const handleToggleStatus = (product) => {
     const newStatus = String(product.status ?? "").toLowerCase() === "active" ? "inactive" : "active";
     toggleStatusMutation.mutate({ id: product.id, status: newStatus });
-  };
-
-  const bulkDeleteMutation = useMutation({
-    mutationFn: bulkDeleteProductsApi,
-    onSuccess: () => {
-      setSelectedProductIds([]);
-      setBulkSelectMode(false);
-      invalidateProductQueries();
-      notify.success("លុបផលិតផលរួចរាល់", "ផលិតផលដែលបានជ្រើសរើសត្រូវបានលុបចោលរួចហើយ។");
-    },
-    onError: (error) => {
-      notify.error("លុបជាក្រុមបរាជ័យ", getApiErrorMessage(error, "មិនអាចលុបផលិតផលដែលបានជ្រើសរើសបានទេ។"));
-    },
-  });
-
-  const openBulkSelectMode = () => setBulkSelectMode(true);
-  const closeBulkSelectMode = () => {
-    setBulkSelectMode(false);
-    setSelectedProductIds([]);
-  };
-
-  const handleToggleProduct = (productId) => {
-    if (!bulkSelectMode) return;
-    setSelectedProductIds((prev) => {
-      const id = Number(productId);
-      return prev.some((item) => Number(item) === id)
-        ? prev.filter((item) => Number(item) !== id)
-        : [...prev, id];
-    });
-  };
-
-  const handleToggleAllProducts = () => {
-    if (!bulkSelectMode) return;
-    const pageIds = products.map((p) => Number(p.id));
-    const allSelected = pageIds.every((id) => selectedProductIds.some((sid) => Number(sid) === id));
-    setSelectedProductIds((prev) => {
-      if (allSelected) return prev.filter((id) => !pageIds.includes(Number(id)));
-      return [...new Set([...prev.map(Number), ...pageIds])];
-    });
-  };
-
-  const handleBulkDeleteProducts = () => {
-    if (selectedProductIds.length === 0) return;
-    openConfirm(
-      "លុបផលិតផលជាក្រុម",
-      `តើអ្នកប្រាកដថាចង់លុបផលិតផលចំនួន ${selectedProductIds.length} ដែលបានជ្រើសរើសមែនទេ? សកម្មភាពនេះមិនអាចប្ដូរវិញបាន។`,
-      () => bulkDeleteMutation.mutate(selectedProductIds)
-    );
   };
 
   const createVariantMutation = useMutation({
@@ -1458,18 +1407,10 @@ export default function Products() {
         isLoading={isLoading}
         isError={isError}
         isDeleting={deleteProductMutation.isPending}
-        bulkSelectMode={bulkSelectMode}
-        selectedProductIds={selectedProductIds}
-        bulkDeleteIsPending={bulkDeleteMutation.isPending}
         onViewProduct={openViewProduct}
         onEditProduct={openManageProduct}
         onDeleteProduct={handleDeleteProduct}
         onToggleStatus={handleToggleStatus}
-        onOpenBulkSelect={openBulkSelectMode}
-        onCancelBulkSelect={closeBulkSelectMode}
-        onToggleSelect={handleToggleProduct}
-        onToggleSelectAll={handleToggleAllProducts}
-        onBulkDelete={handleBulkDeleteProducts}
       />
 
       {selectedProduct && (
