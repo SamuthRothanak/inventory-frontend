@@ -1856,7 +1856,7 @@
         </div>
 
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_230px_180px]">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(160px,1fr)_minmax(0,230px)_minmax(0,180px)]">
             <div className="relative">
               <FiSearch
                 className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -1930,8 +1930,8 @@
 
         {activeTab === "adjustments" && (
           <>
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_190px_190px_220px]">
+            <div className="flex flex-col flex-wrap gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="grid w-full min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(160px,1fr)_minmax(0,190px)_minmax(0,190px)_minmax(0,220px)]">
                 <div className="relative">
                   <FiSearch
                     className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -1995,7 +1995,7 @@
                 </div>
               </div>
 
-              <div className="relative min-w-[13rem]">
+              <div className="relative w-full shrink-0 xl:w-52">
                 <InventoryDropdown
                   value={adjustmentPerPage}
                   onChange={(value) => setAdjustmentPerPage(Number(value))}
@@ -2025,7 +2025,7 @@
         {activeTab === "movements" && (
           <>
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_190px_190px_190px_150px]">
+              <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(140px,1fr)_minmax(0,190px)_minmax(0,190px)_minmax(0,190px)_minmax(0,150px)]">
                 <div className="relative">
                   <FiSearch
                     className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}

@@ -3101,7 +3101,7 @@ export default function Purchases() {
         {activeTab === "orders" && (
           <>
             <div className={`flex flex-col gap-3 border-b px-4 py-4 xl:flex-row xl:items-center xl:justify-between ${isDark ? "border-zinc-800" : "border-zinc-200"}`}>
-              <div className="grid flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_200px_200px_160px_160px]">
+              <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(160px,1fr)_minmax(0,200px)_minmax(0,200px)_minmax(0,160px)_minmax(0,160px)]">
                 <div className="relative">
                   <FiSearch className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`} />
                   <input type="text" placeholder="ស្វែងរកការទិញ អ្នកផ្គត់ផ្គង់ ទំនិញ..." value={searchTerm}

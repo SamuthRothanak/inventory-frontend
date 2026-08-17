@@ -1277,7 +1277,7 @@ export default function Products() {
         </div>
       )}
 
-      <div className={`grid grid-cols-1 gap-2.5 xl:grid-cols-[minmax(220px,1fr)_180px_140px_170px_110px_130px_160px] xl:items-center ${exportMenuOpen ? "mb-14" : ""}`}>
+      <div className={`grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-[minmax(160px,1fr)_minmax(0,180px)_minmax(0,140px)_minmax(0,170px)_minmax(0,110px)_minmax(0,130px)_minmax(0,160px)] xl:items-center ${exportMenuOpen ? "mb-14" : ""}`}>
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}

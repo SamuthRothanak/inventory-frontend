@@ -485,7 +485,7 @@ export default function Supplier() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_220px_160px_auto] xl:items-center">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_200px_160px] xl:items-center 2xl:grid-cols-[minmax(280px,1fr)_220px_160px_auto]">
           <div className="relative">
             <FiSearch
               className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg ${theme.muted}`}
@@ -523,7 +523,7 @@ export default function Supplier() {
             }))}
           />
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap xl:justify-end">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-nowrap xl:col-span-3 xl:justify-end 2xl:col-span-1">
           <div className="relative">
             <button
               type="button"
