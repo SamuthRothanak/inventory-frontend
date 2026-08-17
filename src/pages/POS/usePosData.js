@@ -99,6 +99,7 @@ function assemblePosProducts(products, categories, variants, pvus, priceRules, s
             conversionQty: Number(pvu.conversion_qty) || 1,
             barcode: pvu.barcode || "",
             priceRules: rules,
+            isDefaultSaleUnit: !!pvu.is_default_sale_unit,
           };
         })
         .filter((u) => u.priceRules.length > 0);

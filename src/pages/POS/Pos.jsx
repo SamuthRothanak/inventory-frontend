@@ -560,7 +560,12 @@ export default function Pos() {
 
   function openQuickAdd(product) {
     setSelectedProduct(product);
-    setSelectedUnitId(product.units[0]?.id || "");
+    // Was always taking units[0] regardless of which unit is actually configured as the
+    // product's default SALE unit (product_variant_units.is_default_sale_unit) — a variant
+    // whose purchase-default unit (e.g. a case) happened to load first would pre-select that
+    // instead of the intended sale unit (e.g. a single bottle).
+    const defaultUnit = product.units.find((u) => u.isDefaultSaleUnit) || product.units[0];
+    setSelectedUnitId(defaultUnit?.id || "");
     setQty(1);
   }
 
