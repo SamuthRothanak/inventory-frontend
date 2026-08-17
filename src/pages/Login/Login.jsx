@@ -18,6 +18,7 @@ import {
 
 import { loginApi } from "../../services/auth.service";
 import { useAuthStore } from "../../store/authStore";
+import { resolveLandingPath } from "../../utils/landingPath";
 import {
   getShopInitials,
   getStoredShopInfo,
@@ -63,9 +64,7 @@ const Login = () => {
   });
 
   const redirectByPermission = () => {
-    if (can("dashboard.view")) { navigate("/home", { replace: true }); return; }
-    if (can("sales.create"))   { navigate("/pos",  { replace: true }); return; }
-    navigate("/login", { replace: true });
+    navigate(resolveLandingPath(can), { replace: true });
   };
 
   useEffect(() => {

@@ -66,12 +66,19 @@ export default function App() {
       <Route
         path="/home"
         element={
-          <ProtectedRoute requiredPermission="dashboard.view">
+          <ProtectedRoute requireAnyPermission>
             <HomeLayout />
           </ProtectedRoute>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route
+          index
+          element={
+            <ProtectedRoute requiredPermission="dashboard.view">
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route path="sales" element={<Sale />} />
         <Route path="customer" element={<Customer />} />
         <Route path="users" element={<Users />} />
