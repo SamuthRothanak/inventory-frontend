@@ -35,6 +35,8 @@ import { Routes, Route } from "react-router-dom";
 
 import HomeLayout from "./pages/Home";
 import Login from "./pages/Login/Login";
+import ForgotPassword from "./pages/ForgotPassword/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword/ResetPassword";
 
 import Dashboard from "./pages/Admin/Dashboard/Dashboard";
 import Users from "./pages/Admin/Users/Users";
@@ -60,6 +62,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       <Route path="/" element={<RoleRedirect />} />
 

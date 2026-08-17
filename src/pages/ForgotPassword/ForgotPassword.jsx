@@ -1,54 +1,29 @@
-import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  FiUser,
-  FiLock,
-  FiEye,
-  FiEyeOff,
+  FiMail,
   FiShield,
   FiTrendingUp,
   FiAlertCircle,
+  FiCheckCircle,
   FiPackage,
-  FiUsers,
+  FiArrowLeft,
 } from "react-icons/fi";
 
-import { loginApi } from "../../services/auth.service";
-import { useAuthStore } from "../../store/authStore";
-import { resolveLandingPath } from "../../utils/landingPath";
-import {
-  getShopInitials,
-  getStoredShopInfo,
-  SHOP_INFO_UPDATED_EVENT,
-} from "../../utils/shopInfo";
+import { forgotPasswordApi } from "../../services/auth.service";
+import { getShopInitials, getStoredShopInfo } from "../../utils/shopInfo";
 
 const schema = z.object({
-  login: z.string().min(1, "សូមបញ្ចូលឈ្មោះអ្នកប្រើ ឬអ៊ីមែល"),
-  password: z.string().min(6, "ពាក្យសម្ងាត់ត្រូវមានយ៉ាងតិច ៦ តួអក្សរ"),
+  email: z.string().min(1, "សូមបញ្ចូលអ៊ីមែល").email("អ៊ីមែលមិនត្រឹមត្រូវ"),
 });
 
-const getNames = (items) => {
-  if (!Array.isArray(items)) return [];
-  return items
-    .map((item) => {
-      if (typeof item === "string") return item;
-      if (item && typeof item === "object") return item.name;
-      return null;
-    })
-    .filter(Boolean);
-};
-
-const Login = () => {
-  const navigate = useNavigate();
-  const setAuth = useAuthStore((state) => state.setAuth);
-  const token = useAuthStore((state) => state.token);
-  const roles = useAuthStore((state) => state.roles);
-  const can   = useAuthStore((state) => state.can);
-  const [showPassword, setShowPassword] = useState(false);
-  const [shopInfo, setShopInfo] = useState(() => getStoredShopInfo());
+const ForgotPassword = () => {
+  const [shopInfo] = useState(() => getStoredShopInfo());
+  const [sent, setSent] = useState(false);
 
   const {
     register,
@@ -57,58 +32,18 @@ const Login = () => {
     formState: { errors },
   } = useForm({
     resolver: zodResolver(schema),
-    defaultValues: {
-      login: "",
-      password: "",
-    },
+    defaultValues: { email: "" },
   });
 
-  const redirectByPermission = () => {
-    navigate(resolveLandingPath(can), { replace: true });
-  };
-
-  useEffect(() => {
-    if (token) redirectByPermission();
-  }, [token, roles]);
-
-  useEffect(() => {
-    const syncShopInfo = (event) => {
-      setShopInfo(event.detail ?? getStoredShopInfo());
-    };
-
-    window.addEventListener(SHOP_INFO_UPDATED_EVENT, syncShopInfo);
-    window.addEventListener("storage", syncShopInfo);
-
-    return () => {
-      window.removeEventListener(SHOP_INFO_UPDATED_EVENT, syncShopInfo);
-      window.removeEventListener("storage", syncShopInfo);
-    };
-  }, []);
-
   const mutation = useMutation({
-    mutationFn: loginApi,
-    onSuccess: (response) => {
-      const payload = response?.data ?? response;
-      const user = payload?.user ?? null;
-
-      const userRoles = getNames(user?.roles ?? payload?.roles ?? []);
-      const userPermissions = getNames(
-        user?.permissions ?? payload?.permissions ?? []
-      );
-
-      setAuth({
-        token: payload?.token,
-        tokenType: payload?.token_type || "Bearer",
-        user,
-        roles: userRoles,
-        permissions: userPermissions,
-      });
+    mutationFn: forgotPasswordApi,
+    onSuccess: () => {
+      setSent(true);
     },
     onError: (error) => {
       const message =
-        error?.response?.data?.errors?.login?.[0] ||
         error?.response?.data?.message ||
-        "ការចូលប្រើបានបរាជ័យ សូមពិនិត្យព័ត៌មានរបស់អ្នកម្ដងទៀត";
+        "មិនអាចផ្ញើសំណើបានទេ សូមព្យាយាមម្ដងទៀត";
 
       setError("root", {
         type: "server",
@@ -118,7 +53,8 @@ const Login = () => {
   });
 
   const onSubmit = (values) => {
-    mutation.mutate(values);
+    setSent(false);
+    mutation.mutate(values.email);
   };
 
   return (
@@ -135,7 +71,6 @@ const Login = () => {
         <div className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-white/70 bg-white/85 shadow-[0_24px_60px_-22px_rgba(190,18,60,0.25)] backdrop-blur-xl lg:grid-cols-[1.02fr_1fr]">
           {/* Left Brand Panel */}
           <div className="relative hidden overflow-hidden bg-gradient-to-br from-rose-600 via-red-600 to-red-700 p-8 text-white lg:flex lg:flex-col lg:justify-between xl:p-9">
-            {/* decorative rings */}
             <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full border border-white/15" />
             <div className="pointer-events-none absolute -bottom-24 -left-10 h-72 w-72 rounded-full border border-white/10" />
             <div className="pointer-events-none absolute right-10 bottom-32 h-3 w-3 rounded-full bg-white/40" />
@@ -157,12 +92,11 @@ const Login = () => {
 
               <div className="mt-10 max-w-md">
                 <h1 className="text-[2.15rem] font-bold leading-[1.25]">
-                  គ្រប់គ្រងស្តុក និងការលក់
-                  <span className="block text-white/95">ងាយស្រួលក្នុងកន្លែងតែមួយ</span>
+                  ភ្លេចពាក្យសម្ងាត់?
+                  <span className="block text-white/95">មិនអីទេ យើងជួយអ្នក</span>
                 </h1>
                 <p className="mt-4 text-sm leading-7 text-white/85">
-                  គ្រប់គ្រងទំនិញ ស្តុក អ្នកផ្គត់ផ្គង់ អតិថិជន
-                  និងការលក់ប្រចាំថ្ងៃ ប្រកបដោយសុវត្ថិភាព និងភាពរលូន។
+                  បញ្ចូលអ៊ីមែលដែលបានចុះឈ្មោះ ហើយយើងនឹងផ្ញើតំណកំណត់ពាក្យសម្ងាត់ឡើងវិញទៅឱ្យអ្នក។
                 </p>
               </div>
             </div>
@@ -171,7 +105,7 @@ const Login = () => {
               <Feature
                 icon={<FiShield className="text-lg" />}
                 title="សុវត្ថិភាពខ្ពស់"
-                desc="ការចូលប្រើតាមតួនាទី សម្រាប់បុគ្គលិកដែលមានសិទ្ធិ។"
+                desc="តំណកំណត់ពាក្យសម្ងាត់ផុតកំណត់ក្នុងរយៈពេល ៦០ នាទី។"
               />
               <Feature
                 icon={<FiTrendingUp className="text-lg" />}
@@ -189,7 +123,6 @@ const Login = () => {
           {/* Right Form Panel */}
           <div className="flex items-center justify-center p-5 sm:p-7 lg:p-9">
             <div className="w-full max-w-sm">
-              {/* Mobile brand */}
               <div className="mb-6 flex items-center gap-3 lg:hidden">
                 <div className="login-icon-3d flex h-12 w-12 items-center justify-center rounded-xl bg-red-600 text-white">
                   <span className="text-base font-extrabold">{getShopInitials(shopInfo.name)}</span>
@@ -206,86 +139,51 @@ const Login = () => {
 
               <div className="mb-6">
                 <div className="login-icon-3d mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white">
-                  <FiShield className="text-xl" />
+                  <FiMail className="text-xl" />
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900">ចូលប្រើប្រាស់</h2>
+                <h2 className="text-2xl font-bold text-slate-900">ភ្លេចពាក្យសម្ងាត់</h2>
                 <p className="mt-1.5 text-sm leading-6 text-slate-500">
-                  សូមបញ្ចូលព័ត៌មានគណនីរបស់អ្នក ដើម្បីចូលប្រើប្រព័ន្ធ {shopInfo.name}។
+                  បញ្ចូលអ៊ីមែលរបស់អ្នក ដើម្បីទទួលតំណកំណត់ពាក្យសម្ងាត់ឡើងវិញ។
                 </p>
               </div>
 
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                {/* Username */}
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    ឈ្មោះអ្នកប្រើ ឬអ៊ីមែល
+                    អ៊ីមែល
                   </label>
                   <div className="group relative">
                     <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-red-500">
-                      <FiUser />
+                      <FiMail />
                     </span>
                     <input
-                      type="text"
-                      {...register("login")}
-                      placeholder="បញ្ចូលឈ្មោះអ្នកប្រើ ឬអ៊ីមែល"
+                      type="email"
+                      {...register("email")}
+                      placeholder="បញ្ចូលអ៊ីមែលរបស់អ្នក"
                       className={`w-full rounded-xl border bg-white py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 focus:ring-red-100 ${
-                        errors.login
+                        errors.email
                           ? "border-red-400 focus:border-red-500"
                           : "border-slate-200 focus:border-red-500"
                       }`}
                     />
                   </div>
-                  {errors.login && (
+                  {errors.email && (
                     <p className="mt-2 text-sm text-red-500">
-                      {errors.login.message}
+                      {errors.email.message}
                     </p>
                   )}
                 </div>
 
-                {/* Password */}
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <label className="block text-sm font-semibold text-slate-700">
-                      ពាក្យសម្ងាត់
-                    </label>
-                    <Link
-                      to="/forgot-password"
-                      className="text-xs font-semibold text-red-600 hover:text-red-700"
-                    >
-                      ភ្លេចពាក្យសម្ងាត់?
-                    </Link>
-                  </div>
-                  <div className="group relative">
-                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-red-500">
-                      <FiLock />
+                {sent && (
+                  <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    <FiCheckCircle className="mt-0.5 shrink-0" />
+                    <span>
+                      ប្រសិនបើអ៊ីមែលនេះមានចុះឈ្មោះ តំណកំណត់ពាក្យសម្ងាត់ឡើងវិញត្រូវបានផ្ញើទៅហើយ។
+                      សូមពិនិត្យមើលប្រអប់សំបុត្ររបស់អ្នក។
                     </span>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      {...register("password")}
-                      placeholder="បញ្ចូលពាក្យសម្ងាត់"
-                      className={`w-full rounded-xl border bg-white py-3 pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 focus:ring-red-100 ${
-                        errors.password
-                          ? "border-red-400 focus:border-red-500"
-                          : "border-slate-200 focus:border-red-500"
-                      }`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-red-500"
-                      aria-label={showPassword ? "លាក់ពាក្យសម្ងាត់" : "បង្ហាញពាក្យសម្ងាត់"}
-                    >
-                      {showPassword ? <FiEyeOff /> : <FiEye />}
-                    </button>
                   </div>
-                  {errors.password && (
-                    <p className="mt-2 text-sm text-red-500">
-                      {errors.password.message}
-                    </p>
-                  )}
-                </div>
+                )}
 
-                {/* Server error */}
                 {errors.root && (
                   <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
                     <FiAlertCircle className="mt-0.5 shrink-0" />
@@ -293,7 +191,6 @@ const Login = () => {
                   </div>
                 )}
 
-                {/* Submit */}
                 <button
                   type="submit"
                   disabled={mutation.isPending}
@@ -302,27 +199,21 @@ const Login = () => {
                   {mutation.isPending ? (
                     <>
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                      កំពុងចូលប្រើ...
+                      កំពុងផ្ញើ...
                     </>
                   ) : (
-                    "ចូលប្រើប្រាស់"
+                    "ផ្ញើតំណកំណត់ពាក្យសម្ងាត់"
                   )}
                 </button>
               </form>
 
-              <div className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs leading-6 text-slate-500">
-                <span className="table-icon-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200">
-                  <FiUsers size={15} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  សម្រាប់បុគ្គលិកដែលមានសិទ្ធិតែប៉ុណ្ណោះ។
-                  ការចូលប្រើត្រូវបានផ្ដល់ឲ្យតាមតួនាទីដែលបានកំណត់។
-                </span>
-              </div>
-
-              <p className="mt-4 text-center text-xs text-slate-400">
-                © {new Date().getFullYear()} {shopInfo.name} · រក្សាសិទ្ធិគ្រប់យ៉ាង
-              </p>
+              <Link
+                to="/login"
+                className="mt-5 flex items-center justify-center gap-2 text-sm font-semibold text-slate-500 hover:text-red-600"
+              >
+                <FiArrowLeft />
+                ត្រឡប់ទៅចូលប្រើប្រាស់
+              </Link>
             </div>
           </div>
         </div>
@@ -343,4 +234,4 @@ const Feature = ({ icon, title, desc }) => (
   </div>
 );
 
-export default Login;
+export default ForgotPassword;
