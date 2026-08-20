@@ -8,6 +8,11 @@
 // permissions the user actually has, in the same priority order as the sidebar.
 export function resolveLandingPath(can) {
   if (can("dashboard.view")) return "/home";
+  // Checked before the admin-panel view permissions below: a cashier role
+  // typically also has sales.view (to see their own sales for returns), which
+  // would otherwise match first and send a cashier to the admin Sales page
+  // instead of the POS register they actually need.
+  if (can("sales.create")) return "/pos";
   if (can("sales.view")) return "/home/sales";
   if (can("purchases.view")) return "/home/purchases";
   if (can("products.view")) return "/home/products";
@@ -19,6 +24,5 @@ export function resolveLandingPath(can) {
   if (can("users.view")) return "/home/users";
   if (can("roles.view")) return "/home/roles";
   if (can("audit-log.view")) return "/home/audit-log";
-  if (can("sales.create")) return "/pos";
   return "/login";
 }

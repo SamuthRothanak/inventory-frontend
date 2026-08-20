@@ -125,10 +125,15 @@ function formatKhRelativeTime(value) {
 }
 
 // ── Sub-components ────────────────────────────────────────────────
-function HeroCard({ theme, title, value, sub, icon, iconBg, trend, details = [] }) {
+function HeroCard({ theme, title, value, sub, icon, iconBg, trend, details = [], to }) {
   const Icon = icon;
+  const Wrapper = to ? Link : "div";
+  const wrapperProps = to ? { to } : {};
   return (
-    <div className={`rounded-2xl border p-6 shadow-sm ${theme.card}`}>
+    <Wrapper
+      {...wrapperProps}
+      className={`block rounded-2xl border p-6 shadow-sm transition ${theme.card} ${to ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md" : ""}`}
+    >
       <div className="flex items-center justify-between">
         <p className={`text-sm font-semibold uppercase tracking-wide ${theme.muted}`}>{title}</p>
         <div className={`summary-icon-3d flex h-12 w-12 items-center justify-center rounded-2xl text-xl ${iconBg}`}>
@@ -148,31 +153,41 @@ function HeroCard({ theme, title, value, sub, icon, iconBg, trend, details = [] 
       )}
       <div className="mt-3 flex items-center justify-between">
         <p className={`text-sm ${theme.muted}`}>{sub}</p>
-        {trend && (
+        {trend ? (
           <span className={`flex max-w-[8.5rem] items-center gap-1 text-right text-xs font-bold leading-tight ${trend.up ? "text-emerald-500" : "text-red-400"}`}>
             {trend.up ? <FiArrowUp className="shrink-0 text-sm" /> : <FiArrowDown className="shrink-0 text-sm" />}
             {trend.pct}% ធៀបម្សិលមិញ
           </span>
-        )}
+        ) : to ? (
+          <span className={`flex items-center gap-1 text-xs font-semibold ${theme.muted}`}>
+            មើលលម្អិត <FiExternalLink className="text-xs" />
+          </span>
+        ) : null}
       </div>
-    </div>
+    </Wrapper>
   );
 }
 
-function MiniCard({ theme, label, value, icon, iconBg, accent }) {
+function MiniCard({ theme, label, value, icon, iconBg, accent, to }) {
   const Icon = icon;
+  const Wrapper = to ? Link : "div";
+  const wrapperProps = to ? { to } : {};
   return (
-    <div className={`rounded-2xl border border-l-4 p-4 shadow-sm ${theme.card} ${accent}`}>
+    <Wrapper
+      {...wrapperProps}
+      className={`block rounded-2xl border border-l-4 p-4 shadow-sm transition ${theme.card} ${accent} ${to ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md" : ""}`}
+    >
       <div className="flex items-center gap-3">
         <div className={`summary-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base ${iconBg}`}>
           <Icon />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className={`text-xs font-semibold uppercase tracking-wide ${theme.muted}`}>{label}</p>
           <p className={`mt-0.5 text-2xl font-extrabold leading-none ${theme.pageTitle}`}>{value}</p>
         </div>
+        {to && <FiExternalLink className={`shrink-0 text-sm ${theme.muted}`} />}
       </div>
-    </div>
+    </Wrapper>
   );
 }
 
@@ -242,6 +257,9 @@ export default function Dashboard() {
   // gates Purchases access, so a role like "staff" (dashboard.view but no purchases.view) doesn't
   // see them here even though it can't open the Purchases page itself.
   const canViewPurchases = can("purchases.view");
+  const debtTo = can("reports.sales") ? "/home/reports" : null;
+  const DebtWrapper = debtTo ? Link : "div";
+  const debtWrapperProps = debtTo ? { to: debtTo } : {};
 
   const theme = {
     pageTitle: isDark ? "text-white"                                  : "text-zinc-900",
@@ -386,6 +404,7 @@ export default function Dashboard() {
       icon:   FiAlertTriangle,
       iconBg: stockFollowCount > 0 ? "bg-amber-500/10 text-amber-500" : "bg-emerald-500/10 text-emerald-500",
       accent: stockFollowCount > 0 ? "border-l-amber-500" : "border-l-emerald-500",
+      to:     can("stock-balances.view") ? "/home/inventory" : undefined,
     },
     {
       label:  "ត្រឡប់ / ទាមទារ",
@@ -394,6 +413,7 @@ export default function Dashboard() {
       icon:   FiRotateCcw,
       iconBg: returnFollowCount > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500",
       accent: returnFollowCount > 0 ? "border-l-rose-500" : "border-l-emerald-500",
+      to:     can("sales.view") ? "/home/sales" : undefined,
     },
     canViewPurchases && {
       label:  "ចាំទទួលស្តុក",
@@ -402,6 +422,7 @@ export default function Dashboard() {
       icon:   FiPackage,
       iconBg: "bg-violet-500/10 text-violet-500",
       accent: "border-l-violet-500",
+      to:     "/home/purchases",
     },
   ].filter(Boolean);
 
@@ -411,16 +432,19 @@ export default function Dashboard() {
       type: "low_stock", label: "ស្តុកស្ទើរអស់",
       color: "text-red-500", bg: "bg-red-500/10", icon: FiAlertTriangle,
       items: d.alerts.low_stock,
+      to: can("stock-balances.view") ? "/home/inventory" : null,
     },
     canViewPurchases && d.alerts.pending_stock_in.length > 0 && {
       type: "pending_stock_in", label: "រង់ចាំទទួលស្តុក",
       color: "text-violet-500", bg: "bg-violet-500/10", icon: FiPackage,
       items: d.alerts.pending_stock_in,
+      to: "/home/purchases",
     },
     d.alerts.unpaid_sales.length > 0 && {
       type: "unpaid", label: "មិនទាន់បង់ / មួយផ្នែក",
       color: "text-amber-500", bg: "bg-amber-500/10", icon: FiCreditCard,
       items: d.alerts.unpaid_sales,
+      to: can("sales.view") ? "/home/sales" : null,
     },
     d.alerts.expiring_soon.length > 0 && {
       type: "expiring_soon", label: "ជិតផុតកំណត់",
@@ -431,6 +455,7 @@ export default function Dashboard() {
           ? item.expired_date + " · សល់ " + fmtInt(item.qty_remaining)
           : item.detail,
       })),
+      to: can("stock-balances.view") ? "/home/inventory" : null,
     },
   ].filter(Boolean);
 
@@ -491,12 +516,17 @@ export default function Dashboard() {
   ];
 
   // ── Recent activities ─────────────────────────────────────────────
+  const ACTIVITY_LINK = {
+    sale:     can("sales.view") ? "/home/sales" : null,
+    purchase: canViewPurchases ? "/home/purchases" : null,
+  };
   const recentActivities = d.recent_activities
     .filter((a) => canViewPurchases || a.type !== "purchase")
     .map((a, i) => ({
         id: i,
         ...(ACTIVITY_META[a.type] ?? { icon: FiActivity, color: "text-zinc-400", bg: "bg-zinc-100" }),
         label: a.label, sub: a.sub, time: formatKhRelativeTime(a.time),
+        to: ACTIVITY_LINK[a.type] ?? null,
       }));
 
   return (
@@ -548,6 +578,7 @@ export default function Dashboard() {
                 { label: "សរុប KHR", value: `៛${fmtInt(d?.today.sales_total_khr)}` },
                 { label: "សរុបជា USD", value: `$${fmtUsd(d?.today.sales_total_usd)}`, className: "text-emerald-500" },
               ]}
+              to={can("sales.view") ? "/home/sales" : undefined}
             />
             <HeroCard
               theme={theme}
@@ -561,6 +592,7 @@ export default function Dashboard() {
                 { label: "ទទួល USD", value: `$${fmtUsd(d?.payment_breakdown.total_collected_actual_usd)}` },
                 { label: "ទទួល KHR", value: `៛${fmtInt(d?.payment_breakdown.total_collected_khr)}` },
               ]}
+              to={can("sales.view") ? "/home/sales" : undefined}
             />
             {canViewPurchases && (
               <HeroCard
@@ -575,9 +607,13 @@ export default function Dashboard() {
                   { label: "បានបង់ USD", value: `$${fmtUsd(d?.today.purchases_paid_usd)}` },
                   { label: "បានបង់ KHR", value: `៛${fmtInt(d?.today.purchases_paid_khr)}` },
                 ]}
+                to="/home/purchases"
               />
             )}
-            <div className={`rounded-2xl border p-6 shadow-sm ${theme.card}`}>
+            <DebtWrapper
+              {...debtWrapperProps}
+              className={`block rounded-2xl border p-6 shadow-sm transition ${theme.card} ${debtTo ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md" : ""}`}
+            >
               <div className="flex items-center justify-between">
                 <p className={`text-sm font-semibold uppercase tracking-wide ${theme.muted}`}>ជំពាក់បច្ចុប្បន្ន</p>
                 <div className="summary-icon-3d flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-xl text-amber-500">
@@ -604,7 +640,7 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-            </div>
+            </DebtWrapper>
           </div>
         )}
       </div>
@@ -613,7 +649,7 @@ export default function Dashboard() {
       {!isLoading && secondaryCards.length > 0 && (
         <div className="grid gap-3 md:grid-cols-3">
           {secondaryCards.map((c) => (
-            <MiniCard key={c.label} theme={theme} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} accent={c.accent} />
+            <MiniCard key={c.label} theme={theme} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} accent={c.accent} to={c.to} />
           ))}
         </div>
       )}
@@ -636,6 +672,13 @@ export default function Dashboard() {
               </span>
             </div>
           </div>
+          {can("reports.sales") && (
+            <div className="mb-3 flex justify-end">
+              <Link to="/home/reports" className={`flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:opacity-80 ${theme.badge}`}>
+                <FiExternalLink className="text-xs" /> មើលរបាយការណ៍លម្អិត
+              </Link>
+            </div>
+          )}
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={d?.chart ?? []} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.gridLine} vertical={false} />

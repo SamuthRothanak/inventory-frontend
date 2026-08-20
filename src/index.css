@@ -265,15 +265,19 @@ input[type="number"] {
     margin-bottom: 0;
   }
 
+  /* Stacked label-above-value layout: side-by-side label/value competed for
+     width and forced long Khmer labels (e.g. "ពេល / អ្នកប្រើ") to wrap
+     mid-cluster, mangling the glyph. Stacking each gets the full card width
+     and wraps only at natural word boundaries. */
   .responsive-card-table > tbody > tr > td:not([colspan]) {
     display: flex;
+    flex-direction: column;
+    align-items: stretch;
     min-width: 0;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.75rem 1rem !important;
+    gap: 0.3rem;
+    padding: 0.7rem 1rem !important;
     border-top: 1px solid rgba(161, 161, 170, 0.16);
-    text-align: right;
+    text-align: left;
   }
 
   .responsive-card-table > tbody > tr > td:not([colspan]):first-child {
@@ -282,17 +286,16 @@ input[type="number"] {
 
   .responsive-card-table > tbody > tr > td:not([colspan])::before {
     content: attr(data-label);
-    flex: 0 0 auto;
-    max-width: 42%;
     color: #71717a;
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     font-weight: 700;
-    text-align: left;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
   }
 
   .responsive-card-table > tbody > tr > td:not([colspan]) > * {
     min-width: 0;
-    max-width: 68%;
+    max-width: 100%;
   }
 
   .responsive-card-table > tbody > tr > td[data-label=""]::before {
@@ -300,6 +303,8 @@ input[type="number"] {
   }
 
   .responsive-card-table > tbody > tr > td[data-label=""] {
+    flex-direction: row;
+    align-items: center;
     justify-content: flex-end;
   }
 

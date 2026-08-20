@@ -1,4 +1,5 @@
 ﻿import { useState } from "react";
+import { Link } from "react-router-dom";
 
 const DETAIL_KH = {
   "received · needs confirm": "បានទទួល · ត្រូវបញ្ជាក់",
@@ -43,22 +44,27 @@ export default function AlertSection({ alert, theme, isDark }) {
       </button>
       {open && (
         <div className="space-y-2 px-3 pb-3">
-          {alert.items.map((item, i) => (
-            <div
-              key={`${item.id ?? item.name ?? "alert"}-${i}`}
-              className={`flex min-w-0 items-start gap-3 rounded-lg border border-l-4 px-3 py-2.5 text-xs transition ${ROW_ACCENT[alert.type] ?? "border-l-zinc-400"} ${isDark ? "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
-            >
-              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-bold ${alert.bg} ${alert.color}`}>
-                {i + 1}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className={`block break-words font-bold leading-5 ${theme.pageTitle}`}>{item.name}</span>
-                <span className={`mt-0.5 block break-words leading-5 ${theme.muted}`}>
-                  {translateDetail(item.detail) || "-"}
+          {alert.items.map((item, i) => {
+            const RowTag = alert.to ? Link : "div";
+            const rowProps = alert.to ? { to: alert.to } : {};
+            return (
+              <RowTag
+                key={`${item.id ?? item.name ?? "alert"}-${i}`}
+                {...rowProps}
+                className={`flex min-w-0 items-start gap-3 rounded-lg border border-l-4 px-3 py-2.5 text-xs transition ${ROW_ACCENT[alert.type] ?? "border-l-zinc-400"} ${alert.to ? "cursor-pointer" : ""} ${isDark ? "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"}`}
+              >
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-bold ${alert.bg} ${alert.color}`}>
+                  {i + 1}
                 </span>
-              </span>
-            </div>
-          ))}
+                <span className="min-w-0 flex-1">
+                  <span className={`block break-words font-bold leading-5 ${theme.pageTitle}`}>{item.name}</span>
+                  <span className={`mt-0.5 block break-words leading-5 ${theme.muted}`}>
+                    {translateDetail(item.detail) || "-"}
+                  </span>
+                </span>
+              </RowTag>
+            );
+          })}
         </div>
       )}
     </div>

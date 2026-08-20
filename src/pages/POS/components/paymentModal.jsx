@@ -1,11 +1,13 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import QRCode from "qrcode";
 import {
   BadgeDollarSign, X, CheckCircle, Printer, ShoppingCart,
-  Hash, Clock, AlertCircle,
+  Hash, Clock, AlertCircle, Maximize,
 } from "./posIcons";
 import { usd, khr, generateInvoiceNo, cn } from "./posData";
 import { PaymentRow, Divider } from "./ui";
 import { createSaleApi } from "../../../services/sale.service";
+import { generateBakongQrApi, checkBakongPaymentApi } from "../../../services/bakong.service";
 import SalePrintModal from "../../Admin/Sales/components/SalePrintModal";
 
 function buildSaleForPrint(data) {
@@ -55,6 +57,7 @@ function buildSaleForPrint(data) {
 const BASE_TABS = [
   { id: "cash",     label: "សាច់ប្រាក់" },
   { id: "transfer", label: "ធនាគារ / QR" },
+  { id: "bakong",   label: "Bakong KHQR" },
   { id: "split",    label: "បំបែក" },
 ];
 
@@ -340,6 +343,242 @@ export default function PaymentModal({
   const [isSubmitting,      setIsSubmitting]       = useState(false);
   const [submitError,       setSubmitError]        = useState(null);
 
+  // ── Bakong KHQR ──
+  const [bakongQrText,  setBakongQrText]  = useState("");
+  const [bakongMd5,     setBakongMd5]     = useState("");
+  const [bakongStatus,  setBakongStatus]  = useState("idle"); // idle | generating | waiting | paid | error
+  const [bakongError,   setBakongError]   = useState("");
+  const [bakongCheckWarning, setBakongCheckWarning] = useState("");
+  const [bakongFullscreen, setBakongFullscreen] = useState(false);
+  const bakongCanvasRef = useRef(null);
+  const bakongFullscreenCanvasRef = useRef(null);
+  const bakongPollRef   = useRef(null);
+  // Second-screen "customer display": a separate popup window, kept in sync over
+  // BroadcastChannel rather than shared React state, since it's a genuinely separate
+  // window/document. bakongPopupRef lets us close it directly (sale completed, modal
+  // closed) without relying on the popup to notice on its own.
+  const bakongPopupRef = useRef(null);
+  const bakongChannelRef = useRef(null);
+  // Synchronous guard against completing the sale twice: setInterval fires on a fixed
+  // clock regardless of whether the previous tick's request has returned yet, so if a
+  // check call is slow (>4s), two ticks can both be in flight and both see paid=true.
+  // clearInterval() alone only stops *future* ticks — it can't cancel one already
+  // awaiting its response — so state/ref must decide "have we already acted on this".
+  const bakongCompletedRef = useRef(false);
+  const bakongFailCountRef = useRef(0);
+  const bakongElapsedMsRef = useRef(0);
+  const [bakongRetryKey, setBakongRetryKey] = useState(0);
+
+  // Bakong's check-transaction API is quota-limited (confirmed: 100 requests/day on
+  // this token) — polling every few seconds burns through that in minutes. 15s keeps
+  // a single sale's worst case (nobody pays, cashier leaves it open) to a bounded
+  // number of calls, and MAX_POLL_MS stops polling entirely after 5 minutes so a
+  // forgotten/abandoned QR can't keep eating quota in the background.
+  const BAKONG_POLL_INTERVAL_MS = 15000;
+  const BAKONG_MAX_POLL_MS = 5 * 60 * 1000;
+
+  useEffect(() => {
+    // `open` and `total` are both deps, not just `tab` — this modal instance stays
+    // mounted between opens (Pos.jsx always renders it, toggling `open`), so without
+    // these the QR would go stale: reopening on a new cart while already parked on
+    // this tab, or the cart total changing while on it, would otherwise keep showing
+    // a QR for the previous amount. `bakongRetryKey` lets the manual retry button
+    // (shown after a timeout) re-run this same generation logic on demand.
+    if (!open || tab !== "bakong" || total <= 0) return undefined;
+
+    let cancelled = false;
+    setBakongStatus("generating");
+    setBakongError("");
+    setBakongCheckWarning("");
+    bakongCompletedRef.current = false;
+    bakongFailCountRef.current = 0;
+    bakongElapsedMsRef.current = 0;
+
+    generateBakongQrApi(total)
+      .then((res) => {
+        if (cancelled) return;
+        const { qr, md5 } = res?.data ?? {};
+        setBakongQrText(qr || "");
+        setBakongMd5(md5 || "");
+        setBakongStatus("waiting");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBakongStatus("error");
+        setBakongError("មិនអាចបង្កើត QR បានទេ។ សូមព្យាយាមម្ដងទៀត។");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, open, total, bakongRetryKey]);
+
+  // Render the QR onto canvas whenever the text changes.
+  useEffect(() => {
+    if (!bakongQrText || !bakongCanvasRef.current) return;
+    QRCode.toCanvas(bakongCanvasRef.current, bakongQrText, { width: 220, margin: 1 }).catch(() => {});
+  }, [bakongQrText]);
+
+  // Fullscreen view uses a separate <canvas> (a single canvas node can't render in
+  // two places at once) — only drawn when the overlay is actually open.
+  useEffect(() => {
+    if (!bakongFullscreen || !bakongQrText || !bakongFullscreenCanvasRef.current) return;
+    QRCode.toCanvas(bakongFullscreenCanvasRef.current, bakongQrText, { width: 420, margin: 1 }).catch(() => {});
+  }, [bakongFullscreen, bakongQrText]);
+
+  // If payment gets confirmed while the customer is looking at the fullscreen QR,
+  // drop back to the normal modal automatically so the cashier sees the "paid" state
+  // and the completion button without needing to remember to exit fullscreen first.
+  useEffect(() => {
+    if (bakongStatus === "paid" && bakongFullscreen) {
+      setBakongFullscreen(false);
+    }
+  }, [bakongStatus, bakongFullscreen]);
+
+  // Create the customer-display BroadcastChannel once — this effect only owns the
+  // channel's lifecycle (open on mount, close on unmount), not its message handling.
+  useEffect(() => {
+    const channel = new BroadcastChannel("bakong-customer-display");
+    bakongChannelRef.current = channel;
+
+    return () => {
+      channel.close();
+      bakongPopupRef.current?.close?.();
+    };
+  }, []);
+
+  // Keep the channel's "request-state" handler AND the live broadcast in sync with
+  // current values. This must NOT live in the mount-only effect above: `onmessage`
+  // is a plain closure, so if it were assigned once on mount it would keep answering
+  // every future "request-state" with whatever cartItems/total/etc. were at mount
+  // time (typically an empty cart, since Pos.jsx renders this modal once, up front,
+  // long before any items exist) — a stale-closure bug that was confirmed live: the
+  // popup rendered the correct layout but with $0.00 and no items, every time.
+  useEffect(() => {
+    const channel = bakongChannelRef.current;
+    if (!channel) return;
+
+    const payload = { cartItems, subtotal, discountAmount, deliveryFeeUsd, total, qr: bakongQrText, status: bakongStatus };
+
+    channel.onmessage = (event) => {
+      if (event.data?.type === "request-state") {
+        channel.postMessage({ type: "state", payload });
+      }
+    };
+
+    channel.postMessage({ type: "state", payload });
+  }, [cartItems, subtotal, discountAmount, deliveryFeeUsd, total, bakongQrText, bakongStatus]);
+
+  // A manual, single check against the SAME still-live md5 — used from the timeout
+  // screen. Deliberately does NOT regenerate a new QR: if the connection dropped
+  // while a customer had already scanned and paid, the old md5 is the only thing
+  // that can ever be matched to that payment. Generating a fresh QR at that point
+  // would orphan it — the money already left their account, but nothing in this
+  // system would ever check that specific transaction again.
+  const [bakongManualCheckPending, setBakongManualCheckPending] = useState(false);
+
+  async function checkBakongOnceMore() {
+    if (!bakongMd5 || bakongCompletedRef.current) return;
+
+    setBakongManualCheckPending(true);
+    try {
+      const res = await checkBakongPaymentApi(bakongMd5);
+      if (res?.data?.paid && !bakongCompletedRef.current) {
+        bakongCompletedRef.current = true;
+        setBakongStatus("paid");
+        handleComplete();
+      }
+    } catch {
+      // leave the cashier on the timeout screen to try again — never silently drop
+      // a possibly-already-paid transaction just because one check call failed.
+    } finally {
+      setBakongManualCheckPending(false);
+    }
+  }
+
+  async function openCustomerDisplay() {
+    try {
+      if (!("getScreenDetails" in window)) throw new Error("unsupported");
+
+      const details = await window.getScreenDetails();
+      const secondScreen = details.screens.find((s) => !s.isPrimary);
+      if (!secondScreen) throw new Error("no-second-screen");
+
+      const popup = window.open(
+        "/pos/customer-display",
+        "bakong-customer-display",
+        `left=${secondScreen.left},top=${secondScreen.top},width=${secondScreen.width},height=${secondScreen.height},menubar=no,toolbar=no,location=no,status=no`
+      );
+      if (!popup) throw new Error("popup-blocked");
+
+      bakongPopupRef.current = popup;
+    } catch {
+      // Unsupported browser (Firefox/Safari), no second screen plugged in, or the
+      // user declined the window-placement permission — either way, fall back to
+      // the same-screen overlay so the feature still works with one monitor.
+      setBakongFullscreen(true);
+    }
+  }
+
+  // Poll for payment confirmation while waiting.
+  useEffect(() => {
+    if (tab !== "bakong" || bakongStatus !== "waiting" || !bakongMd5) return undefined;
+
+    bakongPollRef.current = window.setInterval(async () => {
+      bakongElapsedMsRef.current += BAKONG_POLL_INTERVAL_MS;
+      if (bakongElapsedMsRef.current >= BAKONG_MAX_POLL_MS) {
+        window.clearInterval(bakongPollRef.current);
+        setBakongStatus("timeout");
+        return;
+      }
+
+      try {
+        const res = await checkBakongPaymentApi(bakongMd5);
+        bakongFailCountRef.current = 0;
+        setBakongCheckWarning("");
+
+        if (res?.data?.paid && !bakongCompletedRef.current) {
+          // The ref check+set happens synchronously right here, before the `await`
+          // inside handleComplete() ever runs — so even if another tick's request
+          // is already in flight and also resolves paid=true, only the first one
+          // to reach this line proceeds. clearInterval() stops future ticks too,
+          // but is not what prevents the double-complete — the ref is.
+          bakongCompletedRef.current = true;
+          window.clearInterval(bakongPollRef.current);
+          setBakongStatus("paid");
+          handleComplete();
+        }
+      } catch {
+        // Could be a transient network hiccup, or something persistently broken
+        // (expired token, API outage) — either way, never treat this as "paid",
+        // but do surface it after a few misses so it isn't silent forever.
+        bakongFailCountRef.current += 1;
+        if (bakongFailCountRef.current >= 3) {
+          setBakongCheckWarning("មិនអាចពិនិត្យការទូទាត់បានទេ។ សូមពិនិត្យអ៊ីនធឺណិត ឬសាកល្បងម្ដងទៀត។");
+        }
+      }
+    }, BAKONG_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(bakongPollRef.current);
+    };
+  }, [tab, bakongStatus, bakongMd5]);
+
+  // Close the customer-display popup whenever this modal closes, cancelled or not —
+  // it has no purpose once there's no active checkout for it to reflect.
+  useEffect(() => {
+    if (!open) bakongPopupRef.current?.close?.();
+  }, [open]);
+
+  function downloadBakongQr() {
+    const canvas = bakongCanvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.download = `bakong-qr-${usd(total).replace(/[^0-9.]/g, "")}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  }
+
   if (!open) return null;
 
   // ── Cash calculations ──
@@ -415,6 +654,19 @@ export default function PaymentModal({
         amountAppliedInvoiceCurrency: transferApplied,
         changeAmount: transferChangeDueUsd > 0 ? transferChangeAmt : 0,
         changeCurrency: transferChangeDueUsd > 0 ? transferChangeCurrency : transferCurrency,
+        paidAt: now,
+      }];
+    }
+    if (tab === "bakong") {
+      return [{
+        paymentMethod: "qr",
+        providerName: "Bakong",
+        currencyCode: "USD",
+        amountReceived: total,
+        exchangeRateUsed: exchangeRate,
+        amountAppliedInvoiceCurrency: total,
+        changeAmount: 0,
+        changeCurrency: "USD",
         paidAt: now,
       }];
     }
@@ -516,6 +768,17 @@ export default function PaymentModal({
         deliveryFeeUsd,
         total,
         payments:      builtPayments,
+        // Was missing — TodaySalesModal's cash/electronic summary cards read these two
+        // fields directly (Pos.jsx totalCash/totalElectronic), but this object never set
+        // them, so a sale just completed in this tab always showed $0.00 in both cards
+        // even though the total/count were correct. amountAppliedInvoiceCurrency is
+        // already the net-of-change USD amount for each payment (see cashApplied above).
+        cashUsd: builtPayments
+          .filter((p) => p.paymentMethod === "cash")
+          .reduce((sum, p) => sum + Number(p.amountAppliedInvoiceCurrency || 0), 0),
+        electronicUsd: builtPayments
+          .filter((p) => p.paymentMethod !== "cash")
+          .reduce((sum, p) => sum + Number(p.amountAppliedInvoiceCurrency || 0), 0),
         exchangeRate,
         // Was missing — the note WAS already being sent to the backend (salePayload.note above),
         // but never carried into the receipt/print data, so SalePrintModal's own "📝 {sale.note}"
@@ -588,6 +851,10 @@ export default function PaymentModal({
         deliveryFeeUsd,
         total,
         payments:      [],
+        // Credit sale — nothing collected today, so both are correctly $0 (unlike the
+        // cash/transfer paths above, this isn't a bug fix, just explicit for clarity).
+        cashUsd: 0,
+        electronicUsd: 0,
         exchangeRate,
         isCredit:      true,
         note,
@@ -613,6 +880,81 @@ export default function PaymentModal({
   }
 
   return (
+    <>
+      {/* ── Bakong fullscreen customer view — turn the laptop screen toward the
+          customer: what they're buying on the left, the QR to pay on the right.
+          Standard dual-purpose "customer display" layout, just on one screen. ── */}
+      {bakongFullscreen && (
+        <div className="fixed inset-0 z-100 flex flex-col bg-white">
+          <button
+            type="button"
+            onClick={() => setBakongFullscreen(false)}
+            className="absolute right-5 top-5 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-100"
+            aria-label="បិទ"
+          >
+            <X className="h-5 w-5" />
+          </button>
+
+          <div className="grid h-full grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
+            {/* Left — what they're buying */}
+            <div className="flex flex-col overflow-hidden border-b border-slate-100 bg-slate-50 p-8 lg:border-b-0 lg:border-r">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500 text-white">
+                  <ShoppingCart className="h-5 w-5" />
+                </div>
+                <p className="text-lg font-extrabold text-slate-900">វិក្កយបត្ររបស់អ្នក</p>
+              </div>
+
+              <div className="flex-1 space-y-2.5 overflow-y-auto pr-1">
+                {cartItems.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-semibold text-slate-900">{item.productName}</p>
+                      <p className="mt-0.5 text-sm text-slate-500">{item.variantName} · {item.qty} {item.unitName} × {usd(item.unitPrice)}</p>
+                    </div>
+                    <span className="ml-3 shrink-0 text-base font-bold text-slate-900">{usd(item.lineTotal)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 space-y-1.5 border-t border-slate-200 pt-4 text-sm">
+                <div className="flex justify-between text-slate-500">
+                  <span>តម្លៃមុនបញ្ចុះ</span><span>{usd(subtotal)}</span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>បញ្ចុះ</span><span>−{usd(discountAmount)}</span>
+                  </div>
+                )}
+                {deliveryFeeUsd > 0 && (
+                  <div className="flex justify-between text-slate-500">
+                    <span>ដឹកជញ្ជូន</span><span>+{usd(deliveryFeeUsd)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-lg font-extrabold text-slate-900">
+                  <span>សរុបទាំងអស់</span>
+                  <span>{usd(total)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right — scan to pay */}
+            <div className="flex flex-col items-center justify-center gap-5 p-8">
+              <p className="text-xl font-bold text-slate-900">សូមស្កេន QR ដើម្បីទូទាត់</p>
+              <canvas ref={bakongFullscreenCanvasRef} className="rounded-2xl border border-slate-200" />
+              <p className="text-4xl font-extrabold text-slate-900">{usd(total)}</p>
+
+              {bakongStatus === "waiting" && (
+                <div className="flex items-center gap-2 text-base font-semibold text-amber-600">
+                  <Clock className="h-5 w-5 animate-pulse" />
+                  កំពុងរង់ចាំការទូទាត់...
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
       <div className="relative w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl" style={{ maxHeight: "92vh" }}>
 
@@ -974,6 +1316,140 @@ export default function PaymentModal({
               </div>
             )}
 
+            {/* ── Bakong KHQR ── */}
+            {tab === "bakong" && (
+              <div className="space-y-4">
+                <p className="font-bold text-slate-900">ស្កេនទូទាត់ Bakong KHQR</p>
+
+                <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-5">
+                  {bakongStatus === "generating" && (
+                    <div className="flex h-55 w-55 items-center justify-center">
+                      <span className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-red-500" />
+                    </div>
+                  )}
+
+                  {bakongStatus === "error" && (
+                    <div className="flex h-55 w-55 flex-col items-center justify-center gap-2 text-center">
+                      <AlertCircle className="h-6 w-6 text-red-500" />
+                      <p className="text-xs text-red-600">{bakongError}</p>
+                    </div>
+                  )}
+
+                  {bakongStatus === "timeout" && (
+                    <div className="flex w-full max-w-xs flex-col items-center gap-3 py-4 text-center">
+                      <Clock className="h-6 w-6 text-slate-400" />
+                      <p className="text-xs text-slate-500">ការត្រួតពិនិត្យស្វ័យប្រវត្តិឈប់ហើយ (5 នាទី) ។</p>
+
+                      <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-xs text-amber-700">
+                        <strong>⚠️ សំខាន់៖</strong> បើអតិថិជនទើបតែស្កេន+បង់ខណៈអ៊ីនធឺណិតដាច់ លុយរបស់គាត់ចូលដល់ហាងរួចហើយ — សូម <strong>ពិនិត្យម្តងទៀត</strong> ជាមុនសិន កុំបង្កើត QR ថ្មីភ្លាមៗ (បើមិនដូច្នេះទេ ការទូទាត់នោះនឹងបាត់ដោយគ្មានការកត់ត្រា)។
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={checkBakongOnceMore}
+                        disabled={bakongManualCheckPending}
+                        className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-red-500 px-3 text-xs font-bold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {bakongManualCheckPending && (
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                        )}
+                        ពិនិត្យម្តងទៀត
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setBakongRetryKey((k) => k + 1)}
+                        className="text-xs font-semibold text-slate-400 underline hover:text-red-600"
+                      >
+                        ប្រាកដថាមិនទាន់បង់ទេ — បង្កើត QR ថ្មី
+                      </button>
+                    </div>
+                  )}
+
+                  <canvas
+                    ref={bakongCanvasRef}
+                    className={cn(
+                      "rounded-lg",
+                      ["generating", "error", "timeout"].includes(bakongStatus) ? "hidden" : ""
+                    )}
+                  />
+
+                  {bakongStatus === "waiting" && (
+                    <div className="flex items-center gap-2 text-xs font-semibold text-amber-600">
+                      <Clock className="h-3.5 w-3.5 animate-pulse" />
+                      កំពុងរង់ចាំការទូទាត់...
+                    </div>
+                  )}
+
+                  {bakongCheckWarning && (
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-red-500">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      {bakongCheckWarning}
+                    </div>
+                  )}
+
+                  {bakongStatus === "paid" && (
+                    <div className="flex items-center gap-2 text-sm font-bold text-emerald-600">
+                      <CheckCircle className="h-4 w-4" />
+                      បានទូទាត់រួច! កំពុងបញ្ចប់ការលក់ដោយស្វ័យប្រវត្តិ...
+                    </div>
+                  )}
+
+                  {bakongStatus !== "timeout" && (
+                    <p className="text-lg font-extrabold text-slate-900">{usd(total)}</p>
+                  )}
+
+                  {bakongQrText && !["error", "timeout"].includes(bakongStatus) && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={openCustomerDisplay}
+                        className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100"
+                      >
+                        <Maximize className="h-3.5 w-3.5" />
+                        បង្ហាញអតិថិជន (អេក្រង់ទី 2 ឬពេញអេក្រង់)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={downloadBakongQr}
+                        className="text-xs font-semibold text-slate-500 underline hover:text-red-600"
+                      >
+                        ទាញយក QR (ផ្ញើតាម Messenger/Telegram)
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={bakongStatus !== "paid" || isSubmitting}
+                  onClick={handleComplete}
+                  className="quick-action-icon-3d flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-red-600 active:translate-y-0 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {isSubmitting
+                    ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    : <CheckCircle className="h-4 w-4" />
+                  }
+                  {isSubmitting ? "កំពុងដំណើរការ..." : `បញ្ចប់ការលក់ — ${usd(total)}`}
+                </button>
+
+                {selectedCustomer ? (
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleCreditComplete}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 text-sm font-bold text-blue-700 transition hover:-translate-y-0.5 hover:bg-blue-100 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    រក្សាទុកជាមិនទាន់ទូទាត់ (ផ្ញើ QR ខាងលើឱ្យអតិថិជនទូទាត់ក្រៅម៉ោង)
+                  </button>
+                ) : (
+                  <p className="text-center text-xs text-slate-400">
+                    ជ្រើសរើសអតិថិជនសិន ដើម្បីអាចរក្សាទុកជាមិនទាន់ទូទាត់បាន។
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* ── Split ── */}
             {tab === "split" && (
               <div className="space-y-4">
@@ -1226,5 +1702,6 @@ export default function PaymentModal({
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -1,11 +1,14 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   FiMail,
+  FiLock,
+  FiEye,
+  FiEyeOff,
   FiShield,
   FiTrendingUp,
   FiAlertCircle,
@@ -14,47 +17,119 @@ import {
   FiArrowLeft,
 } from "react-icons/fi";
 
-import { forgotPasswordApi } from "../../services/auth.service";
+import { forgotPasswordApi, verifyResetCodeApi, resetPasswordApi } from "../../services/auth.service";
 import { getShopInitials, getStoredShopInfo } from "../../utils/shopInfo";
 
-const schema = z.object({
+const emailSchema = z.object({
   email: z.string().min(1, "សូមបញ្ចូលអ៊ីមែល").email("អ៊ីមែលមិនត្រឹមត្រូវ"),
 });
 
-const ForgotPassword = () => {
-  const [shopInfo] = useState(() => getStoredShopInfo());
-  const [sent, setSent] = useState(false);
+const codeSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, "កូដត្រូវមាន 6 ខ្ទង់"),
+});
 
-  const {
-    register,
-    handleSubmit,
-    setError,
-    formState: { errors },
-  } = useForm({
-    resolver: zodResolver(schema),
+const passwordSchema = z
+  .object({
+    password: z.string().min(6, "ពាក្យសម្ងាត់ត្រូវមានយ៉ាងតិច ៦ តួអក្សរ"),
+    password_confirmation: z.string().min(6, "សូមបញ្ជាក់ពាក្យសម្ងាត់"),
+  })
+  .refine((data) => data.password === data.password_confirmation, {
+    message: "ពាក្យសម្ងាត់មិនត្រូវគ្នាទេ",
+    path: ["password_confirmation"],
+  });
+
+const ForgotPassword = () => {
+  const navigate = useNavigate();
+  const [shopInfo] = useState(() => getStoredShopInfo());
+  const [step, setStep] = useState("email"); // "email" | "code" | "password"
+  const [targetEmail, setTargetEmail] = useState("");
+  const [verifiedCode, setVerifiedCode] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const emailForm = useForm({
+    resolver: zodResolver(emailSchema),
     defaultValues: { email: "" },
   });
 
-  const mutation = useMutation({
+  const codeForm = useForm({
+    resolver: zodResolver(codeSchema),
+    defaultValues: { code: "" },
+  });
+
+  const passwordForm = useForm({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: { password: "", password_confirmation: "" },
+  });
+
+  const sendCodeMutation = useMutation({
     mutationFn: forgotPasswordApi,
-    onSuccess: () => {
-      setSent(true);
+    onSuccess: (_, email) => {
+      setTargetEmail(email);
+      setStep("code");
+      codeForm.reset();
     },
     onError: (error) => {
       const message =
         error?.response?.data?.message ||
         "មិនអាចផ្ញើសំណើបានទេ សូមព្យាយាមម្ដងទៀត";
 
-      setError("root", {
-        type: "server",
-        message,
-      });
+      emailForm.setError("root", { type: "server", message });
     },
   });
 
-  const onSubmit = (values) => {
-    setSent(false);
-    mutation.mutate(values.email);
+  const resendMutation = useMutation({
+    mutationFn: forgotPasswordApi,
+  });
+
+  const verifyCodeMutation = useMutation({
+    mutationFn: verifyResetCodeApi,
+    onSuccess: (_, { code }) => {
+      setVerifiedCode(code);
+      setStep("password");
+      passwordForm.reset();
+    },
+    onError: (error) => {
+      const message =
+        error?.response?.data?.errors?.code?.[0] ||
+        error?.response?.data?.message ||
+        "កូដនេះមិនត្រឹមត្រូវ ឬបានផុតកំណត់ហើយ";
+
+      codeForm.setError("root", { type: "server", message });
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: resetPasswordApi,
+    onSuccess: () => {
+      setDone(true);
+      window.setTimeout(() => navigate("/login", { replace: true }), 2000);
+    },
+    onError: (error) => {
+      const message =
+        error?.response?.data?.errors?.code?.[0] ||
+        error?.response?.data?.message ||
+        "មិនអាចកំណត់ពាក្យសម្ងាត់ឡើងវិញបានទេ សូមព្យាយាមម្ដងទៀត";
+
+      passwordForm.setError("root", { type: "server", message });
+    },
+  });
+
+  const onSubmitEmail = (values) => {
+    sendCodeMutation.mutate(values.email);
+  };
+
+  const onSubmitCode = (values) => {
+    verifyCodeMutation.mutate({ email: targetEmail, code: values.code });
+  };
+
+  const onSubmitPassword = (values) => {
+    resetMutation.mutate({ email: targetEmail, code: verifiedCode, ...values });
+  };
+
+  const handleResend = () => {
+    resendMutation.mutate(targetEmail);
   };
 
   return (
@@ -96,7 +171,7 @@ const ForgotPassword = () => {
                   <span className="block text-white/95">មិនអីទេ យើងជួយអ្នក</span>
                 </h1>
                 <p className="mt-4 text-sm leading-7 text-white/85">
-                  បញ្ចូលអ៊ីមែលដែលបានចុះឈ្មោះ ហើយយើងនឹងផ្ញើតំណកំណត់ពាក្យសម្ងាត់ឡើងវិញទៅឱ្យអ្នក។
+                  បញ្ចូលអ៊ីមែលដែលបានចុះឈ្មោះ ហើយយើងនឹងផ្ញើកូដកំណត់ពាក្យសម្ងាត់ឡើងវិញទៅឱ្យអ្នក។
                 </p>
               </div>
             </div>
@@ -105,7 +180,7 @@ const ForgotPassword = () => {
               <Feature
                 icon={<FiShield className="text-lg" />}
                 title="សុវត្ថិភាពខ្ពស់"
-                desc="តំណកំណត់ពាក្យសម្ងាត់ផុតកំណត់ក្នុងរយៈពេល ៦០ នាទី។"
+                desc="កូដកំណត់ពាក្យសម្ងាត់ផុតកំណត់ក្នុងរយៈពេល ១០ នាទី។"
               />
               <Feature
                 icon={<FiTrendingUp className="text-lg" />}
@@ -137,75 +212,263 @@ const ForgotPassword = () => {
                 </div>
               </div>
 
-              <div className="mb-6">
-                <div className="login-icon-3d mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white">
-                  <FiMail className="text-xl" />
-                </div>
-                <h2 className="text-2xl font-bold text-slate-900">ភ្លេចពាក្យសម្ងាត់</h2>
-                <p className="mt-1.5 text-sm leading-6 text-slate-500">
-                  បញ្ចូលអ៊ីមែលរបស់អ្នក ដើម្បីទទួលតំណកំណត់ពាក្យសម្ងាត់ឡើងវិញ។
-                </p>
-              </div>
-
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    អ៊ីមែល
-                  </label>
-                  <div className="group relative">
-                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-red-500">
-                      <FiMail />
-                    </span>
-                    <input
-                      type="email"
-                      {...register("email")}
-                      placeholder="បញ្ចូលអ៊ីមែលរបស់អ្នក"
-                      className={`w-full rounded-xl border bg-white py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 focus:ring-red-100 ${
-                        errors.email
-                          ? "border-red-400 focus:border-red-500"
-                          : "border-slate-200 focus:border-red-500"
-                      }`}
-                    />
-                  </div>
-                  {errors.email && (
-                    <p className="mt-2 text-sm text-red-500">
-                      {errors.email.message}
+              {step === "email" && (
+                <>
+                  <div className="mb-6">
+                    <div className="login-icon-3d mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white">
+                      <FiMail className="text-xl" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-900">ភ្លេចពាក្យសម្ងាត់</h2>
+                    <p className="mt-1.5 text-sm leading-6 text-slate-500">
+                      បញ្ចូលអ៊ីមែលរបស់អ្នក ដើម្បីទទួលកូដកំណត់ពាក្យសម្ងាត់ឡើងវិញ។
                     </p>
-                  )}
-                </div>
-
-                {sent && (
-                  <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                    <FiCheckCircle className="mt-0.5 shrink-0" />
-                    <span>
-                      ប្រសិនបើអ៊ីមែលនេះមានចុះឈ្មោះ តំណកំណត់ពាក្យសម្ងាត់ឡើងវិញត្រូវបានផ្ញើទៅហើយ។
-                      សូមពិនិត្យមើលប្រអប់សំបុត្ររបស់អ្នក។
-                    </span>
                   </div>
-                )}
 
-                {errors.root && (
-                  <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-                    <FiAlertCircle className="mt-0.5 shrink-0" />
-                    <span>{errors.root.message}</span>
+                  <form onSubmit={emailForm.handleSubmit(onSubmitEmail)} className="space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        អ៊ីមែល
+                      </label>
+                      <div className="group relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-red-500">
+                          <FiMail />
+                        </span>
+                        <input
+                          type="email"
+                          {...emailForm.register("email")}
+                          placeholder="បញ្ចូលអ៊ីមែលរបស់អ្នក"
+                          className={`w-full rounded-xl border bg-white py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 focus:ring-red-100 ${
+                            emailForm.formState.errors.email
+                              ? "border-red-400 focus:border-red-500"
+                              : "border-slate-200 focus:border-red-500"
+                          }`}
+                        />
+                      </div>
+                      {emailForm.formState.errors.email && (
+                        <p className="mt-2 text-sm text-red-500">
+                          {emailForm.formState.errors.email.message}
+                        </p>
+                      )}
+                    </div>
+
+                    {emailForm.formState.errors.root && (
+                      <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                        <FiAlertCircle className="mt-0.5 shrink-0" />
+                        <span>{emailForm.formState.errors.root.message}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={sendCodeMutation.isPending}
+                      className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-400/40 bg-gradient-to-r from-red-500 to-rose-600 px-4 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_3px_0_#be123c,0_8px_14px_rgba(225,29,72,0.22)] transition hover:-translate-y-0.5 hover:from-red-600 hover:to-rose-700 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.34),0_4px_0_#9f1239,0_10px_17px_rgba(225,29,72,0.26)] active:translate-y-0.5 active:scale-[0.99] active:shadow-[inset_0_2px_4px_rgba(127,29,29,0.18),0_1px_0_#9f1239,0_3px_7px_rgba(225,29,72,0.2)] disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {sendCodeMutation.isPending ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                          កំពុងផ្ញើ...
+                        </>
+                      ) : (
+                        "ផ្ញើកូដកំណត់ពាក្យសម្ងាត់"
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
+
+              {step === "code" && (
+                <>
+                  <div className="mb-6">
+                    <div className="login-icon-3d mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white">
+                      <FiShield className="text-xl" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-900">បញ្ចូលកូដ</h2>
+                    <p className="mt-1.5 text-sm leading-6 text-slate-500">
+                      យើងបានផ្ញើកូដ 6 ខ្ទង់ទៅ <span className="font-semibold text-slate-700">{targetEmail}</span> សូមបញ្ចូលកូដនោះ ខាងក្រោម។
+                    </p>
                   </div>
-                )}
 
-                <button
-                  type="submit"
-                  disabled={mutation.isPending}
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-400/40 bg-gradient-to-r from-red-500 to-rose-600 px-4 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_3px_0_#be123c,0_8px_14px_rgba(225,29,72,0.22)] transition hover:-translate-y-0.5 hover:from-red-600 hover:to-rose-700 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.34),0_4px_0_#9f1239,0_10px_17px_rgba(225,29,72,0.26)] active:translate-y-0.5 active:scale-[0.99] active:shadow-[inset_0_2px_4px_rgba(127,29,29,0.18),0_1px_0_#9f1239,0_3px_7px_rgba(225,29,72,0.2)] disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {mutation.isPending ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                      កំពុងផ្ញើ...
-                    </>
-                  ) : (
-                    "ផ្ញើតំណកំណត់ពាក្យសម្ងាត់"
-                  )}
-                </button>
-              </form>
+                  <form onSubmit={codeForm.handleSubmit(onSubmitCode)} className="space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        កូដ 6 ខ្ទង់
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        {...codeForm.register("code")}
+                        onChange={(e) => {
+                          codeForm.setValue("code", e.target.value.replace(/[^0-9]/g, "").slice(0, 6), {
+                            shouldValidate: true,
+                          });
+                        }}
+                        placeholder="123456"
+                        className={`w-full rounded-xl border bg-white py-3 px-4 text-center text-lg font-bold tracking-[0.5em] text-slate-900 outline-none transition placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400 focus:ring-4 focus:ring-red-100 ${
+                          codeForm.formState.errors.code
+                            ? "border-red-400 focus:border-red-500"
+                            : "border-slate-200 focus:border-red-500"
+                        }`}
+                      />
+                      {codeForm.formState.errors.code && (
+                        <p className="mt-2 text-sm text-red-500">
+                          {codeForm.formState.errors.code.message}
+                        </p>
+                      )}
+                    </div>
+
+                    {codeForm.formState.errors.root && (
+                      <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                        <FiAlertCircle className="mt-0.5 shrink-0" />
+                        <span>{codeForm.formState.errors.root.message}</span>
+                      </div>
+                    )}
+
+                    {resendMutation.isSuccess && (
+                      <p className="text-center text-xs font-semibold text-emerald-600">
+                        បានផ្ញើកូដថ្មីទៅ {targetEmail} ហើយ។
+                      </p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={verifyCodeMutation.isPending}
+                      className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-400/40 bg-gradient-to-r from-red-500 to-rose-600 px-4 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_3px_0_#be123c,0_8px_14px_rgba(225,29,72,0.22)] transition hover:-translate-y-0.5 hover:from-red-600 hover:to-rose-700 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.34),0_4px_0_#9f1239,0_10px_17px_rgba(225,29,72,0.26)] active:translate-y-0.5 active:scale-[0.99] active:shadow-[inset_0_2px_4px_rgba(127,29,29,0.18),0_1px_0_#9f1239,0_3px_7px_rgba(225,29,72,0.2)] disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {verifyCodeMutation.isPending ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                          កំពុងផ្ទៀងផ្ទាត់...
+                        </>
+                      ) : (
+                        "ផ្ទៀងផ្ទាត់កូដ"
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleResend}
+                      disabled={resendMutation.isPending}
+                      className="w-full text-center text-xs font-semibold text-slate-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {resendMutation.isPending ? "កំពុងផ្ញើ..." : "មិនទាន់ទទួលកូដ? ផ្ញើម្ដងទៀត"}
+                    </button>
+                  </form>
+                </>
+              )}
+
+              {step === "password" && (
+                <>
+                  <div className="mb-6">
+                    <div className="login-icon-3d mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white">
+                      <FiCheckCircle className="text-xl" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-900">កូដត្រឹមត្រូវ</h2>
+                    <p className="mt-1.5 text-sm leading-6 text-slate-500">
+                      សូមបញ្ចូលពាក្យសម្ងាត់ថ្មីសម្រាប់គណនី <span className="font-semibold text-slate-700">{targetEmail}</span>។
+                    </p>
+                  </div>
+
+                  <form onSubmit={passwordForm.handleSubmit(onSubmitPassword)} className="space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        ពាក្យសម្ងាត់ថ្មី
+                      </label>
+                      <div className="group relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-red-500">
+                          <FiLock />
+                        </span>
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          {...passwordForm.register("password")}
+                          placeholder="បញ្ចូលពាក្យសម្ងាត់ថ្មី"
+                          className={`w-full rounded-xl border bg-white py-3 pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 focus:ring-red-100 ${
+                            passwordForm.formState.errors.password
+                              ? "border-red-400 focus:border-red-500"
+                              : "border-slate-200 focus:border-red-500"
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-red-500"
+                          aria-label={showPassword ? "លាក់ពាក្យសម្ងាត់" : "បង្ហាញពាក្យសម្ងាត់"}
+                        >
+                          {showPassword ? <FiEyeOff /> : <FiEye />}
+                        </button>
+                      </div>
+                      {passwordForm.formState.errors.password && (
+                        <p className="mt-2 text-sm text-red-500">
+                          {passwordForm.formState.errors.password.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        បញ្ជាក់ពាក្យសម្ងាត់ថ្មី
+                      </label>
+                      <div className="group relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-red-500">
+                          <FiLock />
+                        </span>
+                        <input
+                          type={showConfirm ? "text" : "password"}
+                          {...passwordForm.register("password_confirmation")}
+                          placeholder="បញ្ចូលពាក្យសម្ងាត់ថ្មីម្ដងទៀត"
+                          className={`w-full rounded-xl border bg-white py-3 pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 focus:ring-red-100 ${
+                            passwordForm.formState.errors.password_confirmation
+                              ? "border-red-400 focus:border-red-500"
+                              : "border-slate-200 focus:border-red-500"
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirm((prev) => !prev)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-red-500"
+                          aria-label={showConfirm ? "លាក់ពាក្យសម្ងាត់" : "បង្ហាញពាក្យសម្ងាត់"}
+                        >
+                          {showConfirm ? <FiEyeOff /> : <FiEye />}
+                        </button>
+                      </div>
+                      {passwordForm.formState.errors.password_confirmation && (
+                        <p className="mt-2 text-sm text-red-500">
+                          {passwordForm.formState.errors.password_confirmation.message}
+                        </p>
+                      )}
+                    </div>
+
+                    {done && (
+                      <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                        <FiCheckCircle className="mt-0.5 shrink-0" />
+                        <span>កំណត់ពាក្យសម្ងាត់ជោគជ័យ។ កំពុងបញ្ជូនអ្នកទៅចូលប្រើប្រាស់...</span>
+                      </div>
+                    )}
+
+                    {passwordForm.formState.errors.root && (
+                      <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                        <FiAlertCircle className="mt-0.5 shrink-0" />
+                        <span>{passwordForm.formState.errors.root.message}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={resetMutation.isPending || done}
+                      className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-400/40 bg-gradient-to-r from-red-500 to-rose-600 px-4 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_3px_0_#be123c,0_8px_14px_rgba(225,29,72,0.22)] transition hover:-translate-y-0.5 hover:from-red-600 hover:to-rose-700 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.34),0_4px_0_#9f1239,0_10px_17px_rgba(225,29,72,0.26)] active:translate-y-0.5 active:scale-[0.99] active:shadow-[inset_0_2px_4px_rgba(127,29,29,0.18),0_1px_0_#9f1239,0_3px_7px_rgba(225,29,72,0.2)] disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {resetMutation.isPending ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                          កំពុងកំណត់...
+                        </>
+                      ) : (
+                        "កំណត់ពាក្យសម្ងាត់"
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
 
               <Link
                 to="/login"
